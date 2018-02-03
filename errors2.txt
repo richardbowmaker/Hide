@@ -1,0 +1,6 @@
+Compile started ...
+
+D:\_Rick's\haskell\HeyHo\errors2.hs:14:7: error:
+    parse error on input `<-'
+    Perhaps this statement should be within a 'do' block?
+Compile complete

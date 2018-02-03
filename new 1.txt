@@ -1,0 +1,7 @@
+rem open wep pages
+
+"C:\Program Files (x86)\Google\Chrome\Application" "http://docs.wxwidgets.org/3.0/annotated.html"
+"C:\Program Files (x86)\Google\Chrome\Application" "https://hackage.haskell.org/package/wxcore-0.92.0.0/docs/doc-index.html"
+"C:\Program Files (x86)\Google\Chrome\Application" "https://hackage.haskell.org/package/wx-0.92.3.0/docs/doc-index.html"
+"C:\Program Files (x86)\Google\Chrome\Application" "https://www.haskell.org/hoogle/"
+"C:\Program Files (x86)\Google\Chrome\Application" "https://github.com/"

@@ -1,0 +1,158 @@
+Compile started ...
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:162:50: error:
+    * Variable not in scope: text1 :: Attr (Menu ()) [Char]
+    * Perhaps you meant `text' (imported from Graphics.UI.WX)
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:233:23: error:
+    * Couldn't match type `Object
+                             (CWxObject (CEvtHandler (CWindow (CTopLevelWindow (CFrame ())))))'
+                     with `Session'
+      Expected type: Session
+        Actual type: Frame ()
+    * In the first argument of `ssAuiMgr', namely `mf'
+      In the expression: ssAuiMgr mf
+      In an equation for `am': am = ssAuiMgr mf
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:270:5: error:
+    * Variable not in scope: updateEditMenusx :: Session -> IO a1
+    * Perhaps you meant `updateEditMenus' (line 703)
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:293:11: error:
+    * Couldn't match expected type `IO (Dialog (CFileDialog a0))'
+                  with actual type `Style -> IO (FileDialog ())'
+    * Probable cause: `fileDialogCreate' is applied to too few arguments
+      In a stmt of a 'do' block:
+        fd <- fileDialogCreate mf "Open file" "." "" "*.hs" (Point 100 100)
+      In the expression:
+        do { let mf = ssFrame ss;
+             fd <- fileDialogCreate
+                     mf "Open file" "." "" "*.hs" (Point 100 100);
+             ans <- dialogShowModal fd;
+             if ans == wxID_OK then
+                 do { fp <- fileDialogGetPath fd;
+                      .... }
+             else
+                 return () }
+      In an equation for `onFileOpen':
+          onFileOpen ss
+            = do { let mf = ...;
+                   fd <- fileDialogCreate
+                           mf "Open file" "." "" "*.hs" (Point 100 100);
+                   ans <- dialogShowModal fd;
+                   .... }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:373:5: error:
+    * Couldn't match type `ThreadId' with `()'
+      Expected type: IO ()
+        Actual type: IO ThreadId
+    * In a stmt of a 'do' block:
+        forkIO
+        $ runExtCmd
+            "D:\\_Rick's\\haskell\\HeyHo\\build.bat"
+            ["heyho"]
+            "D:\\_Rick's\\haskell\\HeyHo"
+            (ssTOutput ss)
+            (ssTOutput ss)
+            (ssCFunc ss)
+            (Just $ compileComplete ss)
+      In the expression:
+        do { otClear ss;
+             otAddLine ss $ BS.pack "Compile started ...";
+             set (ssMenuListGet ss "BuildBuild") [enabled := False];
+             set (ssMenuListGet ss "BuildCompile") [enabled := False];
+             .... }
+      In an equation for `onBuildBuild':
+          onBuildBuild ss
+            = do { otClear ss;
+                   otAddLine ss $ BS.pack "Compile started ...";
+                   set (ssMenuListGet ss "BuildBuild") [enabled := False];
+                   .... }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:426:53: error:
+    * Couldn't match type `IO ()' with `BS.ByteString'
+      Expected type: TChan BS.ByteString
+        Actual type: FunctionChannel
+    * In the second argument of `streamToChan', namely `cout'
+      In the second argument of `($)', namely `streamToChan hout cout'
+      In a stmt of a 'do' block:
+        (_, waits) <- Thread.forkIO $ streamToChan hout cout
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:434:61: error:
+    * Couldn't match type `IO ()' with `BS.ByteString'
+      Expected type: Maybe BS.ByteString
+        Actual type: Maybe (IO ())
+    * In the third argument of `maybe', namely `mfinally'
+      In a stmt of a 'do' block:
+        maybe (return ()) (\ f -> atomically $ writeTChan cfn f) mfinally
+      In the expression:
+        do { (_, Just hout, Just herr, ph) <- createProcess_
+                                                "errors"
+                                                ((proc cmd args)
+                                                   {cwd = Just dir, std_out = CreatePipe,
+                                                    std_err = CreatePipe});
+             (_, waits) <- Thread.forkIO $ streamToChan hout cout;
+             (_, waite) <- Thread.forkIO $ streamToChan herr cerr;
+             Thread.result =<< waits;
+             .... }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:550:17: error:
+    * Couldn't match type `()' with `Bool'
+      Expected type: IO Bool
+        Actual type: IO ()
+    * In a stmt of a 'do' block: return ()
+      In the expression:
+        do { debugOut ss "*** error: fileClose, no tab for source file";
+             return () }
+      In a case alternative:
+          Nothing
+            -> do { debugOut ss "*** error: fileClose, no tab for source file";
+                    return () }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:581:17: error:
+    * Couldn't match type `Int' with `Bool'
+      Expected type: IO Bool
+        Actual type: IO Int
+    * In a stmt of a 'do' block: return (b)
+      In the expression:
+        do { b <- fileSaveAs ss sf;
+             return (b) }
+      In a case alternative:
+          Nothing
+            -> do { b <- fileSaveAs ss sf;
+                    return (b) }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:608:13: error:
+    * Couldn't match type `Bool' with `Int'
+      Expected type: IO Int
+        Actual type: IO Bool
+    * In a stmt of a 'do' block: return (True)
+      In the expression:
+        do { fp <- fileDialogGetPath fd;
+             let sf' = sfSetFilePath sf fp;
+             sfUpdate ss sf';
+             writeSourceFile sf';
+             .... }
+      In a case alternative:
+          5100
+            -> do { fp <- fileDialogGetPath fd;
+                    let sf' = ...;
+                    sfUpdate ss sf';
+                    .... }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:612:13: error:
+    * Couldn't match type `Bool' with `Int'
+      Expected type: IO Int
+        Actual type: IO Bool
+    * In a stmt of a 'do' block: return (False)
+      In the expression: do { return (False) }
+      In a case alternative: 5101 -> do { return (False) }
+
+D:\_Rick's\haskell\HeyHo\Errors.hs:615:13: error:
+    * Couldn't match type `Bool' with `Int'
+      Expected type: IO Int
+        Actual type: IO Bool
+    * In a stmt of a 'do' block: return (True)
+      In the expression: do { return (True) }
+      In a case alternative: otherwise -> do { return (True) }
+Compile complete
