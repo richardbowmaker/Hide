@@ -3,7 +3,10 @@ module Main where
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Text.ParserCombinators.Parsec
-import qualified Text.Parsec.Prim as P 
+import qualified Text.Parsec.Prim as P
+import System.IO 
+
+
 
 main = start mainGUI
 
@@ -20,6 +23,8 @@ mainGUI = do
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
     
+
+    
     
 
     return ()
@@ -29,13 +34,51 @@ mainGUI = do
 
 data CompError = CompError { filename :: String, line :: Int, col :: Int, err1 :: String, errls :: [String] } deriving (Show)
 
+
+parseErrorFile :: String -> IO ([CompError])
+parseErrorFile fn = do
+    h <- openFile fn ReadMode 
+    s <- hGetContents h
+    putStrLn s
+    case (parse errorFile "" s) of
+        Left _ -> do
+            putStrLn "error"
+            hClose h
+            return [(CompError "" 0  0 "" [])]
+        Right es -> do
+            hClose h
+            return es
+
+parseFromFile' :: String -> IO (CompError)
+parseFromFile' fn = do
+    h <- openFile fn ReadMode 
+    s <- hGetContents h
+    putStrLn s
+    case (parse anError "" s) of
+        Left _ -> do
+            putStrLn "error"
+            hClose h
+            return (CompError "" 0  0 "" [])
+        Right es -> do
+            hClose h
+            return es
+
 parseErrors :: String -> Either ParseError [CompError]
 parseErrors s = parse errorFile "" s
 
 errorFile :: GenParser Char () [CompError]
 errorFile = do
-    errs <- many anError
+    string "Compile started ...\n\n"
+    errs <- many anError'
     return errs
+
+anError' :: GenParser Char () CompError
+anError' = do
+        err <- try (anError) 
+        return err
+    <|> do 
+        many1 anyChar
+        return (CompError "" 0 0 "" [])
 
 anError :: GenParser Char () CompError
 anError = do
@@ -52,29 +95,33 @@ fileName = do
     line <- many (noneOf ":")
     char ':'
     col <- many (noneOf ":")
-    string ": error:\n"
+    string ": error:"
+    string eol
     return (drive ++ ":" ++ path, read line, read col)
 
 errorBlock :: GenParser Char () (String, [String])
 errorBlock = do
     header <- errorStart
     lines <- many errorLine
-    char ('\n')
+    string eol
     return (header, lines)
 
 errorLine :: GenParser Char () String
 errorLine = do
     string "    "
-    eline <- many (noneOf "\n")
-    char '\n'
+    eline <- many (noneOf eol)
+    string eol
     return eline
     
 errorStart :: GenParser Char () String
 errorStart = do
     string "    * "
-    line <- many (noneOf "\n")
-    char '\n'
+    line <- many (noneOf eol)
+    string eol
     return line
+
+eol :: String
+eol = "\n"
 
 {-
 
