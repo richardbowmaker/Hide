@@ -455,7 +455,7 @@ onTimer ss = do
         -- calls supplied function whilst there is still data in the channel
         withTChan :: TChan a -> (a -> IO ()) -> IO ()
         withTChan chan f =  
-            whileM_ (liftM not $ atomically $ isEmptyTChan chan)
+            whileM_ 
                 (atomically (tryReadTChan chan) >>= maybe (return ()) (\a -> f a))             
             
 ------------------------------------------------------------    

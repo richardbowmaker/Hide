@@ -155,4 +155,6 @@ D:\_Rick's\haskell\HeyHo\Errors.hs:615:13: error:
     * In a stmt of a 'do' block: return (True)
       In the expression: do { return (True) }
       In a case alternative: otherwise -> do { return (True) }
+      
+      
 Compile complete
