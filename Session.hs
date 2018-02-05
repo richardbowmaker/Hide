@@ -1,5 +1,3 @@
-
-
 module Session 
 (
     Session,
@@ -16,6 +14,7 @@ module Session
     ssMenus,
     ssStatus,
     ssTOutput,
+    ssEOutput,
     ssCFunc,
     ssOutput,
     ssDebug,
@@ -82,6 +81,7 @@ data Session = Session {    ssFrame   :: Frame (),            -- Main window
                             ssMenus   :: SsMenuList,
                             ssStatus  :: StatusField,
                             ssTOutput :: TOutput,
+                            ssEOutput :: EOutput,
                             ssCFunc   :: FunctionChannel,
                             ssOutput  :: ScnEditor,
                             ssDebug   :: ScnEditor}
@@ -91,6 +91,7 @@ type TProject = TVar Project
 
 -- compiler output channel
 type TOutput = TChan ByteString
+type EOutput = TChan ByteString
 
 type FunctionChannel = TChan (IO ())
 
@@ -113,8 +114,9 @@ ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList
 ssCreate mf am nb pr ms sf ot db = do 
     tpr <- atomically $ newTVar $ prCreate []
     tot <- atomically $ newTChan
+    eot <- atomically $ newTChan
     cfn <- atomically $ newTChan
-    return (Session mf am nb tpr ms sf tot cfn ot db)
+    return (Session mf am nb tpr ms sf tot eot cfn ot db)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 

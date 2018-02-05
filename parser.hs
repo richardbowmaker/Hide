@@ -41,7 +41,7 @@ mainGUI = do
     chn' <- atomically $ dupTChan chn
 
     -- stream file to channels in separate thread
-    (_, wait) <- Thread.forkIO $ streamToChan h chn 
+    (_, wait) <- Thread.forkIO $ streamToChan h chn
   
     -- parse same input on both channels
     (_, wait1) <- Thread.forkIO $ parseInThread chn

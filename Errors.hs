@@ -28,7 +28,8 @@ import ScintillaConstants
 import Session
    
 
-   
+
+  
 main = start mainGUI
 
 mainGUI :: IO ()

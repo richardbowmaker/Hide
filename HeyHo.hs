@@ -1,11 +1,14 @@
 
+-- main IDE for Haskell --
+
+
 module Main where
 
 -- library imports
 import Control.Concurrent 
 import Control.Concurrent.STM
 import qualified Control.Concurrent.Thread as Thread
-import Control.Monad (liftM)
+import Control.Monad (liftM, when)
 import Control.Monad.Loops
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
@@ -26,6 +29,7 @@ import Misc
 import Scintilla
 import ScintillaConstants
 import Session
+import Compile
    
 
    
@@ -365,55 +369,33 @@ onTestTest ss = do
 onBuildBuild :: Session -> IO ()
 onBuildBuild ss = do
 
-    otClear ss
-    otAddLine ss $ BS.pack "Compile started ..."
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
-
-    forkIO $ runExtCmd         
-        "D:\\_Rick's\\haskell\\HeyHo\\build.bat" 
-        ["heyho"] 
-        "D:\\_Rick's\\haskell\\HeyHo" 
-        (ssTOutput ss)
-        (ssTOutput ss)
-        (ssCFunc ss)
-        (Just $ compileComplete ss)
-        
+    cpBuildProject ss (Just $ compileComplete ss)
     return ()
     
 onBuildCompile :: Session -> IO ()
 onBuildCompile ss = do
 
-    otClear ss
-    otAddLine ss $ BS.pack "Compile started ..."
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
-    ans <- fileSave ss sf
+    ans <- fileSave ss sf 
     if ans then do
-            -- get again in case filename changed
-            sf <- enbGetSelectedSourceFile ss
-            case (sfFilePath sf) of
-                Just fp -> do
-                    forkIO $ runExtCmd 
-                        "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" ["-c", fp] 
-                        "D:\\_Rick's\\haskell\\HeyHo"
-                        (ssTOutput ss) -- stdout goes to TOutput
-                        (ssTOutput ss)
-                        (ssCFunc ss)
-                        (Just $ compileComplete ss)
-                    return ()
-                Nothing -> return ()
-                
+        -- get again in case filename changed
+        sf <- enbGetSelectedSourceFile ss
+        case (sfFilePath sf) of
+            Just fp -> cpCompileFile ss fp (Just $ compileComplete ss)
+            Nothing -> return () 
     else return ()
                
 compileComplete :: Session -> IO ()
 compileComplete ss = do
     set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
     set (ssMenuListGet ss "BuildCompile") [enabled := True]
-    otAddText ss $ BS.pack "\nCompile complete\n"
+    otAddText ss $ BS.pack "\n\nCompile complete\n"
     return ()
 
 -- run command and redirect std out to the output pane
@@ -423,10 +405,10 @@ runExtCmd cmd args dir cout cerr cfn mfinally = do
     (_, Just hout, Just herr, ph) <- createProcess_ "errors" (proc cmd args)
         {cwd = Just dir, std_out = CreatePipe, std_err = CreatePipe}
 
-    (_, waits) <- Thread.forkIO $ streamToChan hout cout
+--    (_, waits) <- Thread.forkIO $ streamToChan hout cout
     (_, waite) <- Thread.forkIO $ streamToChan herr cerr
     
-    Thread.result =<< waits
+--    Thread.result =<< waits
     Thread.result =<< waite
     waitForProcess ph
     
@@ -455,7 +437,7 @@ onTimer ss = do
         -- calls supplied function whilst there is still data in the channel
         withTChan :: TChan a -> (a -> IO ()) -> IO ()
         withTChan chan f =  
-            whileM_ 
+            whileM_ (liftM not $ atomically $ isEmptyTChan chan)
                 (atomically (tryReadTChan chan) >>= maybe (return ()) (\a -> f a))             
             
 ------------------------------------------------------------    
