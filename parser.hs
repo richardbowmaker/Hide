@@ -6,9 +6,10 @@ import Graphics.UI.WXCore
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Prim as P
 import System.IO 
-import Control.Concurrent.STM.TChan
 import Control.Concurrent 
 import Control.Concurrent.STM
+import Control.Concurrent.STM.TChan
+import Control.Exception
 import qualified Control.Concurrent.Thread as Thread
 import Control.Monad (liftM)
 import Control.Monad.Loops
@@ -18,6 +19,8 @@ import Data.List
 import GHC.IO.Handle
 
 
+
+import System.Directory  
 
 main = start mainGUI
 
@@ -119,27 +122,25 @@ chanToString chn = do
     return (s) 
 
 
-data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errLine :: Int, errTop :: String, errLines :: [String] } deriving (Show)
+data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
 
 compErrorToString :: CompError -> String
 compErrorToString c =
-    "Filename: " ++ (show $ filename c) ++ " (" ++ (show $ srcLine c) ++ "," ++ (show $ srcCol c) ++ ") errout = " ++ (show $ errLine c) ++ "\n" ++
-        " " ++ (errTop c) ++ "\n" ++
+    "Filename: " ++ (show $ filename c) ++ " (" ++ (show $ srcLine c) ++ "," ++ (show $ srcCol c) ++ ") errout = " ++ (show $ errIx c) ++ "\n" ++
         (concat $ map (\s -> " " ++ s ++ "\n") (errLines c))
-    
-    
+       
 
-parseErrorFile :: String -> IO [CompError]
+parseErrorFile :: String -> IO  (Maybe (Int, [CompError]))
 parseErrorFile fn = do
     h <- openFile fn ReadMode 
     s <- hGetContents h
     case (parse errorFile "" s) of
         Left _ -> do
             hClose h
-            return [(CompError "" 0 0 0 "" [])]
+            return Nothing
         Right es -> do
             hClose h
-            return es
+            return $  Just (length es, es)
 
 errorFile :: GenParser Char () [CompError]
 errorFile = do
@@ -151,8 +152,8 @@ anError = do
     string eol
     pos <- getPosition
     (fn, el, ec) <- fileName
-    (e1, els) <- errorBlock
-    return (CompError fn el ec (sourceLine pos)e1 els)
+    els <- errorDesc
+    return (CompError fn el ec (sourceLine pos) els)
 
 fileDrive :: GenParser Char () String
 fileDrive = do
@@ -172,11 +173,10 @@ fileName = do
     string eol
     return (drive ++ path, read line, read col)
 
-errorBlock :: GenParser Char () (String, [String])
-errorBlock = do
-    header <- errorStart
+errorDesc :: GenParser Char () ([String])
+errorDesc = do
     lines <- many errorLine
-    return (header, lines)
+    return (lines)
 
 errorLine :: GenParser Char () String
 errorLine = do
@@ -185,13 +185,6 @@ errorLine = do
     string eol
     return eline
     
-errorStart :: GenParser Char () String
-errorStart = do
-    string "    * "
-    line <- many (noneOf eol)
-    string eol
-    return line
-
 eol :: String
 eol = "\n"
 
