@@ -1,4 +1,5 @@
 
+
 module Main where
 import Graphics.UI.WX
 import Graphics.UI.WXCore
@@ -18,8 +19,6 @@ import GHC.IO.Handle
 
 
 
-
-
 main = start mainGUI
 
 mainGUI :: IO ()
@@ -35,7 +34,7 @@ mainGUI = do
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
     
-    h <- openFile "Errors1.txt" ReadMode
+    h <- openFile "Errors.txt" ReadMode
 
     chn <- atomically $ newTChan
     chn' <- atomically $ dupTChan chn
@@ -144,29 +143,26 @@ parseErrorFile fn = do
 
 errorFile :: GenParser Char () [CompError]
 errorFile = do
-    string "Compile started ...\n\n"
-    errs <- many anErrorOrEof
-    return (init errs)
-
-anErrorOrEof :: GenParser Char () CompError
-anErrorOrEof = do
-        err <- try (anError) 
-        return err
-    <|> do 
-        many1 anyChar
-        return (CompError "" 0 0 0 "" [])
+    errs <- many anError
+    return errs
 
 anError :: GenParser Char () CompError
 anError = do
+    string eol
     pos <- getPosition
     (fn, el, ec) <- fileName
     (e1, els) <- errorBlock
     return (CompError fn el ec (sourceLine pos)e1 els)
 
-fileName :: GenParser Char () (String, Int, Int)
-fileName = do
-    drive <- many (noneOf ":")
+fileDrive :: GenParser Char () String
+fileDrive = do
+    c <- anyChar
     char ':'
+    return $ c:":"
+
+fileName :: GenParser Char () (String, Int, Int)
+fileName = do    
+    drive <- (try fileDrive <|> return "")
     path <- many (noneOf ":")
     char ':'
     line <- many (noneOf ":")
@@ -174,13 +170,12 @@ fileName = do
     col <- many (noneOf ":")
     string ": error:"
     string eol
-    return (drive ++ ":" ++ path, read line, read col)
+    return (drive ++ path, read line, read col)
 
 errorBlock :: GenParser Char () (String, [String])
 errorBlock = do
     header <- errorStart
     lines <- many errorLine
-    string eol
     return (header, lines)
 
 errorLine :: GenParser Char () String

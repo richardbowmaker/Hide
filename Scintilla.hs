@@ -355,7 +355,7 @@ scnIndents = (rgb 200 200 200)
 scnConfigureHaskell :: ScnEditor -> IO ()
 scnConfigureHaskell e = do
     scnSetLexer e (fromIntegral sCLEX_HASKELL :: Int)
-    scnSetKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", 
+    scnSetKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
                         "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as"]
     scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
     scnStyleClearAll e
