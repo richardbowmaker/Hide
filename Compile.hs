@@ -13,7 +13,7 @@ import qualified Control.Concurrent.Thread as Thread
 import Control.Exception
 import Control.Monad (liftM)
 import Control.Monad.Loops
-import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, unpack, writeFile)
+import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
 import qualified Data.ByteString as BS (append, empty)
 import Data.List (find, findIndex, isInfixOf)
 import Data.Word (Word64)
@@ -82,6 +82,8 @@ cpCompileFile ss fp mfinally = do
 cpCompileFileDone :: Session -> Maybe (IO ()) -> (Int, [CompError]) -> IO ()
 cpCompileFileDone ss mfinally (errCount, errors) = do
     
+    outStr $ (show errCount) ++ " errors"
+
     if errCount == 0 then
         outStr "No errors"
     else 
@@ -104,72 +106,38 @@ runGHC ss args dir cerr mfinally = do
     
     ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
-    -- duplicate the output channel so that we can capture the compiler 
-    -- output for parsing
-    cerrs <- atomically $ dupTChan cerr
- 
     (_, _, Just herr, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
         {cwd = Just dir, std_err = CreatePipe}
 
-    -- stream the compile results to the output pane
-    (_, waite) <- Thread.forkIO $ streamToChan ss herr cerr
-    
-    -- stream results to string
-    (_, waits) <- Thread.forkIO $ captureChannel ss cerrs BS.empty
+    -- stream compiler output to output pane
+    bs <- captureOutput herr (ssTOutput ss) $ BS.pack ""
 
-    -- wait for ghc to complete
-    Thread.result =<< waite
-    bs <- Thread.result =<< waits
-    waitForProcess ph
+    h <- openFile "temp.txt" WriteMode
+    BS.hPutStr h bs
+    hClose h
 
-   -- parse the error results
+    let s' = BS.unpack bs
+    ssDebugInfo ss s'
+
+    -- parse the error results
     case (P.parse errorFile "" $ BS.unpack bs) of
         Left _   -> ssDebugError ss "Parse of compilation errors failed"
         Right es -> do
             ssDebugInfo ss $ "parsed ok"
             maybe (return ()) (\f -> f (length es, es)) mfinally
  
-{-
--- run command and redirect std out to the output pane
--- session -> command -> arguments -> working directory -> stdout TChan -> stderr TChan -> completion function
-runExtCmd :: Session -> String -> [String] -> String -> TOutput -> TOutput -> FunctionChannel -> Maybe (IO ()) -> IO ()
-runExtCmd ss cmd args dir cout cerr mfinally = do
-    
-    ssDebugInfo ss $ "Run process: " ++ cmd ++ " " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
- 
-    (_, Just hout, Just herr, ph) <- createProcess_ "errors" (proc cmd args)
-        {cwd = Just dir, std_out = CreatePipe, std_err = CreatePipe}
-
---    (_, waits) <- Thread.forkIO $ streamToChan hout cout
-    (_, waite) <- Thread.forkIO $ streamToChan herr cerr
-    
---    Thread.result =<< waits
-    Thread.result =<< waite
-    waitForProcess ph
-    
-    -- run completion function
-    maybe (return ()) (\f -> f) mfinally
-   
-    where
-    
-        streamToChan h tot = whileM_ (liftM not $ hIsEOF h) (BS.hGetLine h >>= (\s -> atomically $ writeTChan tot s)) 
-        
--}
-
-streamToChan :: Session -> Handle -> TChan BS.ByteString -> IO ()
-streamToChan ss h tot = do
-    whileM_ (liftM not $ hIsEOF h) (BS.hGetLine h >>= (\s -> atomically $ writeTChan tot s))
-    atomically $ writeTChan tot $ BS.pack "\nDone"
-    return ()
-        
-captureChannel :: Session -> TChan BS.ByteString -> BS.ByteString -> IO BS.ByteString
-captureChannel ss chn str = do
-    b <- atomically $ isEmptyTChan chn 
-    if b then captureChannel ss chn str
+-- captures output from handle, wrtes to the output pane and returns
+-- the captured data
+captureOutput :: Handle -> TChan BS.ByteString -> BS.ByteString -> IO (BS.ByteString)
+captureOutput h tot str = do
+    eof <- hIsEOF h
+    if eof then return str
     else do
-        s <- atomically $ readTChan chn
-        if s == BS.pack "Done" then return str
-        else captureChannel ss chn (BS.append str s)
+        s <- BS.hGetLine h
+        let s' = BS.append s $ BS.pack "\n"
+        atomically $ writeTChan tot s'     -- write to output pane
+        captureOutput h tot $ BS.append str s'
+
 
 ------------------------------------------
 -- compiler output parser

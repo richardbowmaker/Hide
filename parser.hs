@@ -9,7 +9,7 @@ import System.IO
 import Control.Concurrent 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
-import Control.Exception
+-- import Control.Exception
 import qualified Control.Concurrent.Thread as Thread
 import Control.Monad (liftM)
 import Control.Monad.Loops
@@ -39,7 +39,7 @@ mainGUI = do
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
     
-    h <- openFile "Errors.txt" ReadMode
+    h <- openFile "temp.txt" ReadMode
 
     chn <- atomically $ newTChan
     chn' <- atomically $ dupTChan chn

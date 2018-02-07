@@ -268,6 +268,7 @@ otAddText ss bs = do
     scnSetReadOnly e False
     scnAppendText e bs
     scnSetReadOnly e True
+    scnShowLastLine e
     
 otAddLine :: Session -> ByteString -> IO ()
 otAddLine ss bs = do
@@ -275,5 +276,6 @@ otAddLine ss bs = do
     scnSetReadOnly e False
     scnAppendLine e bs
     scnSetReadOnly e True
+    scnShowLastLine e
 
 

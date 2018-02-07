@@ -1,0 +1,39 @@
+
+D:\_Rick's\haskell\HeyHo\parser.hs:42:10: error:
+    * Couldn't match expected type `IOMode -> IO Handle'
+                  with actual type `IO Handle'
+    * The function `openFile' is applied to three arguments,
+      but its type `FilePath -> IOMode -> IO Handle' has only two
+      In a stmt of a 'do' block: h <- openFile p "temp.txt" ReadMode
+      In the expression:
+        do { f <- frame [];
+             p <- panel f [];
+             sf1 <- statusField [text := "SF1", statusWidth := 20];
+             sf2 <- statusField [text := "SF2"];
+             .... }
+
+D:\_Rick's\haskell\HeyHo\parser.hs:42:19: error:
+    * Couldn't match type `Object
+                             (CWxObject (CEvtHandler (CWindow (CPanel ()))))'
+                     with `[Char]'
+      Expected type: FilePath
+        Actual type: Panel ()
+    * In the first argument of `openFile', namely `p'
+      In a stmt of a 'do' block: h <- openFile p "temp.txt" ReadMode
+      In the expression:
+        do { f <- frame [];
+             p <- panel f [];
+             sf1 <- statusField [text := "SF1", statusWidth := 20];
+             sf2 <- statusField [text := "SF2"];
+             .... }
+
+D:\_Rick's\haskell\HeyHo\parser.hs:42:21: error:
+    * Couldn't match expected type `IOMode' with actual type `[Char]'
+    * In the second argument of `openFile', namely `"temp.txt"'
+      In a stmt of a 'do' block: h <- openFile p "temp.txt" ReadMode
+      In the expression:
+        do { f <- frame [];
+             p <- panel f [];
+             sf1 <- statusField [text := "SF1", statusWidth := 20];
+             sf2 <- statusField [text := "SF2"];
+             .... }
