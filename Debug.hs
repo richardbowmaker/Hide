@@ -1,6 +1,9 @@
 
 module Debug
 (
+    debugError,
+    debugWarn,
+    debugInfo,
     debugOut
 ) where
 
@@ -11,23 +14,23 @@ import Graphics.UI.WXCore
 import Data.Word (Word64)
 
 import Scintilla
-import Session
 
-debugOut :: Session -> String -> IO ()
-debugOut ss s = do
+debugError :: ScnEditor -> String -> IO ()
+debugError e s = debugOut e ("Error: " ++ s)
+
+debugWarn :: ScnEditor -> String -> IO ()
+debugWarn e s = debugOut e ("Warning: " ++ s)
+
+debugInfo :: ScnEditor -> String -> IO ()
+debugInfo e s = debugOut e ("Info: " ++ s)
+
+
+debugOut :: ScnEditor -> String -> IO ()
+debugOut e s = do
     let bs = BS.pack s
-    let e = ssDebug ss
     scnSetReadOnly e False
     scnAppendLine e bs
     scnSetReadOnly e True
+    scnShowLastLine e
     return ()
-{-
-debugOut :: Session -> String -> [String] -> IO ()
-debugOut ss str strs = do
-    let bs = BS.pack str
-    let e = ssDebug ss
-    scnSetReadOnly e False
-    scnAppendLine e bs
-    scnSetReadOnly e True
-    return ()
- -}   
+

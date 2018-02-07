@@ -24,7 +24,6 @@ import System.Process
 import System.Process.Common
 
 -- project imports
-import Debug
 import Misc
 import Scintilla
 import ScintillaConstants
@@ -398,27 +397,7 @@ compileComplete ss = do
     otAddText ss $ BS.pack "\n\nCompile complete\n"
     return ()
 
--- run command and redirect std out to the output pane
--- command -> arguments -> working directory -> stdout TChan -> stderr TChan -> completion function
-runExtCmd :: String -> [String] -> String -> TOutput -> TOutput -> FunctionChannel -> Maybe (IO ()) -> IO ()
-runExtCmd cmd args dir cout cerr cfn mfinally = do    
-    (_, Just hout, Just herr, ph) <- createProcess_ "errors" (proc cmd args)
-        {cwd = Just dir, std_out = CreatePipe, std_err = CreatePipe}
 
---    (_, waits) <- Thread.forkIO $ streamToChan hout cout
-    (_, waite) <- Thread.forkIO $ streamToChan herr cerr
-    
---    Thread.result =<< waits
-    Thread.result =<< waite
-    waitForProcess ph
-    
-    -- schedule finally function to be called in gui thread
-    maybe (return ()) (\f -> atomically $ writeTChan cfn f) mfinally
-   
-    where
-    
-        streamToChan h tot = whileM_ (liftM not $ hIsEOF h) (BS.hGetLine h >>= (\s -> atomically $ writeTChan tot s)) 
-        
 ------------------------------------------------------------    
 -- Timer handler
 ------------------------------------------------------------    
@@ -528,7 +507,7 @@ fileClose ss sf = do
                 auiNotebookDeletePage nb ix  
                 return (True)
             Nothing -> do
-                debugOut ss "*** error: fileClose, no tab for source file"
+                ssDebugError ss "fileClose, no tab for source file"
                 return (True)
         
     else return (False)
@@ -618,7 +597,6 @@ writeSourceFile sf = do
 scnCallback :: Session -> SCNotification -> IO ()
 scnCallback ss sn = do 
 
-
     case (scnNotifyGetCode sn) of
         
     -- If the constants are used rather than the real values the compiler
@@ -642,7 +620,7 @@ scnCallback ss sn = do
         2013 -> return () -- sCN_PAINTED
           
         otherwise -> do
-            debugOut ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+            -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
             return ()
          
 
@@ -690,7 +668,7 @@ updateEditMenus ss = do
     
         sf <- enbGetSelectedSourceFile ss
         b <- scnSelectionIsEmpty $ sfEditor sf    
---        debugOut ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
+        -- ssDebugInfo ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
         
         b <- scnCanUndo $ sfEditor sf
         set (ssMenuListGet ss "EditUndo")    [enabled := b]
@@ -707,7 +685,7 @@ updateEditMenus ss = do
         
     else do
     
-        debugOut ss "updateEditMenus: no file"
+        ssDebugError ss "updateEditMenus: no file"
         set (ssMenuListGet ss "EditUndo")    [enabled := False]
         set (ssMenuListGet ss "EditRedo")    [enabled := False]
         set (ssMenuListGet ss "EditCut")     [enabled := False]
@@ -887,7 +865,7 @@ enbGetSelectedSourceFile ss = do
             return (sf)
         Nothing -> do 
             -- should not occur, like this to simplfy calling code
-            debugOut ss "*** error: enbGetSelectedSourceFile no source file for current tab"
+            ssDebugError ss "enbGetSelectedSourceFile no source file for current tab"
             return (head fs) 
                   
 -- returns true if the source file of the currently selected tab is clean 
@@ -918,7 +896,7 @@ enbCloseTab ss sf = do
             auiNotebookRemovePage nb ix
             return ()
         Nothing -> do
-            debugOut ss "*** error: enbCloseTab, source file not in tabs"
+            ssDebugError ss "enbCloseTab, source file not in tabs"
             return ()
 
 enbGetTabIndex :: Session -> SourceFile -> IO (Maybe Int)

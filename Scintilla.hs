@@ -55,7 +55,9 @@ module Scintilla
     scnWhite,
     scnSetTabWidth,
     scnSetUseTabs,
-    scnSetIndentationGuides
+    scnSetIndentationGuides,
+    scnGotoLine,
+    scnShowLastLine
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -356,7 +358,7 @@ scnConfigureHaskell :: ScnEditor -> IO ()
 scnConfigureHaskell e = do
     scnSetLexer e (fromIntegral sCLEX_HASKELL :: Int)
     scnSetKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
-                        "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as"]
+                        "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let"]
     scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
     scnStyleClearAll e
     scnSetAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
@@ -601,7 +603,7 @@ scnGetCharAt e p = do
     return (toEnum (fromIntegral c :: Int) :: Char)
    
 ----------------------------------------------
--- Status info 
+-- Position and size 
 ----------------------------------------------
 
 scnGetLineCount :: ScnEditor -> IO Int
@@ -639,6 +641,18 @@ scnGetPositionInfo e = do
     cc <- scnGetTextLen e
     return (l, (p-ls), p, lc, cc)
     
+scnGotoLine :: ScnEditor -> Int -> IO ()
+scnGotoLine e l = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_GOTOLINE  (fromIntegral l :: Word64) 0
+    return ()
+
+scnShowLastLine :: ScnEditor -> IO ()
+scnShowLastLine e = do
+    sl <- scnGetLinesOnScreen e
+    tl <- scnGetLineCount e
+    if (sl < tl) then (scnGotoLine e (tl-1)) 
+    else return ()
+
 ----------------------------------------------
 -- Tabs 
 ----------------------------------------------

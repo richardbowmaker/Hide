@@ -14,17 +14,18 @@ module Session
     ssMenus,
     ssStatus,
     ssTOutput,
-    ssEOutput,
     ssCFunc,
     ssOutput,
-    ssDebug,
+    ssDebugError,
+    ssDebugWarn,
+    ssDebugInfo,
     ssMenuListNew,
     ssMenuListCreate,
     ssMenuListAdd,
     ssMenuListGet,
     ssReadSourceFiles,
     ssIsOpeningState,
-    ssToString,    
+    ssToString,
     SsMenuList,
     SsNameMenuPair,
 --
@@ -57,6 +58,7 @@ module Session
 
 import Graphics.UI.WX
 import Graphics.UI.WXCore
+import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Data.ByteString.Internal (ByteString)
@@ -67,31 +69,33 @@ import Data.Char (toLower)
 import Data.Word (Word64)
 import Numeric (showHex)
 
-import Scintilla
+import Debug
 import Misc
+import Scintilla
 
 ----------------------------------------------------------
 -- Session data and ToString functions
 ----------------------------------------------------------
 
-data Session = Session {    ssFrame   :: Frame (),            -- Main window
-                            ssAuiMgr  :: AuiManager (),       -- Application level AUI manager
-                            ssEditors :: AuiNotebook (),      -- Notebook of source file editors
-                            ssProject :: TProject,            -- Project data (mutable)
-                            ssMenus   :: SsMenuList,
-                            ssStatus  :: StatusField,
-                            ssTOutput :: TOutput,
-                            ssEOutput :: EOutput,
-                            ssCFunc   :: FunctionChannel,
-                            ssOutput  :: ScnEditor,
-                            ssDebug   :: ScnEditor}
+data Session = Session {    ssFrame         :: Frame (),            -- Main window
+                            ssAuiMgr        :: AuiManager (),       -- Application level AUI manager
+                            ssEditors       :: AuiNotebook (),      -- Notebook of source file editors
+                            ssProject       :: TProject,            -- Project data (mutable)
+                            ssMenus         :: SsMenuList,
+                            ssStatus        :: StatusField,
+                            ssTOutput       :: TOutput,             -- TCHan for output pane, e.g. compiler output
+                            ssCFunc         :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
+                            ssOutput        :: ScnEditor,           -- The output pane
+                            ssDebugError    :: String -> IO (),
+                            ssDebugWarn     :: String -> IO (),
+                            ssDebugInfo     :: String -> IO (),
+                            ssMainThreadId  :: ThreadId}
                                                         
  -- project data is mutable
 type TProject = TVar Project
 
 -- compiler output channel
 type TOutput = TChan ByteString
-type EOutput = TChan ByteString
 
 type FunctionChannel = TChan (IO ())
 
@@ -105,18 +109,25 @@ data SourceFile = SourceFile {  sfPanel     :: Panel (),        -- The panel add
 
 type SsNameMenuPair = (String, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
+
+-- global debug flag
+debug = True
                        
 ----------------------------------------------------------------
 -- Session  helpers
 ----------------------------------------------------------------
 
+-- please call this on the main thread
 ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList -> StatusField -> ScnEditor -> ScnEditor -> IO (Session)
 ssCreate mf am nb pr ms sf ot db = do 
+    mtid <- myThreadId
     tpr <- atomically $ newTVar $ prCreate []
     tot <- atomically $ newTChan
-    eot <- atomically $ newTChan
     cfn <- atomically $ newTChan
-    return (Session mf am nb tpr ms sf tot eot cfn ot db)
+    let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
+    let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
+    let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
+    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -156,7 +167,13 @@ ssIsOpeningState [sf@(SourceFile _ _ e Nothing)] = do
     b <- scnIsClean e
     return (b)
 ssIsOpeningState _ = return (False)
-               
+
+ssInvokeInGuiThread :: ThreadId -> FunctionChannel -> (IO ()) -> IO ()
+ssInvokeInGuiThread mtid chan f = do
+    tid <- myThreadId
+    if mtid == tid then f
+    else atomically $ writeTChan chan f
+              
 ----------------------------------------------------------------
 -- Source file helpers
 ----------------------------------------------------------------
