@@ -355,7 +355,6 @@ onEditSelectAll ss = do
   
 onTestTest :: Session -> IO ()
 onTestTest ss = do
-    cpTest ss
     return ()
 
 ------------------------------------------------------------    
@@ -391,7 +390,7 @@ compileComplete :: Session -> IO ()
 compileComplete ss = do
     set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
     set (ssMenuListGet ss "BuildCompile") [enabled := True]
-    otAddText ss $ BS.pack "\n\nCompile complete\n"
+    otAddText ss $ BS.pack "Compile complete\n"
     return ()
 
 
