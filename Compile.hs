@@ -1,8 +1,10 @@
+{-# LANGUAGE BangPatterns #-}
 
 module Compile
 (
     cpBuildProject,
-    cpCompileFile
+    cpCompileFile,
+    cpTest
 ) where
 
 
@@ -13,7 +15,7 @@ import qualified Control.Concurrent.Thread as Thread
 import Control.Exception
 import Control.Monad (liftM)
 import Control.Monad.Loops
-import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
+import qualified Data.ByteString.Char8 as BS (ByteString, hGetContents, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
 import qualified Data.ByteString as BS (append, empty)
 import Data.List (find, findIndex, isInfixOf)
 import Data.Word (Word64)
@@ -31,9 +33,55 @@ import System.Process.Common
 -- project imports
 import Misc
 import Session
+
+import Parser
       
 
-data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
+cpTest :: Session -> IO ()
+cpTest ss = do
+    
+    ssDebugInfo ss "Parse file name"
+    case (P.parse fileName "" "D:\\_Rick's\\haskell\\HeyHo\\ProxyDllClient.hs:163:50: error:\n") of
+        Left _   -> ssDebugError ss "Parse failed"
+        Right (s,i1,i2) ->  ssDebugInfo ss $ "Parse OK : " ++ s
+
+    h <- openFile "errors3.txt" ReadMode
+    s <- hGetContents h
+
+    case (P.parse errorFile "" s) of
+        Left _ -> ssDebugError ss "Parse of compilation errors failed"
+        Right es -> ssDebugError ss $ compErrorsToString es
+
+
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    ssDebugInfo ss "=============================================="
+    
+    (_, _, Just herr, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" ["-c", "D:\\_Rick's\\haskell\\HeyHo\\Errors.hs" ] )
+        {cwd = Just "D:\\_Rick's\\haskell\\HeyHo", std_err = CreatePipe}
+
+    -- stream compiler output to output pane
+    s' <- captureOutput' ss herr (ssTOutput ss) ""
+
+    -- write output to string
+    h <- openFile "temp.txt" WriteMode
+    hPutStr h s'
+    hClose h
+
+
+
+    case (P.parse errorFile "" s') of
+        Left _ -> ssDebugError ss "Parse of compilation errors failed"
+        Right es -> ssDebugError ss $ compErrorsToString es
+
+    return ()
+
+
+-- data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
 
 
 -- build the project
@@ -90,7 +138,7 @@ cpCompileFileDone ss mfinally (errCount, errors) = do
         outStr $ (show errCount) ++ " errors"
 
     -- temp debug
-    outStr $ concat $ map (\ce -> (compErrorToString ce) ++ "\n" ) errors
+    outStr $ compErrorsToString errors
 
     -- schedule GUI finally function
     maybe (return ()) (\f-> atomically $ writeTChan (ssCFunc ss) f) mfinally
@@ -110,21 +158,39 @@ runGHC ss args dir cerr mfinally = do
         {cwd = Just dir, std_err = CreatePipe}
 
     -- stream compiler output to output pane
-    bs <- captureOutput herr (ssTOutput ss) $ BS.pack ""
+    s' <- captureOutput' ss herr (ssTOutput ss) ""
+
 
     h <- openFile "temp.txt" WriteMode
-    BS.hPutStr h bs
+    hPutStr h s'
     hClose h
 
-    let s' = BS.unpack bs
-    ssDebugInfo ss s'
+    h1 <- openFile "temp.txt" ReadMode
+    s2 <- hGetContents h1
+
+ --   let s' = BS.unpack bs
+    ssDebugInfo ss s2
+    ssDebugInfo ss "Old compiler"
+    ssDebugInfo ss $ compErrorsToString $ doParse s2
+  
+    -- hClose h1
 
     -- parse the error results
-    case (P.parse errorFile "" $ BS.unpack bs) of
+--    case (P.parse errorFile "" $ BS.unpack bs) of
+    case (P.parse errorFile "" s2) of
         Left _   -> ssDebugError ss "Parse of compilation errors failed"
         Right es -> do
-            ssDebugInfo ss $ "parsed ok"
-            maybe (return ()) (\f -> f (length es, es)) mfinally
+            ssDebugInfo ss $ "parsed ok"           
+--            maybe (return ()) (\f -> f (length es, es)) mfinally
+            maybe (return ()) (\f -> goodParse f es) mfinally
+
+    where 
+            goodParse :: ((Int, [CompError]) -> IO ()) -> [CompError] -> IO ()
+            goodParse f es = do
+            ssDebugInfo ss "Good parse"
+            ssDebugInfo ss $ compErrorsToString es
+            f (length es, es)
+                
  
 -- captures output from handle, wrtes to the output pane and returns
 -- the captured data
@@ -138,16 +204,32 @@ captureOutput h tot str = do
         atomically $ writeTChan tot s'     -- write to output pane
         captureOutput h tot $ BS.append str s'
 
+captureOutput' :: Session -> Handle -> TChan BS.ByteString -> String -> IO String
+captureOutput' ss h tot str = do
+    eof <- hIsEOF h
+    if eof then do
+        return str
+    else do
+        bs <- BS.hGetLine h -- NB hGetLine is appending a CR on the end of the line !!
+        atomically $ writeTChan tot bs  -- write to output pane
+        captureOutput' ss h tot $ str ++ (init (BS.unpack bs)) ++ "\n"
+
+    where debugLine ss s = ssDebugInfo ss  $ "Line: " ++ (concat $ map (\c -> show (fromEnum c) ++ " ") s)
 
 ------------------------------------------
 -- compiler output parser
 ------------------------------------------
 
+compErrorsToString :: [CompError] -> String
+compErrorsToString ces = "Errors = " ++ (show $ length ces) ++ (concat $ map (\ce -> (compErrorToString ce) ++ "\n" ) ces)
+
+{-
 compErrorToString :: CompError -> String
 compErrorToString c =
     "Filename: " ++ (show $ filename c) ++ " (" ++ (show $ srcLine c) ++ "," ++ (show $ srcCol c) ++ ") errout = " ++ (show $ errIx c) ++ "\n" ++
         (concat $ map (\s -> " " ++ s ++ "\n") (errLines c))
-       
+-}
+      
 errorFile :: P.GenParser Char () [CompError]
 errorFile = do
     errs <- P.many anError
@@ -159,7 +241,7 @@ anError = do
     pos <- P.getPosition
     (fn, el, ec) <- fileName
     els <- errorDesc
-    return (CompError fn el ec (P.sourceLine pos) els)
+    return $ createCompError fn el ec (P.sourceLine pos) els --(CompError fn el ec (P.sourceLine pos) els)
 
 fileDrive :: P.GenParser Char () String
 fileDrive = do

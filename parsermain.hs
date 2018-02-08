@@ -1,21 +1,15 @@
 
 
-module Parser
-(
-    doParse,
-    CompError,
-    compErrorToString,
-    createCompError
-) where
-
-
+module Main where
+import Graphics.UI.WX
+import Graphics.UI.WXCore
 import Text.ParserCombinators.Parsec
 import qualified Text.Parsec.Prim as P
 import System.IO 
-import System.Directory  
 import Control.Concurrent 
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
+-- import Control.Exception
 import qualified Control.Concurrent.Thread as Thread
 import Control.Monad (liftM)
 import Control.Monad.Loops
@@ -25,11 +19,52 @@ import Data.List
 import GHC.IO.Handle
 
 
-doParse :: String -> [CompError]
-doParse s =
-    case (parse errorFile "" s) of
-        Left _ ->   []
-        Right es -> es
+
+
+
+import System.Directory  
+
+main = start mainGUI
+
+mainGUI :: IO ()
+mainGUI = do 
+  
+    -- main window
+    f <- frame []    
+    
+    p <- panel f []
+
+    -- create statusbar field
+    sf1 <- statusField [text := "SF1", statusWidth := 20]
+    sf2 <- statusField [text := "SF2"]
+    set f [statusBar := [sf1,sf2]]
+    
+    h <- openFile "errors3.txt" ReadMode
+
+    chn <- atomically $ newTChan
+    chn' <- atomically $ dupTChan chn
+
+    -- stream file to channels in separate thread
+    (_, wait) <- Thread.forkIO $ streamToChan h chn
+  
+    -- parse same input on both channels
+    (_, wait1) <- Thread.forkIO $ parseInThread chn
+    (_, wait2) <- Thread.forkIO $ parseInThread chn'
+
+    -- wait for threads to complete
+    es1 <- Thread.result =<< wait1
+    es2 <- Thread.result =<< wait2
+    Thread.result =<< wait
+
+    -- close file
+    putStrLn "*** Close ***"
+    hClose h
+
+    -- display results
+    putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es1      
+    putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es2      
+ 
+    return ()
 
 parseInThread :: TChan String -> IO [CompError]
 parseInThread chn = do
@@ -88,9 +123,8 @@ chanToString chn = do
                     return s)
     return (s) 
 
-data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
 
-createCompError fn el ec ln els = (CompError fn el ec ln els)
+data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
 
 compErrorToString :: CompError -> String
 compErrorToString c =

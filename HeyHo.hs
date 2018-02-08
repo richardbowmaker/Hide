@@ -355,10 +355,7 @@ onEditSelectAll ss = do
   
 onTestTest :: Session -> IO ()
 onTestTest ss = do
-    otClear ss
-    otAddLine ss $ BS.pack "line 1"
-    otAddLine ss $ BS.pack "line 2"
-    otAddLine ss $ BS.pack "line 3"
+    cpTest ss
     return ()
 
 ------------------------------------------------------------    
