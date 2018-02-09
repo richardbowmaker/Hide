@@ -33,11 +33,6 @@ import System.Process.Common
 import Misc
 import Session
 
-
--- compilation error
-data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
-
-
 -- build the project
 -- optional final function called in GUI thread on completion  
 cpBuildProject :: Session -> Maybe (IO ()) -> IO ()
@@ -81,13 +76,16 @@ cpCompileFile ss fp mfinally = do
 
     return ()
  
-cpCompileFileDone :: Session -> Maybe (IO ()) -> (Int, [CompError]) -> IO ()
-cpCompileFileDone ss mfinally (errCount, errors) = do
+cpCompileFileDone :: Session -> Maybe (IO ()) -> [CompError] -> IO ()
+cpCompileFileDone ss mfinally ces = do
     
-    if errCount == 0 then
-        outStr "\n\nNo errors\n"
+    if length ces == 0 then
+        outStr "\nNo errors\n"
     else 
-        outStr $ "\n\n" ++ (show errCount) ++ " errors\n"
+        outStr $ "\n" ++ (show $ length ces) ++ " errors\n"
+
+    -- save compilation results to session
+    atomically $ writeTVar (ssCompilerReport ss) ces
 
     -- schedule GUI finally function
     maybe (return ()) (\f-> atomically $ writeTChan (ssCFunc ss) f) mfinally
@@ -98,7 +96,7 @@ cpCompileFileDone ss mfinally (errCount, errors) = do
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function
-runGHC :: Session -> [String] -> String -> TOutput -> Maybe ((Int, [CompError]) -> IO ()) -> IO ()
+runGHC :: Session -> [String] -> String -> TOutput -> Maybe ([CompError] -> IO ()) -> IO ()
 runGHC ss args dir cerr mfinally = do
     
     ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
@@ -113,7 +111,7 @@ runGHC ss args dir cerr mfinally = do
         Left _   -> ssDebugError ss "Parse of compilation errors failed"
         Right es -> do
             ssDebugInfo ss $ "parsed ok"           
-            maybe (return ()) (\f -> f (length es, es)) mfinally
+            maybe (return ()) (\f -> f es) mfinally
 
 -- captures output from handle, wrtes to the output pane and returns
 -- the captured data
@@ -132,14 +130,6 @@ captureOutput ss h tot str = do
 -- compiler output parser
 ------------------------------------------
 
-compErrorsToString :: [CompError] -> String
-compErrorsToString ces = "Errors = " ++ (show $ length ces) ++ (concat $ map (\ce -> (compErrorToString ce) ++ "\n" ) ces)
-
-compErrorToString :: CompError -> String
-compErrorToString c =
-    "Filename: " ++ (show $ filename c) ++ " (" ++ (show $ srcLine c) ++ "," ++ (show $ srcCol c) ++ ") errout = " ++ (show $ errIx c) ++ "\n" ++
-        (concat $ map (\s -> " " ++ s ++ "\n") (errLines c))
-      
 errorFile :: P.GenParser Char () [CompError]
 errorFile = do
     errs <- P.many anError
@@ -151,7 +141,7 @@ anError = do
     pos <- P.getPosition
     (fn, el, ec) <- fileName
     els <- errorDesc
-    return $ (CompError fn el ec (P.sourceLine pos) els)
+    return $ ceCompError fn el ec (P.sourceLine pos) els
 
 fileDrive :: P.GenParser Char () String
 fileDrive = do

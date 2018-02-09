@@ -151,6 +151,10 @@ setUpMainWindow mf sf = do
     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
+
+   -- enable events for output pane, dbl click = goto error
+    scnSetEventHandler oe $ scnCallback ss
+    scnEnableEvents oe
    
     return (ss)
   
@@ -240,11 +244,16 @@ onClosing ss = do
     return ()
 
 onTabChanged :: Session -> EventAuiNotebook -> IO ()
-onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
-    updateSaveMenus ss
-    updateEditMenus ss
-    updateStatus ss
-    return ()    
+onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
+    c <- enbGetTabCount ss
+    if c > 0 then do
+        sf <- enbGetSelectedSourceFile ss
+        scnGrabFocus (sfEditor sf)
+        updateSaveMenus ss
+        updateEditMenus ss
+        updateStatus ss
+        return ()
+    else return ()
 
 onTabClose :: Session -> EventAuiNotebook -> IO ()
 onTabClose ss _ = do
@@ -593,31 +602,50 @@ writeSourceFile sf = do
 scnCallback :: Session -> SCNotification -> IO ()
 scnCallback ss sn = do 
 
-    case (scnNotifyGetCode sn) of
-        
-    -- If the constants are used rather than the real values the compiler
-    -- gives some nonsense about overlapping cases !! compiler bug
-    
-        2002 -> do -- sCN_SAVEPOINTREACHED
-            updateSaveMenus ss
-            updateEditMenus ss
-            return ()
+    let hw1 = scnNotifyGetHwnd sn -- event source HWND
+    let hw2 = ptrToWord64 (scnGetHwnd (ssOutput ss)) -- output pane HWND
 
-        2003 -> do -- sCN_SAVEPOINTLEFT
-            updateSaveMenus ss
-            updateEditMenus ss
-            return ()
+    if hw1 == hw2 then do
+
+        -- event from output pane
+        case (scnNotifyGetCode sn) of
             
-        2007 -> do -- sCN_UPDATEUI
-            updateStatus ss
-            updateEditMenus ss
-            return ()
+            2006 -> do -- sCN_DOUBLECLICK
+                gotoCompileError ss (fromIntegral (snLine sn) :: Int)
+                ssDebugInfo ss "Output pane double click"
+                return ()
+
+            otherwise -> do
+                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+                return ()
+
+    else do
+
+        case (scnNotifyGetCode sn) of
+            
+        -- If the constants are used rather than the real values the compiler
+        -- gives some nonsense about overlapping cases !! compiler bug
         
-        2013 -> return () -- sCN_PAINTED
-          
-        otherwise -> do
-            -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-            return ()
+            2002 -> do -- sCN_SAVEPOINTREACHED
+                updateSaveMenus ss
+                updateEditMenus ss
+                return ()
+
+            2003 -> do -- sCN_SAVEPOINTLEFT
+                updateSaveMenus ss
+                updateEditMenus ss
+                return ()
+                
+            2007 -> do -- sCN_UPDATEUI
+                updateStatus ss
+                updateEditMenus ss
+                return ()
+            
+            2013 -> return () -- sCN_PAINTED
+              
+            otherwise -> do
+                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+                return ()
          
 
 -----------------------------------------------------------------
@@ -871,16 +899,15 @@ enbSelectedSourceFileIsClean ss = do
     ic <- scnIsClean $ sfEditor sf
     return (ic)
     
-enbSelectTab :: Session -> SourceFile -> IO ()
+enbSelectTab :: Session -> SourceFile -> IO (Bool)
 enbSelectTab ss sf = do
     let nb = ssEditors ss
     mix <- enbGetTabIndex ss sf
     case mix of
         Just ix -> do
             auiNotebookSetSelection nb ix
-            return ()            
-        Nothing -> return ()
-    return ()
+            return (True)            
+        Nothing -> return (False)
 
 enbCloseTab :: Session -> SourceFile -> IO ()
 enbCloseTab ss sf = do
@@ -931,7 +958,7 @@ enbGetTabCount ss = do
     return (pc)
 
 ------------------------------------------------------------    
--- Create output pane
+-- Output pane
 ------------------------------------------------------------    
 
 createNoteBook :: Frame () -> IO (AuiNotebook (), ScnEditor)
@@ -955,6 +982,37 @@ createNoteBook f = do
  
     return (nb, e)
 
+-- jump to source file error location
+gotoCompileError :: Session -> Int -> IO ()
+gotoCompileError ss line = do
+
+    -- get compiler errors and lookup the error
+    ces <- atomically $ readTVar $ ssCompilerReport ss
+    let mce = find (\ce -> (ceErrLine ce) <= line ) (reverse ces)
+
+    case mce of
+        Nothing -> return ()
+        Just ce -> do
+
+            -- goto source file
+            msf <- prGetSourceFile ss $ ceFilePath ce 
+            case msf of
+           
+                Just sf -> do
+                    b <- enbSelectTab ss sf
+
+                    if b then do
+                        scnGotoLineCol (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
+                        scnGrabFocus (sfEditor sf)
+
+                    else return ()
+
+                Nothing -> do
+                    -- open source file
+                    sf <- openSourceFileEditor ss $ ceFilePath ce
+                    scnGotoLineCol (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
+                    scnGrabFocus (sfEditor sf)
+                
 ------------------------------------------------------------    
 -- Tree Control
 ------------------------------------------------------------    

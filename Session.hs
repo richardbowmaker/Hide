@@ -5,6 +5,7 @@ module Session
     SourceFile,
     TOutput,
     FunctionChannel,
+    TErrors,
 --
     ssCreate,
     ssFrame,
@@ -25,6 +26,7 @@ module Session
     ssMenuListGet,
     ssReadSourceFiles,
     ssIsOpeningState,
+    ssCompilerReport,
     ssToString,
     SsMenuList,
     SsNameMenuPair,
@@ -49,6 +51,17 @@ module Session
     prToString,
     prUpdate,
     prRead,
+    prGetSourceFile,
+--
+    CompError,
+    ceFilePath,
+    ceSrcLine,
+    ceSrcCol,
+    ceErrLine,
+    ceErrLines,
+    ceCompError,
+    compErrorToString,
+    compErrorsToString,
 --
     otClear,
     otAddText,
@@ -77,19 +90,20 @@ import Scintilla
 -- Session data and ToString functions
 ----------------------------------------------------------
 
-data Session = Session {    ssFrame         :: Frame (),            -- Main window
-                            ssAuiMgr        :: AuiManager (),       -- Application level AUI manager
-                            ssEditors       :: AuiNotebook (),      -- Notebook of source file editors
-                            ssProject       :: TProject,            -- Project data (mutable)
-                            ssMenus         :: SsMenuList,
-                            ssStatus        :: StatusField,
-                            ssTOutput       :: TOutput,             -- TCHan for output pane, e.g. compiler output
-                            ssCFunc         :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
-                            ssOutput        :: ScnEditor,           -- The output pane
-                            ssDebugError    :: String -> IO (),
-                            ssDebugWarn     :: String -> IO (),
-                            ssDebugInfo     :: String -> IO (),
-                            ssMainThreadId  :: ThreadId}
+data Session = Session {    ssFrame             :: Frame (),            -- Main window
+                            ssAuiMgr            :: AuiManager (),       -- Application level AUI manager
+                            ssEditors           :: AuiNotebook (),      -- Notebook of source file editors
+                            ssProject           :: TProject,            -- Project data (mutable)
+                            ssMenus             :: SsMenuList,
+                            ssStatus            :: StatusField,
+                            ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
+                            ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
+                            ssOutput            :: ScnEditor,           -- The output pane
+                            ssDebugError        :: String -> IO (),
+                            ssDebugWarn         :: String -> IO (),
+                            ssDebugInfo         :: String -> IO (),
+                            ssMainThreadId      :: ThreadId,
+                            ssCompilerReport    :: TErrors }
                                                         
  -- project data is mutable
 type TProject = TVar Project
@@ -97,6 +111,10 @@ type TProject = TVar Project
 -- compiler output channel
 type TOutput = TChan ByteString
 
+-- compiler errors
+type TErrors = TVar [CompError]
+
+-- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
 data Project = Project { prFiles :: [SourceFile] }
@@ -110,6 +128,13 @@ data SourceFile = SourceFile {  sfPanel     :: Panel (),        -- The panel add
 type SsNameMenuPair = (String, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
 
+-- compilation error
+data CompError = CompError {    ceFilePath  :: String, 
+                                ceSrcLine   :: Int, 
+                                ceSrcCol    :: Int, 
+                                ceErrLine   :: Int, -- line in compiler output
+                                ceErrLines  :: [String] } deriving (Show)
+
 -- global debug flag
 debug = True
                        
@@ -121,13 +146,14 @@ debug = True
 ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList -> StatusField -> ScnEditor -> ScnEditor -> IO (Session)
 ssCreate mf am nb pr ms sf ot db = do 
     mtid <- myThreadId
-    tpr <- atomically $ newTVar $ prCreate []
-    tot <- atomically $ newTChan
-    cfn <- atomically $ newTChan
+    tpr  <- atomically $ newTVar $ prCreate []
+    tot  <- atomically $ newTChan
+    cfn  <- atomically $ newTChan
+    terr <- atomically $ newTVar []
     let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
-    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid)
+    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid terr)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -251,6 +277,11 @@ prUpdate ss f = atomically (do
 prRead :: Session -> IO Project
 prRead ss = atomically $ readTVar $ ssProject ss
 
+prGetSourceFile :: Session -> String -> IO (Maybe SourceFile)
+prGetSourceFile ss fp = do
+    (Project fs) <- atomically $ readTVar $ ssProject ss
+    return $ find (\sf -> sfPathIs sf (Just fp)) fs
+
 ----------------------------------------------------------------
 -- Output helpers
 ----------------------------------------------------------------
@@ -278,4 +309,18 @@ otAddLine ss bs = do
     scnSetReadOnly e True
     scnShowLastLine e
 
+----------------------------------------------------------------
+-- Comp error
+----------------------------------------------------------------
 
+ceCompError :: String -> Int -> Int -> Int -> [String] -> CompError
+ceCompError fp sl sc el els = (CompError fp sl sc el els)
+
+compErrorsToString :: [CompError] -> String
+compErrorsToString ces = "Errors = " ++ (show $ length ces) ++ (concat $ map (\ce -> (compErrorToString ce) ++ "\n" ) ces)
+
+compErrorToString :: CompError -> String
+compErrorToString c =
+    "Filename: " ++ (show $ ceFilePath c) ++ " (" ++ (show $ ceSrcLine c) ++ "," ++ (show $ ceSrcCol c) ++ ") errout = " ++ (show $ ceErrLine c) ++ "\n" ++
+        (concat $ map (\s -> " " ++ s ++ "\n") (ceErrLines c))
+      

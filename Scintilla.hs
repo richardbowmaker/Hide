@@ -3,6 +3,7 @@ module Scintilla
 (   SCNotification,
     ScnEditor,
     scnCreateEditor,
+    scnNotifyGetHwnd,
     scnNotifyGetCode,
     scnNotifyGetPosition,
     scnNotifyGetWParam,
@@ -57,7 +58,14 @@ module Scintilla
     scnSetUseTabs,
     scnSetIndentationGuides,
     scnGotoLine,
-    scnShowLastLine
+    scnShowLastLine,
+    scnSetFocus,
+    scnGrabFocus,
+    snLine,
+    scnGotoLineCol,
+    scnGotoPos,
+    scnSetFirstVisibleLine,
+    scnSetSelectionMode
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -72,6 +80,8 @@ import Data.String.Combinators (punctuate)
 import Data.Strings (strNull)
 
 import Graphics.Win32.GDI.Types (COLORREF, HWND, rgb)
+import Graphics.Win32.Message (wM_SETFOCUS)
+import Graphics.Win32.Window.PostMessage (postMessage)
 import Graphics.UI.WXCore (varCreate, varGet)
 
 import Foreign.C.String (CString, withCString, withCStringLen)
@@ -140,7 +150,7 @@ data  SCNotification = SCNotification
                 message         :: Int32,  -- SCN_MACRORECORD 
                 wParam          :: Word64, -- SCN_MACRORECORD
                 lParam          :: Int64,  -- SCN_MACRORECORD
-                line            :: Int64,  -- SCN_MODIFIED
+                snLine          :: Int64,  -- SCN_MODIFIED
                 foldLevelNow    :: Int32,  -- SCN_MODIFIED
                 foldLevelPrev   :: Int32,  -- SCN_MODIFIED 
                 margin          :: Int32,  -- SCN_MARGINCLICK 
@@ -197,7 +207,7 @@ instance Storable SCNotification where
                 message
                 wParam
                 lParam
-                line
+                snLine
                 foldLevelNow
                 foldLevelPrev
                 margin
@@ -222,7 +232,7 @@ instance Storable SCNotification where
             pokeByteOff ptr 72    message
             pokeByteOff ptr 80    wParam
             pokeByteOff ptr 88    lParam
-            pokeByteOff ptr 96    line
+            pokeByteOff ptr 96    snLine
             pokeByteOff ptr 104   foldLevelNow
             pokeByteOff ptr 108   foldLevelPrev
             pokeByteOff ptr 112   margin
@@ -358,7 +368,8 @@ scnConfigureHaskell :: ScnEditor -> IO ()
 scnConfigureHaskell e = do
     scnSetLexer e (fromIntegral sCLEX_HASKELL :: Int)
     scnSetKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
-                        "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let"]
+                        "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let",
+                        "newtype", "type"]
     scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
     scnStyleClearAll e
     scnSetAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
@@ -518,6 +529,17 @@ scnSelectAll :: ScnEditor -> IO ()
 scnSelectAll e = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_SELECTALL 0 0
     return ()
+
+{-
+    sC_SEL_STREAM
+    sC_SEL_RECTANGLE
+    sC_SEL_LINES,
+    sC_SEL_THIN,
+-}      
+scnSetSelectionMode :: ScnEditor -> Word32 -> IO ()
+scnSetSelectionMode e m = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONMODE  (fromIntegral m :: Word64) 0
+    return ()
   
 ----------------------------------------------
 -- Brace Highlighting 
@@ -646,12 +668,29 @@ scnGotoLine e l = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_GOTOLINE  (fromIntegral l :: Word64) 0
     return ()
 
+scnGotoPos :: ScnEditor -> Int -> IO ()
+scnGotoPos e p = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_GOTOPOS  (fromIntegral p :: Word64) 0
+    return ()
+
 scnShowLastLine :: ScnEditor -> IO ()
 scnShowLastLine e = do
     sl <- scnGetLinesOnScreen e
     tl <- scnGetLineCount e
     if (sl < tl) then (scnGotoLine e (tl-1)) 
     else return ()
+
+scnGotoLineCol :: ScnEditor -> Int -> Int -> IO ()
+scnGotoLineCol e l c = do
+    p <- scnGetPositionFromLine e l
+    scnGotoPos e (p+c)
+    scnSetFirstVisibleLine e (l-5)
+    return ()
+
+scnSetFirstVisibleLine :: ScnEditor -> Int -> IO ()
+scnSetFirstVisibleLine e l = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETFIRSTVISIBLELINE  (fromIntegral l :: Word64) 0
+    return ()
 
 ----------------------------------------------
 -- Tabs 
@@ -678,3 +717,19 @@ scnSetIndentationGuides e w = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_SETINDENTATIONGUIDES  (fromIntegral w :: Word64) 0
     return ()
     
+----------------------------------------------
+-- Focus 
+----------------------------------------------
+
+scnSetFocus :: ScnEditor -> Bool -> IO ()
+scnSetFocus e b = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETFOCUS (fromBool b :: Word64) 0
+    scnGrabFocus e
+    return ()
+
+scnGrabFocus :: ScnEditor -> IO ()
+scnGrabFocus e = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_GRABFOCUS 0 0
+    return ()
+
+
