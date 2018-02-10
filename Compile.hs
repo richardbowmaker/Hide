@@ -9,7 +9,6 @@ module Compile
     cpCompileFile,
 ) where
 
-
 -- library imports
 import Control.Concurrent 
 import Control.Concurrent.STM
@@ -107,17 +106,15 @@ runGHC ss args dir cerr mfinally = do
     
     ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
-    (_, Just hout, Just herr, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
-        {cwd = Just dir, std_out = CreatePipe, std_err = CreatePipe}
+    (hr, hw) <- createPipe
+
+    (_, _, _, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
+        {cwd = Just dir, std_out = UseHandle hw, std_err = UseHandle hw}
 
     -- stream compiler output to output pane
---    (_, waite) <- Thread.forkIO $ captureOutput ss herr (ssTOutput ss) ""
-    s <- captureOutput ss herr (ssTOutput ss) ""
+    s <- captureOutput ss hr (ssTOutput ss) ""
 
---    s <- Thread.result =<< waite
-    hClose hout
     waitForProcess ph
-    
 
     case (P.parse errorFile "" s) of
         Left _   -> ssDebugError ss "Parse of compilation errors failed"
@@ -144,11 +141,13 @@ captureOutput ss h tot str = do
 
 errorFile :: P.GenParser Char () [CompError]
 errorFile = do
-    errs <- P.many anError
+    errs <- P.many (P.try fileError)
+    P.optional linkLine
     return errs
 
-anError :: P.GenParser Char () CompError
-anError = do
+fileError :: P.GenParser Char () CompError
+fileError = do
+    P.optional fileTitle
     P.string eol
     pos <- P.getPosition
     (fn, el, ec) <- fileName
@@ -173,6 +172,13 @@ fileName = do
     P.string eol
     return (drive ++ path, read line, read col)
 
+fileTitle :: P.GenParser Char () ()
+fileTitle = do
+    P.char '['
+    P.many (P.noneOf eol)
+    P.string eol
+    return ()
+
 errorDesc :: P.GenParser Char () ([String])
 errorDesc = do
     lines <- P.many errorLine
@@ -184,8 +190,15 @@ errorLine = do
     eline <- P.many (P.noneOf eol)
     P.string eol
     return eline
+
+linkLine :: P.GenParser Char () ()
+linkLine = do
+    P.string "Linking"
+    P.many (P.noneOf eol)
+    return ()
     
 eol :: String
 eol = "\n"
+
 
 

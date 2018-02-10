@@ -1,2 +1,5 @@
+[3 of 7] Compiling Scintilla        ( Scintilla.hs, Scintilla.o )
+[6 of 7] Compiling Compile          ( Compile.hs, Compile.o )
 [7 of 7] Compiling Main             ( D:\_Rick's\haskell\HeyHo\HeyHo.hs, D:\_Rick's\haskell\HeyHo\HeyHo.o )
 Linking D:\_Rick's\haskell\HeyHo\HeyHo.exe ...
+

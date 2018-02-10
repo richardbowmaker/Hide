@@ -1,7 +1,6 @@
 
 -- main IDE for Haskell --
 
-
 module Main where
 
 -- library imports
@@ -55,7 +54,7 @@ mainGUI = do
     set mf [on closing := onClosing ss]
     
     -- create a timer that updates the display
-    t <- timer mf [interval := 100, on command := onTimer ss]
+    t <- timer mf [interval := 100, on command := onTimer ss] 
         
     return ()
    
@@ -1005,25 +1004,28 @@ gotoCompileError ss line = do
         Nothing -> return ()
         Just ce -> do
 
-            -- goto source file
+            -- goto source file from list of open files
             msf <- prGetSourceFile ss $ ceFilePath ce 
             case msf of
            
                 Just sf -> do
                     b <- enbSelectTab ss sf
-
-                    if b then do
-                        scnGotoLineCol (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
-                        scnGrabFocus (sfEditor sf)
-
+                    if b then gotoLine (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
                     else return ()
 
                 Nothing -> do
-                    -- open source file
-                    sf <- openSourceFileEditor ss $ ceFilePath ce
-                    scnGotoLineCol (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
-                    scnGrabFocus (sfEditor sf)
-                
+                    -- source file not open
+                    fileOpen ss $ ceFilePath ce
+                    msf <- getSourceFile ss $ ceFilePath ce
+                    case msf of
+                        Just sf -> gotoLine (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
+                        Nothing -> return ()
+     
+    where gotoLine e l c = do
+            scnGotoLineCol e l c
+            scnGrabFocus e
+            
+
 ------------------------------------------------------------    
 -- Tree Control
 ------------------------------------------------------------    

@@ -65,7 +65,9 @@ module Scintilla
     scnGotoLineCol,
     scnGotoPos,
     scnSetFirstVisibleLine,
-    scnSetSelectionMode
+    scnGetFirstVisibleLine,
+    scnSetSelectionMode,
+    scnLinesOnScreen
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -682,15 +684,32 @@ scnShowLastLine e = do
 
 scnGotoLineCol :: ScnEditor -> Int -> Int -> IO ()
 scnGotoLineCol e l c = do
+    fl <- scnGetFirstVisibleLine e
+    sl <- scnLinesOnScreen e
     p <- scnGetPositionFromLine e l
-    scnGotoPos e (p+c)
-    scnSetFirstVisibleLine e (l-5)
-    return ()
+
+    if (l < fl || l >= (fl+sl)) then do
+        scnSetFirstVisibleLine e (l-(sl `div` 2))
+        scnGotoPos e (p+c)
+        return ()
+    else do 
+        scnGotoPos e (p+c)
+        return ()
 
 scnSetFirstVisibleLine :: ScnEditor -> Int -> IO ()
 scnSetFirstVisibleLine e l = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_SETFIRSTVISIBLELINE  (fromIntegral l :: Word64) 0
     return ()
+
+scnGetFirstVisibleLine :: ScnEditor -> IO Int
+scnGetFirstVisibleLine e = do
+    l <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETFIRSTVISIBLELINE  0 0
+    return (fromIntegral l :: Int)
+
+scnLinesOnScreen :: ScnEditor -> IO Int
+scnLinesOnScreen e = do
+    l <- c_ScnSendEditorII (scnGetHwnd e) sCI_LINESONSCREEN  0 0
+    return (fromIntegral l :: Int)
 
 ----------------------------------------------
 -- Tabs 

@@ -39,30 +39,32 @@ mainGUI = do
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
     
-    h <- openFile "errors3.txt" ReadMode
+    h <- openFile "good compile 2.txt" ReadMode
 
     chn <- atomically $ newTChan
-    chn' <- atomically $ dupTChan chn
+ --   chn' <- atomically $ dupTChan chn
 
     -- stream file to channels in separate thread
     (_, wait) <- Thread.forkIO $ streamToChan h chn
   
     -- parse same input on both channels
     (_, wait1) <- Thread.forkIO $ parseInThread chn
-    (_, wait2) <- Thread.forkIO $ parseInThread chn'
+ --   (_, wait2) <- Thread.forkIO $ parseInThread chn'
 
     -- wait for threads to complete
     es1 <- Thread.result =<< wait1
-    es2 <- Thread.result =<< wait2
+--    es2 <- Thread.result =<< wait2
     Thread.result =<< wait
 
     -- close file
     putStrLn "*** Close ***"
     hClose h
 
+    putStrLn $ "Errors: " ++ (show $ length es1)
+
     -- display results
     putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es1      
-    putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es2      
+--   putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es2      
  
     return ()
 
@@ -70,8 +72,12 @@ parseInThread :: TChan String -> IO [CompError]
 parseInThread chn = do
     s <- captureChannel chn "" 
     case (parse errorFile "" s) of
-        Left _ -> return []
-        Right es -> return es
+        Left pe -> do
+            putStrLn $ "Parser failed: " ++ (show pe)
+            return []
+        Right es -> do
+            putStrLn "Parsed OK"
+            return es
     
 
 streamToChan :: Handle -> TChan String -> IO ()
@@ -146,11 +152,13 @@ parseErrorFile fn = do
 
 errorFile :: GenParser Char () [CompError]
 errorFile = do
-    errs <- many anError
+    errs <- many (try fileError)
+    optional linkLine
     return errs
 
-anError :: GenParser Char () CompError
-anError = do
+fileError :: GenParser Char () CompError
+fileError = do
+    optional fileTitle
     string eol
     pos <- getPosition
     (fn, el, ec) <- fileName
@@ -175,6 +183,13 @@ fileName = do
     string eol
     return (drive ++ path, read line, read col)
 
+fileTitle :: GenParser Char () ()
+fileTitle = do
+    char '['
+    many (noneOf eol)
+    string eol
+    return ()
+
 errorDesc :: GenParser Char () ([String])
 errorDesc = do
     lines <- many errorLine
@@ -186,7 +201,14 @@ errorLine = do
     eline <- many (noneOf eol)
     string eol
     return eline
-    
+  
+linkLine :: GenParser Char () ()
+linkLine = do
+    string "Linking"
+    many (noneOf eol)
+    return ()
+
+ 
 eol :: String
 eol = "\n"
 
