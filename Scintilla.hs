@@ -1,4 +1,6 @@
 
+{-# LANGUAGE ScopedTypeVariables #-}
+
 module Scintilla
 (   SCNotification,
     ScnEditor,
@@ -67,7 +69,14 @@ module Scintilla
     scnSetFirstVisibleLine,
     scnGetFirstVisibleLine,
     scnSetSelectionMode,
-    scnLinesOnScreen
+    scnLinesOnScreen,
+    scnFindText,
+    scnSearchNext,
+    scnSearchPrev,
+    scnSetTargetStart,
+    scnSetTargetEnd,
+    scnSetTargetWholeDocument,
+    scnSearchInTarget
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -87,6 +96,7 @@ import Graphics.Win32.Window.PostMessage (postMessage)
 import Graphics.UI.WXCore (varCreate, varGet)
 
 import Foreign.C.String (CString, withCString, withCStringLen)
+import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Utils (fromBool)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Foreign.Storable (Storable, alignment, sizeOf, peek, poke, pokeByteOff, peekByteOff)
@@ -121,11 +131,38 @@ foreign import ccall safe "wrapper" createCallback ::
 --------------------------------------------------------------
 -- data types
 --------------------------------------------------------------
-      
+ 
+data SciTextToFind = SciTextToFind {
+                scnChrgCpMin        :: Int32,
+                scnChrgCpMax        :: Int32,
+                scnLpstrText        :: Word64,
+                scnChrgTextCpMin    :: Int32,
+                scnChrgTextCpMax    :: Int32}
+
+instance Storable SciTextToFind where
+        alignment _ = 8
+        sizeOf _    = 24
+        peek ptr    = SciTextToFind
+            <$> peekByteOff ptr 0
+            <*> peekByteOff ptr 4
+            <*> peekByteOff ptr 8 
+            <*> peekByteOff ptr 16
+            <*> peekByteOff ptr 20
+        poke ptr (SciTextToFind
+                scnChrgCpMin
+                scnChrgCpMax
+                scnLpstrText
+                scnChrgTextCpMin
+                scnChrgTextCpMax) = do                        
+            pokeByteOff ptr 0     scnChrgCpMin
+            pokeByteOff ptr 4     scnChrgCpMax
+            pokeByteOff ptr 8     scnLpstrText                
+            pokeByteOff ptr 16    scnChrgTextCpMin           
+            pokeByteOff ptr 20    scnChrgTextCpMax
+          
 -- Structure for Scintilla Notification (64 bit version)
 -- See Scintilla.h SCNotification for original       
-data  SCNotification = SCNotification
-            {
+data  SCNotification = SCNotification {
                 ptrHwndFrom     :: Word64,
                 idFrom          :: Word64,
                 code            :: Word32,
@@ -750,5 +787,68 @@ scnGrabFocus :: ScnEditor -> IO ()
 scnGrabFocus e = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_GRABFOCUS 0 0
     return ()
+
+----------------------------------------------
+-- Search and replace
+----------------------------------------------
+
+scnSetTargetStart :: ScnEditor -> Int -> IO ()
+scnSetTargetStart e t = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETSTART (fromIntegral t :: Word64) 0
+    return ()
+
+scnSetTargetEnd :: ScnEditor -> Int -> IO ()
+scnSetTargetEnd e t = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETEND  (fromIntegral t :: Word64) 0
+    return ()
+
+scnSetTargetWholeDocument :: ScnEditor -> IO ()
+scnSetTargetWholeDocument e = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0
+    return ()
+
+scnSearchInTarget :: ScnEditor -> String -> IO Int
+scnSearchInTarget e s = do
+    p <- withCStringLen s (\(cs, l) -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHINTARGET (fromIntegral l :: Word64) (ptrToInt64 cs)) 
+    return (fromIntegral p :: Int)
+
+{-
+    First argument is the seqrch options:-
+
+    sCFIND_WHOLEWORD,
+    sCFIND_MATCHCASE,
+    sCFIND_WORDSTART,
+    sCFIND_REGEXP,
+    sCFIND_POSIX,
+    sCFIND_CXX11REGEX,
+-}
+
+scnFindText :: ScnEditor -> String -> Word32 -> Int -> Int -> IO Int
+scnFindText e text ops start end = do
+    p <- alloca (\(ptr :: Ptr SciTextToFind) -> do
+        pos <- withCString text 
+                (\ps -> do
+                    let sci = (SciTextToFind 
+                            (fromIntegral start :: Int32)
+                            (fromIntegral end   :: Int32)
+                            (ptrToWord64 ps)
+                            0 0)    
+                    poke ptr sci
+                    c_ScnSendEditorII (scnGetHwnd e) sCI_FINDTEXT (fromIntegral ops :: Word64) (ptrToInt64 ptr)
+                )
+        return (fromIntegral pos :: Int))
+    return p
+
+scnSearchNext :: ScnEditor -> String -> Int -> IO Int
+scnSearchNext e text ops = do
+    pos <- withCString text 
+            (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHNEXT (fromIntegral ops :: Word64) (ptrToInt64 ps))
+    return (fromIntegral pos :: Int)
+
+scnSearchPrev :: ScnEditor -> String -> Int -> IO Int
+scnSearchPrev e text ops = do
+    pos <- withCString text 
+            (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHPREV (fromIntegral ops :: Word64) (ptrToInt64 ps))
+    return (fromIntegral pos :: Int)
 
 

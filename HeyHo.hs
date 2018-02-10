@@ -133,22 +133,25 @@ setUpMainWindow mf sf = do
     editorAddNewFile ss
     
     -- setup menu handlers
-    set (ssMenuListGet ss "FileOpen")     [on command := onFileOpen      ss]
-    set (ssMenuListGet ss "FileNew")      [on command := onFileNew       ss]
-    set (ssMenuListGet ss "FileSave")     [on command := onFileSave      ss]
-    set (ssMenuListGet ss "FileSaveAs")   [on command := onFileSaveAs    ss]
-    set (ssMenuListGet ss "FileSaveAll")  [on command := onFileSaveAll   ss]
-    set (ssMenuListGet ss "FileClose")    [on command := onFileClose     ss]
-    set (ssMenuListGet ss "FileCloseAll") [on command := onFileCloseAll  ss]
-    set (ssMenuListGet ss "EditUndo")     [on command := onEditUndo      ss]
-    set (ssMenuListGet ss "EditRedo")     [on command := onEditRedo      ss]
-    set (ssMenuListGet ss "EditCut")      [on command := onEditCut       ss]
-    set (ssMenuListGet ss "EditCopy")     [on command := onEditCopy      ss]
-    set (ssMenuListGet ss "EditPaste")    [on command := onEditPaste     ss]
-    set (ssMenuListGet ss "EditAll")      [on command := onEditSelectAll ss]
-    set (ssMenuListGet ss "BuildBuild")   [on command := onBuildBuild    ss]
-    set (ssMenuListGet ss "BuildCompile") [on command := onBuildCompile  ss]
-    set (ssMenuListGet ss "TestTest")     [on command := onTestTest      ss]
+    set (ssMenuListGet ss "FileOpen")           [on command := onFileOpen           ss]
+    set (ssMenuListGet ss "FileNew")            [on command := onFileNew            ss]
+    set (ssMenuListGet ss "FileSave")           [on command := onFileSave           ss]
+    set (ssMenuListGet ss "FileSaveAs")         [on command := onFileSaveAs         ss]
+    set (ssMenuListGet ss "FileSaveAll")        [on command := onFileSaveAll        ss]
+    set (ssMenuListGet ss "FileClose")          [on command := onFileClose          ss]
+    set (ssMenuListGet ss "FileCloseAll")       [on command := onFileCloseAll       ss]
+    set (ssMenuListGet ss "EditUndo")           [on command := onEditUndo           ss]
+    set (ssMenuListGet ss "EditRedo")           [on command := onEditRedo           ss]
+    set (ssMenuListGet ss "EditCut")            [on command := onEditCut            ss]
+    set (ssMenuListGet ss "EditCopy")           [on command := onEditCopy           ss]
+    set (ssMenuListGet ss "EditPaste")          [on command := onEditPaste          ss]
+    set (ssMenuListGet ss "EditAll")            [on command := onEditSelectAll      ss]
+    set (ssMenuListGet ss "EditFind")           [on command := onEditFind           ss]
+    set (ssMenuListGet ss "EditFindForward")    [on command := onEditFindForward    ss]
+    set (ssMenuListGet ss "EditFindBackward")   [on command := onEditFindBackward   ss]
+    set (ssMenuListGet ss "BuildBuild")         [on command := onBuildBuild         ss]
+    set (ssMenuListGet ss "BuildCompile")       [on command := onBuildCompile       ss]
+    set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
@@ -180,14 +183,17 @@ setupMenus mf  = do
                              
     menuQuit  <- menuQuit menuFile [help := "Quit the demo", on command := close mf]
 
-    menuEdit         <- menuPane            [text := "&Edit"]
-    menuEditUndo     <- menuItem menuEdit   [text := "Undo\tCtrl-Z"]
-    menuEditRedo     <- menuItem menuEdit   [text := "Redo\tCtrl-Y"]
+    menuEdit                <- menuPane            [text := "&Edit"]
+    menuEditUndo            <- menuItem menuEdit   [text := "Undo\tCtrl-Z"]
+    menuEditRedo            <- menuItem menuEdit   [text := "Redo\tCtrl-Y"]
     menuAppendSeparator menuEdit
-    menuEditCut      <- menuItem menuEdit   [text := "Cut\tCtrl-X"]
-    menuEditCopy     <- menuItem menuEdit   [text := "Copy\tCtrl-C"]
-    menuEditPaste    <- menuItem menuEdit   [text := "Paste\tCtrl-V"]
-    menuEditAll      <- menuItem menuEdit   [text := "Select All\tCtrl-A"]
+    menuEditCut             <- menuItem menuEdit   [text := "Cut\tCtrl-X"]
+    menuEditCopy            <- menuItem menuEdit   [text := "Copy\tCtrl-C"]
+    menuEditPaste           <- menuItem menuEdit   [text := "Paste\tCtrl-V"]
+    menuEditAll             <- menuItem menuEdit   [text := "Select All\tCtrl-A"]
+    menuEditFind            <- menuItem menuEdit   [text := "Find\tCtrl-F"]
+    menuEditFindForward     <- menuItem menuEdit   [text := "Find Forward\tF3"]
+    menuEditFindBackward    <- menuItem menuEdit   [text := "Find Backward\tShift-F3"]
     
     menuBuild        <- menuPane            [text := "Build"]
     menuBuildCompile <- menuItem menuBuild  [text := "Compile\tCtrl-F7",       help := "Compiles current source file"]
@@ -205,22 +211,25 @@ setupMenus mf  = do
     set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuTest, menuHelp']]
 
     -- create lookup list of menus for session data   
-    ml <- ssMenuListCreate [    ("FileOpen",        menuFileOpen), 
-                                ("FileSave",        menuFileSave), 
-                                ("FileNew",         menuFileNew), 
-                                ("FileClose",       menuFileClose), 
-                                ("FileCloseAll",    menuFileCloseAll), 
-                                ("FileSaveAs",      menuFileSaveAs), 
-                                ("FileSaveAll",     menuFileSaveAll),
-                                ("EditUndo",        menuEditUndo),
-                                ("EditRedo",        menuEditRedo),
-                                ("EditCut",         menuEditCut),
-                                ("EditCopy",        menuEditCopy),
-                                ("EditPaste",       menuEditPaste),
-                                ("EditAll",         menuEditAll),
-                                ("BuildBuild",      menuBuildBuild),
-                                ("BuildCompile",    menuBuildCompile),
-                                ("TestTest",        menuTestTest)]
+    ml <- ssMenuListCreate [    ("FileOpen",            menuFileOpen), 
+                                ("FileSave",            menuFileSave), 
+                                ("FileNew",             menuFileNew), 
+                                ("FileClose",           menuFileClose), 
+                                ("FileCloseAll",        menuFileCloseAll), 
+                                ("FileSaveAs",          menuFileSaveAs), 
+                                ("FileSaveAll",         menuFileSaveAll),
+                                ("EditUndo",            menuEditUndo),
+                                ("EditRedo",            menuEditRedo),
+                                ("EditCut",             menuEditCut),
+                                ("EditCopy",            menuEditCopy),
+                                ("EditPaste",           menuEditPaste),
+                                ("EditAll",             menuEditAll),
+                                ("EditFind",            menuEditFind),
+                                ("EditFindForward",     menuEditFindForward),
+                                ("EditFindBackward",    menuEditFindBackward),
+                                ("BuildBuild",          menuBuildBuild),
+                                ("BuildCompile",        menuBuildCompile),
+                                ("TestTest",            menuTestTest)]
 
     
     -- create Toolbar
@@ -366,6 +375,68 @@ onEditSelectAll ss = do
 onTestTest :: Session -> IO ()
 onTestTest ss = do
     return ()
+
+onEditFind :: Session -> IO ()
+onEditFind ss = do
+    s <- textDialog (ssFrame ss) "Find:" "HeyHo" ""
+    if s /= "" then do
+        sf <- enbGetSelectedSourceFile ss
+        let e = sfEditor sf
+        len <- scnGetTextLen e
+        p <- scnFindText e s 0 0 len
+
+        -- goto text if found
+        if p >= 0 then do
+            scnGotoPos e p
+            scnGrabFocus e
+            ssDebugInfo ss $ "Found at: " ++ (show p)
+
+            -- save find string for next and prev
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p)
+    
+            return ()
+        else return ()
+    else return ()
+
+    where filepath sf =  maybe ("") id (sfFilePath sf)
+
+onEditFindForward :: Session -> IO ()
+onEditFindForward ss = do
+    ssDebugInfo ss "Find forward"
+    ft <- atomically $ readTVar (ssFindText ss)
+    if ((ftText ft) /= "") then do
+        sf <- enbGetSelectedSourceFile ss
+        let e = sfEditor sf
+        scnSetTargetStart e ((ftPosition ft)+1)
+        len <- scnGetTextLen e
+        scnSetTargetEnd e len
+        p <- scnSearchNext e (ftText ft) 0
+        -- goto text if found
+        if p >= 0 then do
+            scnGotoPos e p
+            scnGrabFocus e
+            ssDebugInfo ss $ "Found at: " ++ (show p)
+            return ()
+        else return ()        
+    else return ()
+
+onEditFindBackward :: Session -> IO ()
+onEditFindBackward ss = do
+    ft <- atomically $ readTVar (ssFindText ss)
+    if ((ftText ft) /= "") then do
+        sf <- enbGetSelectedSourceFile ss
+        let e = sfEditor sf
+        scnSetTargetStart e ((ftPosition ft)-1)
+        scnSetTargetEnd e 0
+        p <- scnSearchPrev e (ftText ft) 0
+        -- goto text if found
+        if p >= 0 then do
+            scnGotoPos e p
+            scnGrabFocus e
+            ssDebugInfo ss $ "Found at: " ++ (show p)
+            return ()
+        else return ()        
+    else return ()
 
 ------------------------------------------------------------    
 -- Build Menu handlers
@@ -705,27 +776,33 @@ updateEditMenus ss = do
         -- ssDebugInfo ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
         
         b <- scnCanUndo $ sfEditor sf
-        set (ssMenuListGet ss "EditUndo")    [enabled := b]
+        set (ssMenuListGet ss "EditUndo")           [enabled := b]
         b <- scnCanRedo $ sfEditor sf
-        set (ssMenuListGet ss "EditRedo")    [enabled := b]
+        set (ssMenuListGet ss "EditRedo")           [enabled := b]
         
         b <- scnSelectionIsEmpty $ sfEditor sf        
-        set (ssMenuListGet ss "EditCut")     [enabled := not b]
-        set (ssMenuListGet ss "EditCopy")    [enabled := not b]        
+        set (ssMenuListGet ss "EditCut")            [enabled := not b]
+        set (ssMenuListGet ss "EditCopy")           [enabled := not b]        
         b <- scnCanPaste $ sfEditor sf        
-        set (ssMenuListGet ss "EditPaste")   [enabled := b]
-        set (ssMenuListGet ss "EditAll")     [enabled := True]
+        set (ssMenuListGet ss "EditPaste")          [enabled := b]
+        set (ssMenuListGet ss "EditAll")            [enabled := True]
+        set (ssMenuListGet ss "EditFind")           [enabled := True]
+        set (ssMenuListGet ss "EditFindForward")    [enabled := True]
+        set (ssMenuListGet ss "EditFindBackward")   [enabled := True]
         return ()
         
     else do
     
         ssDebugError ss "updateEditMenus: no file"
-        set (ssMenuListGet ss "EditUndo")    [enabled := False]
-        set (ssMenuListGet ss "EditRedo")    [enabled := False]
-        set (ssMenuListGet ss "EditCut")     [enabled := False]
-        set (ssMenuListGet ss "EditCopy")    [enabled := False]
-        set (ssMenuListGet ss "EditPaste")   [enabled := False]
-        set (ssMenuListGet ss "EditAll")     [enabled := False]
+        set (ssMenuListGet ss "EditUndo")           [enabled := False]
+        set (ssMenuListGet ss "EditRedo")           [enabled := False]
+        set (ssMenuListGet ss "EditCut")            [enabled := False]
+        set (ssMenuListGet ss "EditCopy")           [enabled := False]
+        set (ssMenuListGet ss "EditPaste")          [enabled := False]
+        set (ssMenuListGet ss "EditAll")            [enabled := False]
+        set (ssMenuListGet ss "EditFind")           [enabled := False]
+        set (ssMenuListGet ss "EditFindForward")    [enabled := False]
+        set (ssMenuListGet ss "EditFindBackward")   [enabled := False]
         return ()
  
 -- display line count, cursor position etc. 

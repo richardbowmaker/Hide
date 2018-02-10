@@ -27,6 +27,7 @@ module Session
     ssReadSourceFiles,
     ssIsOpeningState,
     ssCompilerReport,
+    ssFindText,
     ssToString,
     SsMenuList,
     SsNameMenuPair,
@@ -65,7 +66,13 @@ module Session
 --
     otClear,
     otAddText,
-    otAddLine    
+    otAddLine,
+--
+    FindText,
+    ftFindText,
+    ftText,
+    ftFilePath,
+    ftPosition,    
 ) where
 
 
@@ -103,8 +110,11 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssDebugWarn         :: String -> IO (),
                             ssDebugInfo         :: String -> IO (),
                             ssMainThreadId      :: ThreadId,
-                            ssCompilerReport    :: TErrors }
-                                                        
+                            ssCompilerReport    :: TErrors,
+                            ssFindText          :: TFindText}
+   
+data FindText = FindText { ftText :: String, ftFilePath :: String, ftPosition :: Int }
+
  -- project data is mutable
 type TProject = TVar Project
 
@@ -113,6 +123,8 @@ type TOutput = TChan ByteString
 
 -- compiler errors
 type TErrors = TVar [CompError]
+
+type TFindText = TVar FindText
 
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
@@ -150,10 +162,11 @@ ssCreate mf am nb pr ms sf ot db = do
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
+    tfnd <- atomically $ newTVar (FindText "" "" 0)
     let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
-    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid terr)
+    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid terr tfnd)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -324,3 +337,10 @@ compErrorToString c =
     "Filename: " ++ (show $ ceFilePath c) ++ " (" ++ (show $ ceSrcLine c) ++ "," ++ (show $ ceSrcCol c) ++ ") errout = " ++ (show $ ceErrLine c) ++ "\n" ++
         (concat $ map (\s -> " " ++ s ++ "\n") (ceErrLines c))
       
+
+----------------------------------------------------------------
+-- Find Text
+----------------------------------------------------------------
+
+ftFindText :: String -> String -> Int -> FindText
+ftFindText text fp pos = (FindText text fp pos)

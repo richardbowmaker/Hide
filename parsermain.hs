@@ -17,12 +17,14 @@ import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pa
 import qualified Data.ByteString as BS (append)
 import Data.List
 import GHC.IO.Handle
-
-
-
-
-
 import System.Directory  
+
+
+data SourceFile = SourceFile { sfFilePath  :: Maybe String } deriving (Show)   -- Source file path, Nothing = file name not set yet
+
+filepath sf = maybe (return "") (\fp -> return fp) (sfFilePath sf)
+
+
 
 main = start mainGUI
 

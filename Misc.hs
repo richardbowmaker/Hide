@@ -6,6 +6,7 @@ module Misc
     windowToString,
     panelToString,
     ptrToWord64,
+    ptrToInt64,
     findAndUpdate1,
     findAndUpdate2,
     comparePtrs,
@@ -18,12 +19,16 @@ import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Numeric (showHex)
 import Graphics.UI.WXCore
 import Data.Word (Word64)
+import Data.Int (Int64)
 
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
               
 ptrToWord64 :: Ptr a -> Word64
 ptrToWord64 p = fromIntegral  (minusPtr p nullPtr) :: Word64
+
+ptrToInt64 :: Ptr a -> Int64
+ptrToInt64 p = fromIntegral  (minusPtr p nullPtr) :: Int64
 
 panelToString :: Panel () -> IO String
 panelToString p = do
