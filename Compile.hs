@@ -1,4 +1,7 @@
-{-# LANGUAGE BangPatterns #-}
+
+----------------------
+-- Compile module
+----------------------
 
 module Compile
 (
@@ -23,7 +26,7 @@ import Graphics.UI.WXCore
 import Numeric (showHex)
 import qualified Text.ParserCombinators.Parsec as P -- (<|>, anyChar, char, GenParser, getPosition, many, sourceLine, string, try, parse)
 import Text.Printf (printf)
-import qualified System.FilePath.Windows as Win (dropExtension)
+import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName)
 import System.Directory 
 import System.IO
 import System.Process
@@ -35,25 +38,28 @@ import Session
 
 -- build the project
 -- optional final function called in GUI thread on completion  
-cpBuildProject :: Session -> Maybe (IO ()) -> IO ()
-cpBuildProject ss finally = do
-{-
-    -- ?? clean up object files
+cpBuildProject :: Session -> String -> Maybe (IO ()) -> IO ()
+cpBuildProject ss fp mfinally = do  
+   
+-- ghc -fasm -L. -lScintillaProxy -threaded -o %1 %1.hs
+
+    ssDebugInfo ss $ "Start build: " ++ fp
 
     otClear ss
     otAddLine ss $ BS.pack "Build started ..."
 
-    forkIO $ runExtCmd ss        
-        "D:\\_Rick's\\haskell\\HeyHo\\build.bat" 
-        ["heyho"] 
-        "D:\\_Rick's\\haskell\\HeyHo" 
-        (ssTOutput ss)
-        (ssTOutput ss)
-        Nothing
-        finally
--}        
+    --  delete old object file
+    result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
+  
+    forkIO $ runGHC 
+        ss
+        ["-fasm", "-L.", "-lScintillaProxy", "-threaded", "-o", Win.dropExtension fp, fp] 
+        "D:\\_Rick's\\haskell\\HeyHo"
+        (ssTOutput ss) -- stdout goes to TOutput
+        (Just $ cpCompileFileDone ss mfinally)
+
     return ()
- 
+  
 -- compile the specified file
 -- optional final function called in GUI thread on completion  
 cpCompileFile :: Session -> String -> Maybe (IO ()) -> IO ()
@@ -101,11 +107,17 @@ runGHC ss args dir cerr mfinally = do
     
     ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
-    (_, _, Just herr, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
-        {cwd = Just dir, std_err = CreatePipe}
+    (_, Just hout, Just herr, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
+        {cwd = Just dir, std_out = CreatePipe, std_err = CreatePipe}
 
     -- stream compiler output to output pane
+--    (_, waite) <- Thread.forkIO $ captureOutput ss herr (ssTOutput ss) ""
     s <- captureOutput ss herr (ssTOutput ss) ""
+
+--    s <- Thread.result =<< waite
+    hClose hout
+    waitForProcess ph
+    
 
     case (P.parse errorFile "" s) of
         Left _   -> ssDebugError ss "Parse of compilation errors failed"

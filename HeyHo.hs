@@ -30,8 +30,10 @@ import ScintillaConstants
 import Session
 import Compile
    
+--------------------------------------
+-- Main
+--------------------------------------   
 
-   
 main = start mainGUI
 
 mainGUI :: IO ()
@@ -375,8 +377,17 @@ onBuildBuild ss = do
 
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
-    cpBuildProject ss (Just $ compileComplete ss)
-    return ()
+
+    -- save file first
+    sf <- enbGetSelectedSourceFile ss
+    ans <- fileSave ss sf 
+    if ans then do
+        -- get again in case filename changed
+        sf <- enbGetSelectedSourceFile ss
+        case (sfFilePath sf) of
+            Just fp -> cpBuildProject ss fp (Just $ compileComplete ss)
+            Nothing -> return () 
+    else return ()
     
 onBuildCompile :: Session -> IO ()
 onBuildCompile ss = do
