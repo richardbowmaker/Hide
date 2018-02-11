@@ -79,7 +79,8 @@ module Scintilla
     scnSearchInTarget,
     scnSetTargetRange,
     scnSetSearchFlags,
-    scnGotoPosWithScroll
+    scnGotoPosWithScroll,
+    scnGetSelText
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -87,7 +88,7 @@ import Control.Applicative ((<$>), (<*>))
 import Data.Word (Word32, Word64)
 import Data.Int (Int32, Int64)
 import qualified Data.ByteString as BS (append, init, replicate)
-import qualified Data.ByteString.Char8 as BS (pack)
+import qualified Data.ByteString.Char8 as BS (pack, unpack)
 import Data.ByteString.Internal (ByteString)
 import Data.ByteString.Unsafe (unsafeUseAsCString, unsafeUseAsCStringLen)
 import Data.String.Combinators (punctuate)
@@ -580,9 +581,18 @@ scnSelectAll e = do
 -}      
 scnSetSelectionMode :: ScnEditor -> Word32 -> IO ()
 scnSetSelectionMode e m = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONMODE  (fromIntegral m :: Word64) 0
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONMODE (fromIntegral m :: Word64) 0
     return ()
-  
+
+scnGetSelText :: ScnEditor -> IO String
+scnGetSelText e = do
+    len <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETSELTEXT 0 0
+    if len > 0 then do
+        let bs = (BS.replicate ((fromIntegral len :: Int)+1) 0)   -- allocate buffer
+        unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_GETSELTEXT 0 cs)   
+        return $ BS.unpack $ BS.init bs
+    else return ""
+
 ----------------------------------------------
 -- Brace Highlighting 
 ----------------------------------------------

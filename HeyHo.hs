@@ -384,11 +384,13 @@ onTestTest ss = do
 onEditFind :: Session -> IO ()
 onEditFind ss = do
 
-    s <- textDialog (ssFrame ss) "Find:" "HeyHo" ""
+    sf <- enbGetSelectedSourceFile ss
+    let e = sfEditor sf
+    sel <- scnGetSelText e
+    s <- textDialog (ssFrame ss) "Find:" "HeyHo" sel
+
     if s /= "" then do
 
-        sf <- enbGetSelectedSourceFile ss
-        let e = sfEditor sf
         pos <- scnGetCurrentPos e
         len <- scnGetTextLen e
 

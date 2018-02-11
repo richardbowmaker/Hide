@@ -19,6 +19,7 @@ import Data.List
 import GHC.IO.Handle
 import System.Directory  
 
+import Language.Haskell.GHC.ExactPrint.Parsers
 
 data SourceFile = SourceFile { sfFilePath  :: Maybe String } deriving (Show)   -- Source file path, Nothing = file name not set yet
 
@@ -40,7 +41,24 @@ mainGUI = do
     sf1 <- statusField [text := "SF1", statusWidth := 20]
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
+
+    h <- openFile "simple.hs" ReadMode
+    s <- hGetContents h
+
     
+    pr <- parseModule "simple.hs"
+    
+ 
+    case pr of
+        Left (ss, s) -> putStrLn $ "Left: " ++ (show ss) ++ " : " ++ s
+        Right (anns, ps) -> putStrLn $ "Right: " ++ (show anns) ++ " : " -- ++ (show ps)
+    
+    
+
+    
+
+
+{-    
     h <- openFile "good compile 2.txt" ReadMode
 
     chn <- atomically $ newTChan
@@ -66,10 +84,13 @@ mainGUI = do
 
     -- display results
     putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es1      
---   putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es2      
+--   putStrLn $ concat $ map (\ce -> (compErrorToString ce) ++ "\n") es2   
+
+-}   
  
     return ()
 
+{-
 parseInThread :: TChan String -> IO [CompError]
 parseInThread chn = do
     s <- captureChannel chn "" 
@@ -214,6 +235,7 @@ linkLine = do
 eol :: String
 eol = "\n"
 
+-}
 {-
 
 D:\_Rick's\haskell\HeyHo\Errors.hs:233:23: error:
