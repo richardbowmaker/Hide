@@ -76,7 +76,10 @@ module Scintilla
     scnSetTargetStart,
     scnSetTargetEnd,
     scnSetTargetWholeDocument,
-    scnSearchInTarget
+    scnSearchInTarget,
+    scnSetTargetRange,
+    scnSetSearchFlags,
+    scnGotoPosWithScroll
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -733,6 +736,20 @@ scnGotoLineCol e l c = do
         scnGotoPos e (p+c)
         return ()
 
+scnGotoPosWithScroll :: ScnEditor -> Int -> IO ()
+scnGotoPosWithScroll e pos = do
+    l <- scnGetLineFromPosition e pos
+    fl <- scnGetFirstVisibleLine e
+    sl <- scnLinesOnScreen e
+
+    if (l < fl || l >= (fl+sl)) then do
+        scnSetFirstVisibleLine e (l-(sl `div` 4))
+        scnGotoPos e pos
+        return ()
+    else do 
+        scnGotoPos e pos
+        return ()
+
 scnSetFirstVisibleLine :: ScnEditor -> Int -> IO ()
 scnSetFirstVisibleLine e l = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_SETFIRSTVISIBLELINE  (fromIntegral l :: Word64) 0
@@ -802,18 +819,13 @@ scnSetTargetEnd e t = do
     c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETEND  (fromIntegral t :: Word64) 0
     return ()
 
-scnSetTargetWholeDocument :: ScnEditor -> IO ()
-scnSetTargetWholeDocument e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0
+scnSetTargetRange :: ScnEditor -> Int -> Int -> IO ()
+scnSetTargetRange e s f = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETRANGE  (fromIntegral s :: Word64) (fromIntegral f :: Int64)
     return ()
 
-scnSearchInTarget :: ScnEditor -> String -> IO Int
-scnSearchInTarget e s = do
-    p <- withCStringLen s (\(cs, l) -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHINTARGET (fromIntegral l :: Word64) (ptrToInt64 cs)) 
-    return (fromIntegral p :: Int)
-
 {-
-    First argument is the seqrch options:-
+    Second argument is the seqrch options:-
 
     sCFIND_WHOLEWORD,
     sCFIND_MATCHCASE,
@@ -822,6 +834,22 @@ scnSearchInTarget e s = do
     sCFIND_POSIX,
     sCFIND_CXX11REGEX,
 -}
+scnSetSearchFlags :: ScnEditor -> Int -> IO ()
+scnSetSearchFlags e f = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSEARCHFLAGS  (fromIntegral f :: Word64) 0
+    return ()
+
+scnSetTargetWholeDocument :: ScnEditor -> IO ()
+scnSetTargetWholeDocument e = do
+    c_ScnSendEditorII (scnGetHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0
+    return ()
+
+
+
+scnSearchInTarget :: ScnEditor -> String -> IO Int
+scnSearchInTarget e s = do
+    p <- withCStringLen s (\(cs, l) -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHINTARGET (fromIntegral l :: Word64) (ptrToInt64 cs)) 
+    return (fromIntegral p :: Int)
 
 scnFindText :: ScnEditor -> String -> Word32 -> Int -> Int -> IO Int
 scnFindText e text ops start end = do

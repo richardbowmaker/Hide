@@ -40,7 +40,7 @@ mainGUI = do
   
     -- main window
     mf <- frame []    
-    set mf [ text := "HeyHo", size := (Size 1300 800)]  
+    set mf [ text := ssProgramTitle, size := (Size 1300 800)]  
      
      -- create statusbar field
     sf <- statusField []
@@ -151,6 +151,7 @@ setUpMainWindow mf sf = do
     set (ssMenuListGet ss "EditFindBackward")   [on command := onEditFindBackward   ss]
     set (ssMenuListGet ss "BuildBuild")         [on command := onBuildBuild         ss]
     set (ssMenuListGet ss "BuildCompile")       [on command := onBuildCompile       ss]
+    set (ssMenuListGet ss "DebugRun")           [on command := onDebugRun           ss]
     set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
@@ -196,11 +197,14 @@ setupMenus mf  = do
     menuEditFindBackward    <- menuItem menuEdit   [text := "Find Backward\tShift-F3"]
     
     menuBuild        <- menuPane            [text := "Build"]
-    menuBuildCompile <- menuItem menuBuild  [text := "Compile\tCtrl-F7",       help := "Compiles current source file"]
-    menuBuildBuild   <- menuItem menuBuild  [text := "Build\tF7",              help := "Build the project"]
-    menuBuildReBuild <- menuItem menuBuild  [text := "Rebuild\tCtrl-Alt-F7",   help := "Rebuild the project"]
-    menuBuildClean   <- menuItem menuBuild  [text := "Clean",                  help := "Clean the project"]
+    menuBuildCompile <- menuItem menuBuild  [text := "Compile\tCtrl-F7",        help := "Compiles current source file"]
+    menuBuildBuild   <- menuItem menuBuild  [text := "Build\tF7",               help := "Build the project"]
+    menuBuildReBuild <- menuItem menuBuild  [text := "Rebuild\tCtrl-Alt-F7",    help := "Rebuild the project"]
+    menuBuildClean   <- menuItem menuBuild  [text := "Clean",                   help := "Clean the project"]
           
+    menuDebug        <- menuPane            [text := "Debug"]
+    menuDebugRun     <- menuItem menuDebug  [text := "Run\tF5",                 help := "Compiles current source file"]
+
     menuTest         <- menuPane            [text := "Test"]
     menuTestTest     <- menuItem menuTest   [text := "Test\tCtrl-T"]
 
@@ -208,7 +212,7 @@ setupMenus mf  = do
     menuHelp'        <- menuHelp []
     menuHelpAbout    <- menuAbout menuHelp' [help := "About HeyHo", on command := infoDialog mf "About HeyHo" "mmmmm !"]
       
-    set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuTest, menuHelp']]
+    set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuTest, menuHelp']]
 
     -- create lookup list of menus for session data   
     ml <- ssMenuListCreate [    ("FileOpen",            menuFileOpen), 
@@ -229,6 +233,7 @@ setupMenus mf  = do
                                 ("EditFindBackward",    menuEditFindBackward),
                                 ("BuildBuild",          menuBuildBuild),
                                 ("BuildCompile",        menuBuildCompile),
+                                ("DebugRun",            menuDebugRun),
                                 ("TestTest",            menuTestTest)]
 
     
@@ -378,65 +383,136 @@ onTestTest ss = do
 
 onEditFind :: Session -> IO ()
 onEditFind ss = do
+
     s <- textDialog (ssFrame ss) "Find:" "HeyHo" ""
     if s /= "" then do
+
         sf <- enbGetSelectedSourceFile ss
         let e = sfEditor sf
+        pos <- scnGetCurrentPos e
         len <- scnGetTextLen e
-        p <- scnFindText e s 0 0 len
 
-        -- goto text if found
+        p <- findTextInRange e s pos (pos, len) (0, (pos + (length s) -1))
+
         if p >= 0 then do
-            scnGotoPos e p
-            scnGrabFocus e
+
             ssDebugInfo ss $ "Found at: " ++ (show p)
 
             -- save find string for next and prev
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p)
-    
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (filepath sf) pos)
             return ()
-        else return ()
+
+        else do
+
+            infoDialog (ssFrame ss) ssProgramTitle "Not found" 
+            return ()
+
     else return ()
 
     where filepath sf =  maybe ("") id (sfFilePath sf)
 
 onEditFindForward :: Session -> IO ()
 onEditFindForward ss = do
-    ssDebugInfo ss "Find forward"
+
     ft <- atomically $ readTVar (ssFindText ss)
-    if ((ftText ft) /= "") then do
+    let s = (ftText ft)
+
+    if (s /= "") then do
+
         sf <- enbGetSelectedSourceFile ss
         let e = sfEditor sf
-        scnSetTargetStart e ((ftPosition ft)+1)
+
+        -- set search range from current pos to end of doc
+        pos <- scnGetCurrentPos e
         len <- scnGetTextLen e
-        scnSetTargetEnd e len
-        p <- scnSearchNext e (ftText ft) 0
-        -- goto text if found
+
+        p <- findTextInRange e s pos ((ftStartPos ft), len) (0, ((ftStartPos ft) + (length s) -1))
+
         if p >= 0 then do
-            scnGotoPos e p
-            scnGrabFocus e
+
             ssDebugInfo ss $ "Found at: " ++ (show p)
+
+            -- save find string for next and prev
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (ftStartFile ft) (ftStartPos ft))
             return ()
-        else return ()        
+
+        else do
+
+            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
+            return ()
+
     else return ()
+
+    where filepath sf =  maybe ("") id (sfFilePath sf)
 
 onEditFindBackward :: Session -> IO ()
 onEditFindBackward ss = do
+
     ft <- atomically $ readTVar (ssFindText ss)
-    if ((ftText ft) /= "") then do
+    let s = (ftText ft)
+
+    if (s /= "") then do
+
         sf <- enbGetSelectedSourceFile ss
         let e = sfEditor sf
-        scnSetTargetStart e ((ftPosition ft)-1)
-        scnSetTargetEnd e 0
-        p <- scnSearchPrev e (ftText ft) 0
-        -- goto text if found
+
+        -- set search range from current pos to end of doc
+        pos <- scnGetCurrentPos e
+        len <- scnGetTextLen e
+
+        p <- findTextInRange e s pos (((ftStartPos ft) + (length s) -1), 0) ((len, ftStartPos ft))
+
         if p >= 0 then do
-            scnGotoPos e p
-            scnGrabFocus e
+
             ssDebugInfo ss $ "Found at: " ++ (show p)
+
+            -- save find string for next and prev
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (ftStartFile ft) (ftStartPos ft))
             return ()
-        else return ()        
+
+        else do
+
+            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
+            atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
+            return ()
+
     else return ()
+
+    where filepath sf =  maybe ("") id (sfFilePath sf)
+
+-- editor -> find text -> last found position -> Range 1 -> Range 2
+findTextInRange :: ScnEditor -> String -> Int -> (Int, Int) -> (Int, Int) -> IO Int
+findTextInRange e s pos r1 r2 = do 
+
+    if (inRange pos r1) then do
+
+        scnSetTargetRange e (pos+1) (snd r1)
+        p <- scnSearchInTarget e s
+
+        if p >= 0 then gotoPos e p          
+        else do
+
+            scnSetTargetRange e (fst r2) (snd r2)
+            p <- scnSearchInTarget e s
+
+            if p >= 0 then gotoPos e p    
+            else return (-1)
+
+    else if (inRange pos r2) then do
+
+        scnSetTargetRange e (pos+1) (snd r2)
+        p <- scnSearchInTarget e s
+
+        if p >= 0 then gotoPos e p          
+        else return (-1)
+
+    else return (-1)
+    
+    where 
+        inRange a (b,c) = (a >= (min b c)) && (a <= (max b c))
+        gotoPos e p = scnGotoPosWithScroll e p >> scnGrabFocus e >> return p
+
 
 ------------------------------------------------------------    
 -- Build Menu handlers
@@ -483,6 +559,18 @@ compileComplete ss = do
     otAddText ss $ BS.pack "Compile complete\n"
     return ()
 
+
+------------------------------------------------------------    
+-- Build Menu handlers
+------------------------------------------------------------    
+    
+onDebugRun :: Session -> IO ()
+onDebugRun ss = do
+    sf <- enbGetSelectedSourceFile ss
+    case (sfFilePath sf) of
+        Just fp -> cpDebugRun ss fp 
+        Nothing -> warningDialog (ssFrame ss) ssProgramTitle "Source file has not been given a name" 
+    return ()
 
 ------------------------------------------------------------    
 -- Timer handler

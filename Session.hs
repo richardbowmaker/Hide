@@ -6,6 +6,7 @@ module Session
     TOutput,
     FunctionChannel,
     TErrors,
+    ssProgramTitle,
 --
     ssCreate,
     ssFrame,
@@ -71,8 +72,10 @@ module Session
     FindText,
     ftFindText,
     ftText,
-    ftFilePath,
-    ftPosition,    
+    ftCurrFile,
+    ftCurrPos,
+    ftStartFile,
+    ftStartPos,    
 ) where
 
 
@@ -113,7 +116,7 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssCompilerReport    :: TErrors,
                             ssFindText          :: TFindText}
    
-data FindText = FindText { ftText :: String, ftFilePath :: String, ftPosition :: Int }
+data FindText = FindText { ftText :: String, ftCurrFile :: String, ftCurrPos :: Int, ftStartFile :: String, ftStartPos :: Int }
 
  -- project data is mutable
 type TProject = TVar Project
@@ -147,8 +150,13 @@ data CompError = CompError {    ceFilePath  :: String,
                                 ceErrLine   :: Int, -- line in compiler output
                                 ceErrLines  :: [String] } deriving (Show)
 
--- global debug flag
+----------------------------------------------------------------
+-- Globals
+----------------------------------------------------------------
 debug = True
+
+ssProgramTitle :: String
+ssProgramTitle = "HeyHo"
                        
 ----------------------------------------------------------------
 -- Session  helpers
@@ -162,7 +170,7 @@ ssCreate mf am nb pr ms sf ot db = do
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
-    tfnd <- atomically $ newTVar (FindText "" "" 0)
+    tfnd <- atomically $ newTVar (FindText "" "" 0 "" 0)
     let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
@@ -342,5 +350,6 @@ compErrorToString c =
 -- Find Text
 ----------------------------------------------------------------
 
-ftFindText :: String -> String -> Int -> FindText
-ftFindText text fp pos = (FindText text fp pos)
+-- search string -> current file -> start file -> start pos
+ftFindText :: String -> String -> Int -> String -> Int -> FindText
+ftFindText text currFile currPos startFile startPos = (FindText text currFile currPos startFile startPos)

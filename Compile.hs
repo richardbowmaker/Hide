@@ -7,6 +7,7 @@ module Compile
 (
     cpBuildProject,
     cpCompileFile,
+    cpDebugRun
 ) where
 
 -- library imports
@@ -25,8 +26,8 @@ import Graphics.UI.WXCore
 import Numeric (showHex)
 import qualified Text.ParserCombinators.Parsec as P -- (<|>, anyChar, char, GenParser, getPosition, many, sourceLine, string, try, parse)
 import Text.Printf (printf)
-import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName)
 import System.Directory 
+import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName, takeDirectory)
 import System.IO
 import System.Process
 import System.Process.Common
@@ -98,6 +99,23 @@ cpCompileFileDone ss mfinally ces = do
     return ()
 
     where outStr s = atomically $ writeTChan (ssTOutput ss) $ BS.pack s
+
+
+cpDebugRun :: Session -> String -> IO ()
+cpDebugRun ss fp = do
+
+    ssDebugInfo ss $ "Start run: " ++ fp
+
+    --  check .exe file exists
+    let exe = (Win.dropExtension fp) ++ ".exe"
+
+    b <- doesFileExist exe
+
+    if b then do
+        createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)}
+        return ()
+    else infoDialog (ssFrame ss) ssProgramTitle $ "File: " ++ exe ++ " does not exist"
+
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function
