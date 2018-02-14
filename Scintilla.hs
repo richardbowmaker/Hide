@@ -14,16 +14,20 @@ module Scintilla
     scnSetEventHandler,
     scnEnableEvents,
     scnDisableEvents,
+    scnSetModEventMask,
     scnClearAll,
     scnSetText,
     scnGetAllText,
     scnGetTextLen,
+    scnGetTextRange,
     scnConfigureHaskell,
     scnSetSavePoint,
     scnCompareHwnd,
     scnSetReadOnly,
     scnAppendText,
     scnAppendLine,
+    scnAppendTextS,
+    scnAppendLineS,
     scnIsClean,
     scnClose,
     scnUndo, 
@@ -63,7 +67,12 @@ module Scintilla
     scnShowLastLine,
     scnSetFocus,
     scnGrabFocus,
+-- notification gets
+    snPosition,
     snLine,
+    snLinesAdded,
+    snModificationType,
+--
     scnGotoLineCol,
     scnGotoPos,
     scnSetFirstVisibleLine,
@@ -99,7 +108,7 @@ import Graphics.Win32.Message (wM_SETFOCUS)
 import Graphics.Win32.Window.PostMessage (postMessage)
 import Graphics.UI.WXCore (varCreate, varGet)
 
-import Foreign.C.String (CString, withCString, withCStringLen)
+import Foreign.C.String (CString, peekCString, withCString, withCStringLen)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Utils (fromBool)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
@@ -137,11 +146,11 @@ foreign import ccall safe "wrapper" createCallback ::
 --------------------------------------------------------------
  
 data SciTextToFind = SciTextToFind {
-                scnChrgCpMin        :: Int32,
-                scnChrgCpMax        :: Int32,
-                scnLpstrText        :: Word64,
-                scnChrgTextCpMin    :: Int32,
-                scnChrgTextCpMax    :: Int32}
+                scnTtFChrgCpMin        :: Int32,
+                scnTtFChrgCpMax        :: Int32,
+                scnTtFLpstrText        :: Word64,
+                scnTtFChrgTextCpMin    :: Int32,
+                scnTtFChrgTextCpMax    :: Int32}
 
 instance Storable SciTextToFind where
         alignment _ = 8
@@ -153,17 +162,37 @@ instance Storable SciTextToFind where
             <*> peekByteOff ptr 16
             <*> peekByteOff ptr 20
         poke ptr (SciTextToFind
-                scnChrgCpMin
-                scnChrgCpMax
-                scnLpstrText
-                scnChrgTextCpMin
-                scnChrgTextCpMax) = do                        
-            pokeByteOff ptr 0     scnChrgCpMin
-            pokeByteOff ptr 4     scnChrgCpMax
-            pokeByteOff ptr 8     scnLpstrText                
-            pokeByteOff ptr 16    scnChrgTextCpMin           
-            pokeByteOff ptr 20    scnChrgTextCpMax
+                scnTtFChrgCpMin
+                scnTtFChrgCpMax
+                scnTtFLpstrText
+                scnTtFChrgTextCpMin
+                scnTtFChrgTextCpMax) = do                        
+            pokeByteOff ptr 0     scnTtFChrgCpMin
+            pokeByteOff ptr 4     scnTtFChrgCpMax
+            pokeByteOff ptr 8     scnTtFLpstrText                
+            pokeByteOff ptr 16    scnTtFChrgTextCpMin           
+            pokeByteOff ptr 20    scnTtFChrgTextCpMax
           
+data SciTextRange = SciTextRange {
+                scnTRChrgCpMin    :: Int32,
+                scnTRChrgCpMax    :: Int32,
+                scnTRLpstrText    :: CString}
+
+instance Storable SciTextRange where
+        alignment _ = 8
+        sizeOf _    = 16
+        peek ptr    = SciTextRange
+            <$> peekByteOff ptr 0
+            <*> peekByteOff ptr 4
+            <*> peekByteOff ptr 8 
+        poke ptr (SciTextRange
+                scnTRChrgCpMin
+                scnTRChrgCpMax
+                scnTRLpstrText) = do                        
+            pokeByteOff ptr 0     scnTRChrgCpMin
+            pokeByteOff ptr 4     scnTRChrgCpMax
+            pokeByteOff ptr 8     scnTRLpstrText                
+
 -- Structure for Scintilla Notification (64 bit version)
 -- See Scintilla.h SCNotification for original       
 data  SCNotification = SCNotification {
@@ -171,7 +200,7 @@ data  SCNotification = SCNotification {
                 idFrom          :: Word64,
                 code            :: Word32,
                 
-                position        :: Int64,
+                snPosition      :: Int64,
                 -- SCN_STYLENEEDED, SCN_DOUBLECLICK, SCN_MODIFIED, SCN_MARGINCLICK, 
                 -- SCN_NEEDSHOWN, SCN_DWELLSTART, SCN_DWELLEND, SCN_CALLTIPCLICK, 
                 -- SCN_HOTSPOTCLICK, SCN_HOTSPOTDOUBLECLICK, SCN_HOTSPOTRELEASECLICK, 
@@ -184,12 +213,12 @@ data  SCNotification = SCNotification {
                 -- SCN_KEY, SCN_DOUBLECLICK, SCN_HOTSPOTCLICK, SCN_HOTSPOTDOUBLECLICK, 
                 -- SCN_HOTSPOTRELEASECLICK, SCN_INDICATORCLICK, SCN_INDICATORRELEASE, 
 
-                modificationType :: Int32, -- SCN_MODIFIED 
+                snModificationType :: Int32, -- SCN_MODIFIED 
                 ptrText         :: Word64,
                 -- SCN_MODIFIED, SCN_USERLISTSELECTION, SCN_AUTOCSELECTION, SCN_URIDROPPED 
 
                 length          :: Int64, 
-                linesAdded      :: Int64,  -- SCN_MODIFIED 
+                snLinesAdded    :: Int64,  -- SCN_MODIFIED 
                 message         :: Int32,  -- SCN_MACRORECORD 
                 wParam          :: Word64, -- SCN_MACRORECORD
                 lParam          :: Int64,  -- SCN_MACRORECORD
@@ -240,13 +269,13 @@ instance Storable SCNotification where
                 ptrHwndFrom
                 idFrom
                 code                
-                position           
+                snPosition           
                 ch
                 modifiers
-                modificationType
+                snModificationType
                 ptrText
                 length
-                linesAdded
+                snLinesAdded
                 message
                 wParam
                 lParam
@@ -265,13 +294,13 @@ instance Storable SCNotification where
             pokeByteOff ptr 0     ptrHwndFrom
             pokeByteOff ptr 8     idFrom
             pokeByteOff ptr 16    code                
-            pokeByteOff ptr 24    position           
+            pokeByteOff ptr 24    snPosition           
             pokeByteOff ptr 32    ch
             pokeByteOff ptr 36    modifiers
-            pokeByteOff ptr 40    modificationType
+            pokeByteOff ptr 40    snModificationType
             pokeByteOff ptr 48    ptrText
             pokeByteOff ptr 56    length
-            pokeByteOff ptr 64    linesAdded
+            pokeByteOff ptr 64    snLinesAdded
             pokeByteOff ptr 72    message
             pokeByteOff ptr 80    wParam
             pokeByteOff ptr 88    lParam
@@ -295,7 +324,7 @@ data ScnEditor = ScnEditor
     }  
  
 -----------------------------------------------------------
--- show
+-- helpers
 
 instance Show ScnEditor where
     show (ScnEditor p e me) = 
@@ -304,6 +333,15 @@ instance Show ScnEditor where
         ", Event Handler: " ++ (case me of 
                                     Nothing -> "Not set" 
                                     (Just _) -> "Set" )
+
+ioNull :: IO ()
+ioNull = return ()
+
+ioBool :: Int64 -> IO Bool
+ioBool i = return (i /= 0)
+
+ioInt :: Int64 -> IO Int
+ioInt i = return (fromIntegral i :: Int)
 
 -----------------------------------------------------------
 
@@ -314,6 +352,10 @@ scnCreateEditor parent = do
     hwnd <- c_ScnNewEditor parent
     return (ScnEditor parent hwnd Nothing)
     
+---------------------------------------------    
+-- Callback from ScintillaProxy dll    
+---------------------------------------------    
+
 scnSetEventHandler :: ScnEditor -> (SCNotification -> IO ()) -> IO (ScnEditor)
 scnSetEventHandler (ScnEditor p c _) eh = do
     let s = (ScnEditor p c (Just eh))
@@ -322,19 +364,33 @@ scnSetEventHandler (ScnEditor p c _) eh = do
     return (s)
 
 scnEnableEvents :: ScnEditor -> IO ()
-scnEnableEvents (ScnEditor _ c _) = do
-    c_ScnEnableEvents c    
-    return ()
+scnEnableEvents (ScnEditor _ c _) = c_ScnEnableEvents c >> ioNull 
 
 scnDisableEvents :: ScnEditor -> IO ()
-scnDisableEvents s@(ScnEditor _ c _) = do
-    c_ScnDisableEvents c    
-    return ()
+scnDisableEvents (ScnEditor _ c _) = c_ScnDisableEvents c >> ioNull 
    
----------------------------------------------    
--- Callback from ScintillaProxy dll    
----------------------------------------------    
+{-
+Available event masks
+sC_MOD_INSERTTEXT
+sC_MOD_DELETETEXT
+sC_MOD_CHANGESTYLE
+sC_MOD_CHANGEFOLD
+sC_PERFORMED_USER
+sC_PERFORMED_UNDO
+sC_PERFORMED_REDO
+sC_MULTISTEPUNDOREDO
+sC_LASTSTEPINUNDOREDO
+sC_MOD_CHANGEMARKER
+sC_MOD_BEFOREINSERT
+sC_MOD_BEFOREDELETE
+sC_MULTILINEUNDOREDO
+sC_MODEVENTMASKALL.
+-}
+scnSetModEventMask :: ScnEditor -> Word32 -> IO ()
+scnSetModEventMask e m = c_ScnSendEditorII (scnGetHwnd e) sCI_SETMODEVENTMASK (fromIntegral m :: Word64) 0 >> ioNull 
 
+
+-- callback from scintilla
 scnCallback :: ScnEditor -> Ptr (SCNotification) -> IO ()
 scnCallback (ScnEditor _ _ Nothing) _ = return ()
 scnCallback e@(ScnEditor _ _ (Just f)) p = do
@@ -377,6 +433,65 @@ scnNotifyGetListCompletionMethod (SCNotification _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 scnCompareHwnd :: ScnEditor -> SCNotification -> Bool
 scnCompareHwnd scn sn = ptrToWord64 (scnGetHwnd scn) == (scnNotifyGetHwnd sn)
+
+----------------------------------------------
+-- Text Get and Set 
+----------------------------------------------
+
+scnClearAll :: ScnEditor -> IO ()
+scnClearAll e = c_ScnSendEditorII (scnGetHwnd e) sCI_CLEARALL 0 0 >> ioNull
+
+-- set the entire content of the editor    
+scnSetText :: ScnEditor -> ByteString -> IO ()
+scnSetText e bs = do
+    let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
+    unsafeUseAsCString bs0 (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_SETTEXT 0 cs)
+    return ()
+
+-- get all text from editor    
+scnGetAllText :: ScnEditor -> IO ByteString
+scnGetAllText e = do            
+    len <- scnGetTextLen e
+    let bs = (BS.replicate (len+1) 0)   -- allocate buffer
+    unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_GETTEXT (fromIntegral (len+1) :: Word64) cs)   
+    return (BS.init bs) -- drop the zero byte at the end
+    
+scnGetTextLen :: ScnEditor -> IO Int
+scnGetTextLen e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETLENGTH 0 0 >>= ioInt
+  
+scnAppendText :: ScnEditor -> ByteString -> IO ()
+scnAppendText e bs = do
+    let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
+    unsafeUseAsCStringLen bs0 (\(cs, l) -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_APPENDTEXT (fromIntegral (l-1) :: Word64) cs)
+    return ()
+    
+scnAppendLine :: ScnEditor -> ByteString -> IO ()
+scnAppendLine scn bs = scnAppendText scn $ BS.append bs $ BS.pack "\n"
+    
+scnGetCharAt :: ScnEditor -> Int -> IO Char
+scnGetCharAt e p = do
+    c <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETCHARAT (fromIntegral p :: Word64) 0
+    return (toEnum (fromIntegral c :: Int) :: Char)
+   
+scnAppendTextS :: ScnEditor -> String -> IO ()
+scnAppendTextS e s = withCStringLen s (\(cs, l) -> c_ScnSendEditorIS (scnGetHwnd e) sCI_APPENDTEXT (fromIntegral (l) :: Word64) cs) >> ioNull
+    
+scnAppendLineS :: ScnEditor -> String -> IO ()
+scnAppendLineS scn s = scnAppendTextS scn s >>  scnAppendTextS scn "\n"
+
+scnGetTextRange :: ScnEditor -> Int -> Int -> IO String
+scnGetTextRange e start end = do
+    p <- alloca (\(ptr :: Ptr SciTextRange) -> do
+        let range = (SciTextRange 
+                (fromIntegral start :: Int32)
+                (fromIntegral end   :: Int32)
+                nullPtr)
+
+        poke ptr range
+        c_ScnSendEditorII (scnGetHwnd e) sCI_GETTEXTRANGE 0 (ptrToInt64 ptr)
+        (SciTextRange _ _ ps) <- peek ptr
+        peekCString ps)
+    return ""
 
 ------------------------------------------------------------    
 -- Scintilla commands
@@ -491,73 +606,47 @@ scnClose e = c_ScnDestroyEditor (scnGetHwnd e)
 ----------------------------------------------
 
 scnUndo :: ScnEditor -> IO ()
-scnUndo e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_UNDO 0 0
-    return ()
+scnUndo e = c_ScnSendEditorII (scnGetHwnd e) sCI_UNDO 0 0 >> ioNull 
     
 scnRedo :: ScnEditor -> IO ()
-scnRedo e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_REDO 0 0
-    return ()
+scnRedo e = c_ScnSendEditorII (scnGetHwnd e) sCI_REDO 0 0 >> ioNull 
 
 scnCanUndo :: ScnEditor -> IO Bool
-scnCanUndo e = do
-    b <- c_ScnSendEditorII (scnGetHwnd e) sCI_CANUNDO 0 0
-    return (b /= 0)
+scnCanUndo e = c_ScnSendEditorII (scnGetHwnd e) sCI_CANUNDO 0 0 >>= ioBool
 
 scnCanRedo :: ScnEditor -> IO Bool
-scnCanRedo e = do
-    b <- c_ScnSendEditorII (scnGetHwnd e) sCI_CANREDO 0 0
-    return (b /= 0)
+scnCanRedo e = c_ScnSendEditorII (scnGetHwnd e) sCI_CANREDO 0 0 >>= ioBool
 
 scnBeginUndoAction :: ScnEditor -> IO ()
-scnBeginUndoAction e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_BEGINUNDOACTION 0 0
-    return ()
+scnBeginUndoAction e = c_ScnSendEditorII (scnGetHwnd e) sCI_BEGINUNDOACTION 0 0 >> ioNull 
 
 scnEndUndoAction :: ScnEditor -> IO ()
-scnEndUndoAction e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_ENDUNDOACTION 0 0
-    return ()
+scnEndUndoAction e = c_ScnSendEditorII (scnGetHwnd e) sCI_ENDUNDOACTION 0 0 >> ioNull 
 
 scnSetUndoCollection :: ScnEditor -> Bool -> IO ()
-scnSetUndoCollection e b = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETUNDOCOLLECTION (fromBool b :: Word64) 0
-    return ()
+scnSetUndoCollection e b = c_ScnSendEditorII (scnGetHwnd e) sCI_SETUNDOCOLLECTION (fromBool b :: Word64) 0 >> ioNull 
 
 scnGetUndoCollection :: ScnEditor -> IO Bool
-scnGetUndoCollection e = do
-    b <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETUNDOCOLLECTION 0 0
-    return (b /= 0)
+scnGetUndoCollection e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETUNDOCOLLECTION 0 0 >>= ioBool
     
 ----------------------------------------------
 -- Cut and Paste 
 ----------------------------------------------
 
 scnCut :: ScnEditor -> IO ()
-scnCut e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_CUT 0 0
-    return ()
+scnCut e = c_ScnSendEditorII (scnGetHwnd e) sCI_CUT 0 0 >> ioNull 
 
 scnCopy :: ScnEditor -> IO ()
-scnCopy e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_COPY 0 0
-    return ()
-    
+scnCopy e = c_ScnSendEditorII (scnGetHwnd e) sCI_COPY 0 0 >> ioNull 
+  
 scnPaste :: ScnEditor -> IO ()
-scnPaste e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_PASTE 0 0
-    return ()
+scnPaste e = c_ScnSendEditorII (scnGetHwnd e) sCI_PASTE 0 0 >> ioNull 
 
 scnClear :: ScnEditor -> IO ()
-scnClear e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_CLEAR 0 0
-    return ()
+scnClear e = c_ScnSendEditorII (scnGetHwnd e) sCI_CLEAR 0 0 >> ioNull 
 
 scnCanPaste :: ScnEditor -> IO Bool
-scnCanPaste e = do
-    b <- c_ScnSendEditorII (scnGetHwnd e) sCI_CANPASTE 0 0
-    return (b /= 0)
+scnCanPaste e =  c_ScnSendEditorII (scnGetHwnd e) sCI_CANPASTE 0 0 >>= ioBool
     
 ----------------------------------------------
 -- Selection 
@@ -569,9 +658,7 @@ scnSelectionIsEmpty e = do
     return (b == 1)
   
 scnSelectAll :: ScnEditor -> IO ()
-scnSelectAll e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SELECTALL 0 0
-    return ()
+scnSelectAll e = c_ScnSendEditorII (scnGetHwnd e) sCI_SELECTALL 0 0 >> ioNull 
 
 {-
     sC_SEL_STREAM
@@ -580,9 +667,7 @@ scnSelectAll e = do
     sC_SEL_THIN,
 -}      
 scnSetSelectionMode :: ScnEditor -> Word32 -> IO ()
-scnSetSelectionMode e m = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONMODE (fromIntegral m :: Word64) 0
-    return ()
+scnSetSelectionMode e m = c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONMODE (fromIntegral m :: Word64) 0 >> ioNull 
 
 scnGetSelText :: ScnEditor -> IO String
 scnGetSelText e = do
@@ -598,19 +683,13 @@ scnGetSelText e = do
 ----------------------------------------------
   
 scnBraceHighlight :: ScnEditor -> Int -> Int -> IO ()
-scnBraceHighlight e pa pb = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEHIGHLIGHT (fromIntegral pa :: Word64) (fromIntegral pb :: Int64)
-    return ()
+scnBraceHighlight e pa pb = c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEHIGHLIGHT (fromIntegral pa :: Word64) (fromIntegral pb :: Int64) >> ioNull 
 
 scnBraceBadLight :: ScnEditor -> Int -> IO ()
-scnBraceBadLight e p = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEBADLIGHT (fromIntegral p :: Word64) 0
-    return ()
+scnBraceBadLight e p = c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEBADLIGHT (fromIntegral p :: Word64) 0 >> ioNull 
 
 scnBraceMatch :: ScnEditor -> Int -> IO Int
-scnBraceMatch e p = do
-    p' <- c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEMATCH  (fromIntegral p :: Word64) 0
-    return (fromIntegral p' :: Int)
+scnBraceMatch e p = c_ScnSendEditorII (scnGetHwnd e) sCI_BRACEMATCH  (fromIntegral p :: Word64) 0 >>= ioInt
     
 scnUpdateBraces :: ScnEditor -> IO ()
 scnUpdateBraces e = do
@@ -634,76 +713,24 @@ scnUpdateBraces e = do
             | otherwise = scnBraceHighlight e psa pea 
         
 ----------------------------------------------
--- Text Get and Set 
-----------------------------------------------
-
-scnClearAll :: ScnEditor -> IO ()
-scnClearAll e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_CLEARALL 0 0
-    return ()
-
--- set the entire content of the editor    
-scnSetText :: ScnEditor -> ByteString -> IO ()
-scnSetText e bs = do
-    let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
-    unsafeUseAsCString bs0 (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_SETTEXT 0 cs)
-    return ()
-
--- get all text from editor    
-scnGetAllText :: ScnEditor -> IO ByteString
-scnGetAllText e = do            
-    len <- scnGetTextLen e
-    let bs = (BS.replicate (len+1) 0)   -- allocate buffer
-    unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_GETTEXT (fromIntegral (len+1) :: Word64) cs)   
-    return (BS.init bs) -- drop the zero byte at the end
-    
-scnGetTextLen :: ScnEditor -> IO Int
-scnGetTextLen e = do
-    len <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETLENGTH 0 0
-    return (fromIntegral len :: Int)
-   
-scnAppendText :: ScnEditor -> ByteString -> IO ()
-scnAppendText e bs = do
-    let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
-    unsafeUseAsCStringLen bs0 (\(cs, l) -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_APPENDTEXT (fromIntegral (l-1) :: Word64) cs)
-    return ()
-    
-scnAppendLine :: ScnEditor -> ByteString -> IO ()
-scnAppendLine scn bs = scnAppendText scn $ BS.append bs $ BS.pack "\n"
-    
-scnGetCharAt :: ScnEditor -> Int -> IO Char
-scnGetCharAt e p = do
-    c <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETCHARAT (fromIntegral p :: Word64) 0
-    return (toEnum (fromIntegral c :: Int) :: Char)
-   
-----------------------------------------------
 -- Position and size 
 ----------------------------------------------
 
 scnGetLineCount :: ScnEditor -> IO Int
-scnGetLineCount e = do
-    c <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETLINECOUNT  0 0
-    return (fromIntegral c :: Int)
-    
+scnGetLineCount e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETLINECOUNT  0 0 >>= ioInt
+   
 scnGetLinesOnScreen :: ScnEditor -> IO Int
-scnGetLinesOnScreen e = do
-    c <- c_ScnSendEditorII (scnGetHwnd e) sCI_LINESONSCREEN  0 0
-    return (fromIntegral c :: Int)
-    
+scnGetLinesOnScreen e = c_ScnSendEditorII (scnGetHwnd e) sCI_LINESONSCREEN  0 0 >>= ioInt
+   
 scnGetCurrentPos :: ScnEditor -> IO Int
-scnGetCurrentPos e = do
-    p <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETCURRENTPOS  0 0
-    return (fromIntegral p :: Int)
+scnGetCurrentPos e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETCURRENTPOS  0 0 >>= ioInt
+
    
 scnGetPositionFromLine :: ScnEditor -> Int -> IO Int
-scnGetPositionFromLine e l = do
-    p <- c_ScnSendEditorII (scnGetHwnd e) sCI_POSITIONFROMLINE  (fromIntegral l :: Word64) 0
-    return (fromIntegral p :: Int)
+scnGetPositionFromLine e l = c_ScnSendEditorII (scnGetHwnd e) sCI_POSITIONFROMLINE  (fromIntegral l :: Word64) 0 >>= ioInt
 
 scnGetLineFromPosition :: ScnEditor -> Int -> IO Int
-scnGetLineFromPosition e p = do
-    l <- c_ScnSendEditorII (scnGetHwnd e) sCI_LINEFROMPOSITION  (fromIntegral p :: Word64) 0
-    return (fromIntegral l :: Int)
+scnGetLineFromPosition e p = c_ScnSendEditorII (scnGetHwnd e) sCI_LINEFROMPOSITION  (fromIntegral p :: Word64) 0 >>= ioInt
 
 -- returns line, line position, doc position, total lines, total size
 scnGetPositionInfo :: ScnEditor -> IO (Int, Int, Int, Int, Int) 
@@ -761,33 +788,26 @@ scnGotoPosWithScroll e pos = do
         return ()
 
 scnSetFirstVisibleLine :: ScnEditor -> Int -> IO ()
-scnSetFirstVisibleLine e l = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETFIRSTVISIBLELINE  (fromIntegral l :: Word64) 0
-    return ()
+scnSetFirstVisibleLine e l = c_ScnSendEditorII (scnGetHwnd e) sCI_SETFIRSTVISIBLELINE  (fromIntegral l :: Word64) 0 >> ioNull
+
 
 scnGetFirstVisibleLine :: ScnEditor -> IO Int
-scnGetFirstVisibleLine e = do
-    l <- c_ScnSendEditorII (scnGetHwnd e) sCI_GETFIRSTVISIBLELINE  0 0
-    return (fromIntegral l :: Int)
+scnGetFirstVisibleLine e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETFIRSTVISIBLELINE  0 0 >>= ioInt
 
 scnLinesOnScreen :: ScnEditor -> IO Int
-scnLinesOnScreen e = do
-    l <- c_ScnSendEditorII (scnGetHwnd e) sCI_LINESONSCREEN  0 0
-    return (fromIntegral l :: Int)
+scnLinesOnScreen e = c_ScnSendEditorII (scnGetHwnd e) sCI_LINESONSCREEN  0 0 >>= ioInt
 
 ----------------------------------------------
 -- Tabs 
 ----------------------------------------------
 
 scnSetTabWidth :: ScnEditor -> Int -> IO ()
-scnSetTabWidth e w = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTABWIDTH  (fromIntegral w :: Word64) 0
-    return ()
+scnSetTabWidth e w = c_ScnSendEditorII (scnGetHwnd e) sCI_SETTABWIDTH  (fromIntegral w :: Word64) 0 >> ioNull
+
 
 scnSetUseTabs :: ScnEditor -> Bool -> IO ()
-scnSetUseTabs e t = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETUSETABS  (fromBool t :: Word64) 0
-    return ()
+scnSetUseTabs e t = c_ScnSendEditorII (scnGetHwnd e) sCI_SETUSETABS  (fromBool t :: Word64) 0 >> ioNull
+
 
 {-
     sC_IV_NONE
@@ -796,10 +816,8 @@ scnSetUseTabs e t = do
     sC_IV_LOOKBOTH,
 -}      
 scnSetIndentationGuides :: ScnEditor -> Word32 -> IO ()
-scnSetIndentationGuides e w = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETINDENTATIONGUIDES  (fromIntegral w :: Word64) 0
-    return ()
-    
+scnSetIndentationGuides e w = c_ScnSendEditorII (scnGetHwnd e) sCI_SETINDENTATIONGUIDES  (fromIntegral w :: Word64) 0 >> ioNull
+  
 ----------------------------------------------
 -- Focus 
 ----------------------------------------------
@@ -811,28 +829,21 @@ scnSetFocus e b = do
     return ()
 
 scnGrabFocus :: ScnEditor -> IO ()
-scnGrabFocus e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_GRABFOCUS 0 0
-    return ()
+scnGrabFocus e = c_ScnSendEditorII (scnGetHwnd e) sCI_GRABFOCUS 0 0 >> ioNull
 
 ----------------------------------------------
 -- Search and replace
 ----------------------------------------------
 
 scnSetTargetStart :: ScnEditor -> Int -> IO ()
-scnSetTargetStart e t = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETSTART (fromIntegral t :: Word64) 0
-    return ()
+scnSetTargetStart e t = c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETSTART (fromIntegral t :: Word64) 0 >> ioNull
 
 scnSetTargetEnd :: ScnEditor -> Int -> IO ()
-scnSetTargetEnd e t = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETEND  (fromIntegral t :: Word64) 0
-    return ()
+scnSetTargetEnd e t = c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETEND  (fromIntegral t :: Word64) 0  >> ioNull
 
 scnSetTargetRange :: ScnEditor -> Int -> Int -> IO ()
-scnSetTargetRange e s f = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETRANGE  (fromIntegral s :: Word64) (fromIntegral f :: Int64)
-    return ()
+scnSetTargetRange e s f = c_ScnSendEditorII (scnGetHwnd e) sCI_SETTARGETRANGE  (fromIntegral s :: Word64) (fromIntegral f :: Int64) >> ioNull
+
 
 {-
     Second argument is the seqrch options:-
@@ -845,15 +856,10 @@ scnSetTargetRange e s f = do
     sCFIND_CXX11REGEX,
 -}
 scnSetSearchFlags :: ScnEditor -> Int -> IO ()
-scnSetSearchFlags e f = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_SETSEARCHFLAGS  (fromIntegral f :: Word64) 0
-    return ()
+scnSetSearchFlags e f = c_ScnSendEditorII (scnGetHwnd e) sCI_SETSEARCHFLAGS  (fromIntegral f :: Word64) 0 >> ioNull
 
 scnSetTargetWholeDocument :: ScnEditor -> IO ()
-scnSetTargetWholeDocument e = do
-    c_ScnSendEditorII (scnGetHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0
-    return ()
-
+scnSetTargetWholeDocument e = c_ScnSendEditorII (scnGetHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0 >> ioNull
 
 
 scnSearchInTarget :: ScnEditor -> String -> IO Int
@@ -878,15 +884,16 @@ scnFindText e text ops start end = do
     return p
 
 scnSearchNext :: ScnEditor -> String -> Int -> IO Int
-scnSearchNext e text ops = do
-    pos <- withCString text 
-            (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHNEXT (fromIntegral ops :: Word64) (ptrToInt64 ps))
-    return (fromIntegral pos :: Int)
+scnSearchNext e text ops = 
+    withCString text 
+        (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHNEXT (fromIntegral ops :: Word64) (ptrToInt64 ps)) 
+            >>= ioInt
+
 
 scnSearchPrev :: ScnEditor -> String -> Int -> IO Int
-scnSearchPrev e text ops = do
-    pos <- withCString text 
-            (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHPREV (fromIntegral ops :: Word64) (ptrToInt64 ps))
-    return (fromIntegral pos :: Int)
+scnSearchPrev e text ops = 
+    withCString text 
+        (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHPREV (fromIntegral ops :: Word64) (ptrToInt64 ps))
+            >>= ioInt
 
 
