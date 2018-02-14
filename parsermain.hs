@@ -3,8 +3,6 @@
 module Main where
 import Graphics.UI.WX
 import Graphics.UI.WXCore
-import Text.ParserCombinators.Parsec
-import qualified Text.Parsec.Prim as P
 import System.IO 
 import Control.Concurrent 
 import Control.Concurrent.STM
@@ -21,6 +19,18 @@ import System.Directory
 
 import Language.Haskell.GHC.ExactPrint.Parsers
 
+import Text.Parsec
+-- import Text.Parsec.Token
+import Text.ParserCombinators.Parsec
+import qualified Text.Parsec.Prim as P
+-- import Text.Parsec.Language (haskellDef)
+
+
+
+
+import Text.ParserCombinators.Parsec.Char
+
+
 data SourceFile = SourceFile { sfFilePath  :: Maybe String } deriving (Show)   -- Source file path, Nothing = file name not set yet
 
 filepath sf = maybe (return "") (\fp -> return fp) (sfFilePath sf)
@@ -28,6 +38,88 @@ filepath sf = maybe (return "") (\fp -> return fp) (sfFilePath sf)
 
 
 main = start mainGUI
+
+
+data CompError = CompError { filename :: String, srcLine :: Int, srcCol :: Int, errIx :: Int, errLines :: [String] } deriving (Show)
+
+
+
+-- functionSpecifier :: GenParser Char () [String]
+
+functionId :: GenParser Char () (String, [String])
+functionId = do
+    first <- lower
+    rest <- many alphaNum
+    whiteSpace
+    string "::"
+    whiteSpace 
+    ty <- many1 typeSpec
+    whiteSpace
+    string eol
+    return (first:rest, ty)
+
+-- -> xxxx ->
+-- -> aaa [sddsfd] ->
+-- aaa (123,123)
+-- aaa [aaaa]
+-- zzz (a -> b)
+
+typeSpec :: GenParser Char () String
+typeSpec = do
+    whiteSpace
+    ss <- sepBy typeSpec2 (string "->") 
+    return $ intercalate "/" ss
+
+-- ->  m (a -> b -> c) -> 
+typeSpec2 :: GenParser Char () String
+typeSpec2 = do
+    a <- many (noneOf "->()")
+--    whiteSpace
+    ne <- optionMaybe parseNestedExpr
+    return $ a ++ (maybe "" nestedExprToString ne)
+--    ne <- parseNestedExpr
+--    return $ a ++ (nestedExprToString ne)
+
+data NestedExpr = Leaf String | Node [NestedExpr]
+
+topNestedExpr :: GenParser Char () NestedExpr
+topNestedExpr = do
+    char '('
+    ne <- parseNestedExpr
+    char ')'
+    return ne
+
+parseNestedExpr :: GenParser Char () NestedExpr
+parseNestedExpr = node <|> leaf
+  where
+    node = Node <$> between (char '(') (char ')') (many parseNestedExpr)
+    leaf = Leaf <$> many1 (noneOf "()")
+
+
+nestedExprToString :: NestedExpr -> String
+nestedExprToString (Leaf s) = s
+nestedExprToString (Node ts) = "(" ++ (concat (map nestedExprToString ts)) ++ ")"
+
+
+
+commentLines :: GenParser Char () [String]
+commentLines = many lineComment
+
+lineComment :: GenParser Char () String
+lineComment = do
+    whiteSpace
+    string "-- "
+    c <- many (noneOf eol)
+    return c
+
+trim s = dropWhile (==' ') $ reverse $ dropWhile (==' ') $ reverse s
+
+whiteSpace :: GenParser Char () ()
+whiteSpace = many (char ' ') >> return ()
+
+eol :: String
+eol = "\n"
+
 
 mainGUI :: IO ()
 mainGUI = do 
@@ -42,20 +134,14 @@ mainGUI = do
     sf2 <- statusField [text := "SF2"]
     set f [statusBar := [sf1,sf2]]
 
-    h <- openFile "simple.hs" ReadMode
-    s <- hGetContents h
+--    h <- openFile "simple.hs" ReadMode
+--    s <- hGetContents h
 
     
-    pr <- parseModule "simple.hs"
-    
+ -- ignore comments
+
  
-    case pr of
-        Left (ss, s) -> putStrLn $ "Left: " ++ (show ss) ++ " : " ++ s
-        Right (anns, ps) -> putStrLn $ "Right: " ++ (show anns) ++ " : " -- ++ (show ps)
-    
-    
-
-    
+  
 
 
 {-    

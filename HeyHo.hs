@@ -251,19 +251,16 @@ setupMenus mf  = do
 
 onClosing :: Session -> IO ()
 onClosing ss = do
-    let mf = ssFrame ss
-    let am = ssAuiMgr ss
     fileCloseAll ss
-    auiManagerUnInit am
-    windowDestroy mf
+    (auiManagerUnInit . ssAuiMgr) ss
+    (windowDestroy . ssFrame) ss
     return ()
 
 onTabChanged :: Session -> EventAuiNotebook -> IO ()
 onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
     c <- enbGetTabCount ss
     if c > 0 then do
-        sf <- enbGetSelectedSourceFile ss
-        scnGrabFocus (sfEditor sf)
+        enbGetSelectedSourceFile ss >>= (scnGrabFocus . sfEditor)
         updateSaveMenus ss
         updateEditMenus ss
         updateStatus ss
@@ -272,16 +269,14 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
 
 onTabClose :: Session -> EventAuiNotebook -> IO ()
 onTabClose ss _ = do
-    sf <- enbGetSelectedSourceFile ss
-    closeEditor ss sf   
+    enbGetSelectedSourceFile ss >>= closeEditor ss    
     updateSaveMenus ss      
     updateEditMenus ss
     return ()
     
 onFileClose :: Session -> IO ()
 onFileClose ss = do
-    sf <- enbGetSelectedSourceFile ss
-    fileClose ss sf
+    enbGetSelectedSourceFile ss >>= fileClose ss 
     updateSaveMenus ss    
     updateEditMenus ss
     return ()
@@ -291,16 +286,14 @@ onFileCloseAll = fileCloseAll
 
 onFileSave :: Session -> IO ()
 onFileSave ss = do
-    sf <- enbGetSelectedSourceFile ss
-    fileSave ss sf
+    enbGetSelectedSourceFile ss >>= fileSave ss 
     updateSaveMenus ss    
     updateEditMenus ss
     return ()
 
 onFileSaveAs :: Session -> IO ()
 onFileSaveAs ss = do
-    sf <- enbGetSelectedSourceFile ss
-    fileSaveAs ss sf
+    enbGetSelectedSourceFile ss >>= fileSaveAs ss
     updateSaveMenus ss    
     updateEditMenus ss
     return ()
@@ -315,14 +308,12 @@ onFileSaveAll ss = do
 -- File Open
 onFileOpen :: Session -> IO ()
 onFileOpen ss = do
-    
     let mf = ssFrame ss                     -- wxFD_OPEN wxFD_FILE_MUST_EXIST
     fd <- fileDialogCreate mf "Open file" "." "" "*.hs" (Point 100 100) 0x11
     ans <- dialogShowModal fd
     if ans == wxID_OK
     then do
-        fp <- fileDialogGetPath fd
-        fileOpen ss fp
+        fileDialogGetPath fd >>= fileOpen ss 
         updateSaveMenus ss    
         updateEditMenus ss        
         return ()
@@ -331,8 +322,7 @@ onFileOpen ss = do
 
 onFileNew :: Session -> IO ()
 onFileNew ss = do
-    sf <- editorAddNewFile ss
-    enbSelectTab ss sf
+    editorAddNewFile ss >>= enbSelectTab ss 
     updateSaveMenus ss    
     updateEditMenus ss    
     return ()
@@ -342,40 +332,22 @@ onFileNew ss = do
 ------------------------------------------------------------    
 
 onEditUndo :: Session -> IO ()
-onEditUndo ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnUndo $ sfEditor sf
-    return ()
+onEditUndo ss = enbGetSelectedSourceFile ss >>= (scnUndo . sfEditor)
 
 onEditRedo :: Session -> IO ()
-onEditRedo ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnRedo $ sfEditor sf
-    return ()
- 
+onEditRedo ss = enbGetSelectedSourceFile ss >>= (scnRedo . sfEditor)
+
 onEditCut :: Session -> IO ()
-onEditCut ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnCut $ sfEditor sf
-    return ()
+onEditCut ss = enbGetSelectedSourceFile ss >>= (scnCut . sfEditor)
 
 onEditCopy :: Session -> IO ()
-onEditCopy ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnCopy $ sfEditor sf
-    return ()
+onEditCopy ss = enbGetSelectedSourceFile ss >>= (scnCopy . sfEditor)
     
 onEditPaste :: Session -> IO ()
-onEditPaste ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnPaste $ sfEditor sf
-    return ()
+onEditPaste ss = enbGetSelectedSourceFile ss >>= (scnPaste . sfEditor)
   
 onEditSelectAll :: Session -> IO ()
-onEditSelectAll ss = do
-    sf <- enbGetSelectedSourceFile ss
-    scnSelectAll $ sfEditor sf
-    return ()
+onEditSelectAll ss = enbGetSelectedSourceFile ss >>= (scnSelectAll . sfEditor)
   
 onTestTest :: Session -> IO ()
 onTestTest ss = do
@@ -662,8 +634,7 @@ closeTab ss sf = do
     
 fileCloseAll :: Session -> IO ()
 fileCloseAll ss = do 
-    sfs <- ssReadSourceFiles ss  
-    doWhileTrueIO (fileClose ss) sfs
+    ssReadSourceFiles ss >>= doWhileTrueIO (fileClose ss)
     updateSaveMenus ss    
     updateEditMenus ss
     return ()
@@ -690,9 +661,7 @@ fileClose ss sf = do
     
 fileSaveAll :: Session -> IO (Bool)
 fileSaveAll ss = do
-
-        sfs <- ssReadSourceFiles ss
-        b <- doWhileTrueIO (fileSave ss) sfs
+        b <- ssReadSourceFiles ss >>= doWhileTrueIO (fileSave ss)
         return (b)
 
 -- if file is dirty then writes it to file
@@ -757,8 +726,7 @@ writeSourceFile sf = do
     let e = sfEditor sf
     case (sfFilePath sf) of
         Just fp -> do
-            bs <- scnGetAllText e
-            BS.writeFile fp bs
+            scnGetAllText e >>= BS.writeFile fp
             scnSetSavePoint e
             return ()
         
@@ -1020,8 +988,7 @@ editorAddNewFile ss = do
 
     -- create panel with scintilla editor inside
     p <- panel nb []
-    hwnd <- windowGetHandle p
-    scn <- scnCreateEditor hwnd
+    scn <- windowGetHandle p >>= scnCreateEditor
     scnConfigureHaskell scn
 
     -- add panel to notebook
@@ -1050,9 +1017,7 @@ editorAddNewFile ss = do
 enbGetSelectedTabHwnd :: Session -> IO Word64
 enbGetSelectedTabHwnd ss = do
     let nb = ssEditors ss
-    ix <- auiNotebookGetSelection nb
-    p <- auiNotebookGetPage nb ix
-    hp <- windowGetHandle p
+    hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
     return (ptrToWord64 hp)
  
 -- returns the source file for the currently selected tab
