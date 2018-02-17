@@ -481,17 +481,21 @@ scnAppendLineS scn s = scnAppendTextS scn s >>  scnAppendTextS scn "\n"
 
 scnGetTextRange :: ScnEditor -> Int -> Int -> IO String
 scnGetTextRange e start end = do
-    p <- alloca (\(ptr :: Ptr SciTextRange) -> do
-        let range = (SciTextRange 
-                (fromIntegral start :: Int32)
-                (fromIntegral end   :: Int32)
-                nullPtr)
 
-        poke ptr range
-        c_ScnSendEditorII (scnGetHwnd e) sCI_GETTEXTRANGE 0 (ptrToInt64 ptr)
-        (SciTextRange _ _ ps) <- peek ptr
-        peekCString ps)
-    return ""
+    let bs = (BS.replicate (end-start+2) 0)   -- allocate for return string
+    s <- unsafeUseAsCString bs (\cs -> do 
+        s <- alloca (\(ptr :: Ptr SciTextRange) -> do
+            let range = (SciTextRange 
+                    (fromIntegral start :: Int32)
+                    (fromIntegral end   :: Int32)
+                    cs)
+            poke ptr range
+            c_ScnSendEditorII (scnGetHwnd e) sCI_GETTEXTRANGE 0 (ptrToInt64 ptr)
+            (SciTextRange _ _ ps) <- peek ptr
+            s <- peekCString ps
+            return s)
+        return s)
+    return s
 
 ------------------------------------------------------------    
 -- Scintilla commands
@@ -546,6 +550,9 @@ scnConfigureHaskell e = do
     scnSetUseTabs e False
     scnSetIndentationGuides e sC_IV_LOOKBOTH    
     scnSetStyleColour e (fromIntegral sTYLE_INDENTGUIDE :: Word64) scnIndents  scnWhite
+
+    -- inhibit keys
+    scnDisbleKey e 16
     
     return ()
     
@@ -896,4 +903,12 @@ scnSearchPrev e text ops =
         (\ps -> c_ScnSendEditorII (scnGetHwnd e) sCI_SEARCHPREV (fromIntegral ops :: Word64) (ptrToInt64 ps))
             >>= ioInt
 
+
+----------------------------------------------
+-- Keyboard mapping
+----------------------------------------------
+
+-- see scintilla help online for key codes
+scnDisbleKey :: ScnEditor -> Int -> IO ()
+scnDisbleKey e kc = c_ScnSendEditorII (scnGetHwnd e) sCI_ASSIGNCMDKEY (fromIntegral kc :: Word64) (fromIntegral sCI_NULL :: Int64) >> ioNull
 

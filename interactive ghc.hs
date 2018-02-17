@@ -54,15 +54,14 @@ mainGUI = do
     scnConfigureHaskell scn2
     scnAppendLineS scn2 "Debug"
 
-    scnSetEventHandler scn1 $ scnCallback scn1 scn2
+    (hinrd, hinwr) <- createPipe
+    (hotrd, hotwr) <- createPipe
 
-
+    scnSetEventHandler scn1 $ scnCallback scn1 scn2 hinwr
     scnEnableEvents scn1
     scnSetModEventMask scn1 $ sC_PERFORMED_USER -- sC_MOD_INSERTTEXT
    
 
-    (hinrd, hinwr) <- createPipe
-    (hotrd, hotwr) <- createPipe
 
     t <- timer f [interval := 100, on command := onTimer scn1 chan] 
  
@@ -109,8 +108,8 @@ onTimer scn1 chan = do
     scnEnableEvents scn1
     scnSetModEventMask scn1 $ sC_PERFORMED_USER
   
-scnCallback :: ScnEditor -> ScnEditor -> SCNotification -> IO ()
-scnCallback scn1 scn2 sn = do 
+scnCallback :: ScnEditor -> ScnEditor -> Handle -> SCNotification -> IO ()
+scnCallback scn1 scn2 hinwr sn = do 
 
     case (scnNotifyGetCode sn) of
         2007 -> return ()
@@ -118,12 +117,23 @@ scnCallback scn1 scn2 sn = do
 --            scnAppendTextS scn2 $ "mod bits " ++ (show $ snModificationType sn) ++ " "
             if (snModificationType sn) .&. (fromIntegral sC_PERFORMED_USER :: Int32) > 0 
                     && (snLinesAdded sn) == 1 then do
-                scnAppendLineS scn2 $ "Single line added: " ++ (show $ snPosition sn)
-                scnShowLastLine scn2
-                len <- scnGetTextLen scn1
-                s <- scnGetTextRange scn1 (fromIntegral (snPosition sn) :: Int) len                 
+--                scnAppendLineS scn2 $ "Single line added: " ++ (show $ snPosition sn)
+--                scnShowLastLine scn2
+
+                ln <- scnGetLineFromPosition scn1 (fromIntegral (snPosition sn) :: Int)
+                lp1 <- scnGetPositionFromLine scn1 ln
+                lp2 <- scnGetPositionFromLine scn1 (ln+1)               
+                s <- scnGetTextRange scn1 lp1 lp2 
+                let s = init (keepAfter '>' s)      
                 scnAppendLineS scn2 $ "Single line added: " ++ s
                 scnShowLastLine scn2
+
+                scnSetModEventMask scn1 0
+                scnDisableEvents scn1
+                hPutStr hinwr s
+                scnEnableEvents scn1
+                scnSetModEventMask scn1 $ sC_PERFORMED_USER
+
             else return ()
 
         2013 -> return ()
@@ -133,4 +143,12 @@ scnCallback scn1 scn2 sn = do
             return ()
 
     return ()
+
+    where keepAfter :: Eq a => a -> [a] -> [a]
+          keepAfter _ [] = []
+          keepAfter x' (x:xs) = if x' == x then xs else keepAfter x' xs
+
+          showList :: Enum a => [a] -> String
+          showList xs = concat $ map (\a -> (show $ fromEnum a) ++ " ") xs
+ 
 
