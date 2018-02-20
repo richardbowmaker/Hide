@@ -16,7 +16,6 @@ import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Numeric (showHex)
-import Text.Printf (printf)
 import System.IO
 import System.FilePath.Windows (takeFileName)
 import System.Process
@@ -24,7 +23,9 @@ import System.Process.Common
 
 -- project imports
 import Compile
+import qualified EditMenu as EM
 import EditorNotebook
+import qualified FileMenu as FM
 import Misc
 import OutputPane
 import Scintilla
@@ -253,7 +254,7 @@ setupMenus mf  = do
 
 onClosing :: Session -> IO ()
 onClosing ss = do
-    fileCloseAll ss
+    FM.fileCloseAll ss
     (auiManagerUnInit . ssAuiMgr) ss
     (windowDestroy . ssFrame) ss
     return ()
@@ -263,48 +264,48 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
     c <- enbGetTabCount ss
     if c > 0 then do
         enbGetSelectedSourceFile ss >>= (scnGrabFocus . sfEditor)
-        updateSaveMenus ss
-        updateEditMenus ss
-        updateStatus ss
+        FM.updateSaveMenus ss
+        EM.updateEditMenus ss
+        FM.updateStatus ss
         return ()
     else return ()
 
 onTabClose :: Session -> EventAuiNotebook -> IO ()
 onTabClose ss _ = do
-    enbGetSelectedSourceFile ss >>= closeEditor ss    
-    updateSaveMenus ss      
-    updateEditMenus ss
+    enbGetSelectedSourceFile ss >>= FM.closeEditor ss    
+    FM.updateSaveMenus ss      
+    EM.updateEditMenus ss
     return ()
     
 onFileClose :: Session -> IO ()
 onFileClose ss = do
-    enbGetSelectedSourceFile ss >>= fileClose ss 
-    updateSaveMenus ss    
-    updateEditMenus ss
+    enbGetSelectedSourceFile ss >>= FM.fileClose ss 
+    FM.updateSaveMenus ss    
+    EM.updateEditMenus ss
     return ()
   
 onFileCloseAll :: Session -> IO ()
-onFileCloseAll = fileCloseAll
+onFileCloseAll = FM.fileCloseAll
 
 onFileSave :: Session -> IO ()
 onFileSave ss = do
-    enbGetSelectedSourceFile ss >>= fileSave ss 
-    updateSaveMenus ss    
-    updateEditMenus ss
+    enbGetSelectedSourceFile ss >>= FM.fileSave ss 
+    FM.updateSaveMenus ss    
+    EM.updateEditMenus ss
     return ()
 
 onFileSaveAs :: Session -> IO ()
 onFileSaveAs ss = do
-    enbGetSelectedSourceFile ss >>= fileSaveAs ss
-    updateSaveMenus ss    
-    updateEditMenus ss
+    enbGetSelectedSourceFile ss >>= FM.fileSaveAs ss
+    FM.updateSaveMenus ss    
+    EM.updateEditMenus ss
     return ()
     
 onFileSaveAll :: Session -> IO ()    
 onFileSaveAll ss = do   
-    fileSaveAll ss
-    updateSaveMenus ss    
-    updateEditMenus ss
+    FM.fileSaveAll ss
+    FM.updateSaveMenus ss    
+    EM.updateEditMenus ss
     return ()
    
 -- File Open
@@ -315,9 +316,9 @@ onFileOpen ss = do
     ans <- dialogShowModal fd
     if ans == wxID_OK
     then do
-        fileDialogGetPath fd >>= fileOpen ss 
-        updateSaveMenus ss    
-        updateEditMenus ss        
+        fileDialogGetPath fd >>= FM.fileOpen ss (scnCallback ss)
+        FM.updateSaveMenus ss    
+        EM.updateEditMenus ss        
         return ()
     else
         return ()
@@ -325,8 +326,8 @@ onFileOpen ss = do
 onFileNew :: Session -> IO ()
 onFileNew ss = do
     enbAddNewFile ss (scnCallback ss) >>= enbSelectTab ss 
-    updateSaveMenus ss    
-    updateEditMenus ss    
+    FM.updateSaveMenus ss    
+    EM.updateEditMenus ss    
     return ()
  
 ------------------------------------------------------------    
@@ -351,146 +352,21 @@ onEditPaste ss = enbGetSelectedSourceFile ss >>= (scnPaste . sfEditor)
 onEditSelectAll :: Session -> IO ()
 onEditSelectAll ss = enbGetSelectedSourceFile ss >>= (scnSelectAll . sfEditor)
   
+onEditFind :: Session -> IO ()
+onEditFind = EM.editFind
+
+onEditFindForward :: Session -> IO ()
+onEditFindForward = EM.editFindForward
+
+onEditFindBackward :: Session -> IO ()
+onEditFindBackward = EM.editFindBackward
+
 onTestTest :: Session -> IO ()
 onTestTest ss = do 
     p <- panel (ssFrame ss) [size := (Size 300 300)]
     h <- windowGetHandle p
     ghcOpenGhci h "parsermain.hs"
     return ()
-
-onEditFind :: Session -> IO ()
-onEditFind ss = do
-
-    sf <- enbGetSelectedSourceFile ss
-    let e = sfEditor sf
-    sel <- scnGetSelText e
-    s <- textDialog (ssFrame ss) "Find:" "HeyHo" sel
-
-    if s /= "" then do
-
-        pos <- scnGetCurrentPos e
-        len <- scnGetTextLen e
-
-        p <- findTextInRange e s pos (pos, len) (0, (pos + (length s) -1))
-
-        if p >= 0 then do
-
-            ssDebugInfo ss $ "Found at: " ++ (show p)
-
-            -- save find string for next and prev
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (filepath sf) pos)
-            return ()
-
-        else do
-
-            infoDialog (ssFrame ss) ssProgramTitle "Not found" 
-            return ()
-
-    else return ()
-
-    where filepath sf =  maybe ("") id (sfFilePath sf)
-
-onEditFindForward :: Session -> IO ()
-onEditFindForward ss = do
-
-    ft <- atomically $ readTVar (ssFindText ss)
-    let s = (ftText ft)
-
-    if (s /= "") then do
-
-        sf <- enbGetSelectedSourceFile ss
-        let e = sfEditor sf
-
-        -- set search range from current pos to end of doc
-        pos <- scnGetCurrentPos e
-        len <- scnGetTextLen e
-
-        p <- findTextInRange e s pos ((ftStartPos ft), len) (0, ((ftStartPos ft) + (length s) -1))
-
-        if p >= 0 then do
-
-            ssDebugInfo ss $ "Found at: " ++ (show p)
-
-            -- save find string for next and prev
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (ftStartFile ft) (ftStartPos ft))
-            return ()
-
-        else do
-
-            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
-            return ()
-
-    else return ()
-
-    where filepath sf =  maybe ("") id (sfFilePath sf)
-
-onEditFindBackward :: Session -> IO ()
-onEditFindBackward ss = do
-
-    ft <- atomically $ readTVar (ssFindText ss)
-    let s = (ftText ft)
-
-    if (s /= "") then do
-
-        sf <- enbGetSelectedSourceFile ss
-        let e = sfEditor sf
-
-        -- set search range from current pos to end of doc
-        pos <- scnGetCurrentPos e
-        len <- scnGetTextLen e
-
-        p <- findTextInRange e s pos (((ftStartPos ft) + (length s) -1), 0) ((len, ftStartPos ft))
-
-        if p >= 0 then do
-
-            ssDebugInfo ss $ "Found at: " ++ (show p)
-
-            -- save find string for next and prev
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (filepath sf) p (ftStartFile ft) (ftStartPos ft))
-            return ()
-
-        else do
-
-            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
-            atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
-            return ()
-
-    else return ()
-
-    where filepath sf =  maybe ("") id (sfFilePath sf)
-
--- editor -> find text -> last found position -> Range 1 -> Range 2
-findTextInRange :: ScnEditor -> String -> Int -> (Int, Int) -> (Int, Int) -> IO Int
-findTextInRange e s pos r1 r2 = do 
-
-    if (inRange pos r1) then do
-
-        scnSetTargetRange e (pos+1) (snd r1)
-        p <- scnSearchInTarget e s
-
-        if p >= 0 then gotoPos e p          
-        else do
-
-            scnSetTargetRange e (fst r2) (snd r2)
-            p <- scnSearchInTarget e s
-
-            if p >= 0 then gotoPos e p    
-            else return (-1)
-
-    else if (inRange pos r2) then do
-
-        scnSetTargetRange e (pos+1) (snd r2)
-        p <- scnSearchInTarget e s
-
-        if p >= 0 then gotoPos e p          
-        else return (-1)
-
-    else return (-1)
-    
-    where 
-        inRange a (b,c) = (a >= (min b c)) && (a <= (max b c))
-        gotoPos e p = scnGotoPosWithScroll e p >> scnGrabFocus e >> return p
 
 
 ------------------------------------------------------------    
@@ -505,7 +381,7 @@ onBuildBuild ss = do
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
-    ans <- fileSave ss sf 
+    ans <- FM.fileSave ss sf 
     if ans then do
         -- get again in case filename changed
         sf <- enbGetSelectedSourceFile ss
@@ -522,7 +398,7 @@ onBuildCompile ss = do
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
-    ans <- fileSave ss sf 
+    ans <- FM.fileSave ss sf 
     if ans then do
         -- get again in case filename changed
         sf <- enbGetSelectedSourceFile ss
@@ -572,173 +448,7 @@ onTimer ss = do
             whileM_ (liftM not $ atomically $ isEmptyTChan chan)
                 (atomically (tryReadTChan chan) >>= maybe (return ()) (\a -> f a))             
             
-------------------------------------------------------------    
--- 
-------------------------------------------------------------    
 
-closeEditor :: Session -> SourceFile -> IO Bool
-closeEditor ss sf = do
-
-    let e = sfEditor sf      
-    ic <- scnIsClean e
-    
-    if ic then do
-        
-       -- save file
-        b <- fileSave ss sf
-        
-        if b then do
-        
-            closeTab ss sf         
-            return (True)
-
-        -- veto close, don't know how to do this yet ??
-        else return (False)         
-        
-    else do
-    
-        -- file is dirty so prompt the user if they want to save it
-        enbSelectTab ss sf
-        b <- confirmDialog (ssFrame ss) 
-                "Heyho" 
-                ("Do you wish to save the file: ?\n" ++ (show $ sfFilePathString sf))
-                True
-                
-        if b then do
-            
-           -- save file
-            b <- fileSave ss sf
-            
-            if b then do
-            
-                closeTab ss sf         
-                return (True)
-
-            -- veto close, don't know how to do this yet ??
-            else return (False) 
-    
-        else do
-            closeTab ss sf
-            return (True)
-          
-closeTab :: Session -> SourceFile -> IO ()
-closeTab ss sf = do
-    
-    -- close down scintilla editor
-    let e = sfEditor sf
-    scnDisableEvents e
-    scnClose e
-    
-    -- remove source file from project
-    prUpdate ss (\pr -> prCreate (findAndRemove (sfIsSame sf) (prFiles pr)))
-    
-    -- update status bar
-    updateStatus ss
-    
-    return ()
-    
-fileCloseAll :: Session -> IO ()
-fileCloseAll ss = do 
-    ssReadSourceFiles ss >>= doWhileTrueIO (fileClose ss)
-    updateSaveMenus ss    
-    updateEditMenus ss
-    return ()
-       
-fileClose :: Session -> SourceFile -> IO Bool
-fileClose ss sf = do
-
-    b <- closeEditor ss sf
-    
-    if b then do
-    
-        -- remove page from notebook
-        mix <- enbGetTabIndex ss sf 
-        case mix of
-            Just ix -> do
-                let nb = ssEditors ss        
-                auiNotebookDeletePage nb ix  
-                return (True)
-            Nothing -> do
-                ssDebugError ss "fileClose, no tab for source file"
-                return (True)
-        
-    else return (False)
-    
-fileSaveAll :: Session -> IO (Bool)
-fileSaveAll ss = do
-        b <- ssReadSourceFiles ss >>= doWhileTrueIO (fileSave ss)
-        return (b)
-
--- if file is dirty then writes it to file
--- if no filename has been set then file save as is called
--- returns false if user cancelled        
-fileSave :: Session -> SourceFile -> IO Bool
-fileSave ss sf = do
-
-    let e = sfEditor sf      
-    ic <- scnIsClean e
-    
-    if (ic) then do
-        return (True)
-    else       
-        case (sfFilePath sf) of
-            Just fp -> do
-                writeSourceFile sf
-                return (True)
-            
-            -- source file has no name, so prompt user for one
-            Nothing -> do
-                b <- fileSaveAs ss sf
-                return (b)
-                   
--- File Save As, returns False if user opted to cancel the save 
-fileSaveAs :: Session -> SourceFile -> IO Bool
-fileSaveAs ss sf = do
-   
-    -- ensure source file is displayed
-    enbSelectTab ss sf
-    
-    -- prompt user for name to save to
-    let mf = ssFrame ss                   -- wxFD_SAVE wxFD_OVERWRITE_PROMPT
-    fd <- fileDialogCreate mf "Save file as" "." "" "*.hs" (Point 100 100) 0x6
-    rs <- dialogShowModal fd 
-    
-    case rs of
---        wxID_OK -> do
--- ?? don't know how to fix pattern match against a function    
-        5100 -> do    
-            fp <- fileDialogGetPath fd
-            
-            -- save new name to mutable project data
-            let sf' = sfSetFilePath sf fp
-            sfUpdate ss sf'
-            writeSourceFile sf'
-            
-            -- update tab name
-            enbSetTabText ss sf'
-            return (True)
-            
-        --wxID_CANCEL -> do
-        5101 -> do
-            return (False)
-            
-        otherwise  -> do
-            return (True)
-           
--- writes file to disk and sets editor to clean
-writeSourceFile :: SourceFile -> IO ()
-writeSourceFile sf = do
-    let e = sfEditor sf
-    case (sfFilePath sf) of
-        Just fp -> do
-            scnGetAllText e >>= BS.writeFile fp
-            scnSetSavePoint e
-            return ()
-        
-        Nothing -> do
-            -- bug, shouldn't end up here
-            return ()
-            
 -----------------------------------------------------------------
 -- Scintilla callback
 -----------------------------------------------------------------
@@ -755,7 +465,7 @@ scnCallback ss sn = do
         case (scnNotifyGetCode sn) of
             
             2006 -> do -- sCN_DOUBLECLICK
-                opGotoCompileError ss (fromIntegral (snLine sn) :: Int) (fileOpen ss)
+                opGotoCompileError ss (fromIntegral (snLine sn) :: Int) (FM.fileOpen ss $ scnCallback ss)
                 ssDebugInfo ss "Output pane double click"
                 return ()
 
@@ -771,18 +481,18 @@ scnCallback ss sn = do
         -- gives some nonsense about overlapping cases !! compiler bug
         
             2002 -> do -- sCN_SAVEPOINTREACHED
-                updateSaveMenus ss
-                updateEditMenus ss
+                FM.updateSaveMenus ss
+                EM.updateEditMenus ss
                 return ()
 
             2003 -> do -- sCN_SAVEPOINTLEFT
-                updateSaveMenus ss
-                updateEditMenus ss
+                FM.updateSaveMenus ss
+                EM.updateEditMenus ss
                 return ()
                 
             2007 -> do -- sCN_UPDATEUI
-                updateStatus ss
-                updateEditMenus ss
+                FM.updateStatus ss
+                EM.updateEditMenus ss
                 return ()
             
             2013 -> return () -- sCN_PAINTED
@@ -791,181 +501,8 @@ scnCallback ss sn = do
                 -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
                 return ()
          
-
------------------------------------------------------------------
--- Update menu status
------------------------------------------------------------------
-         
--- updates the enabled state of the Save, SaveAs and SaveAll menus                                
-updateSaveMenus :: Session -> IO ()   
-updateSaveMenus ss = do
- 
-    fs <- ssReadSourceFiles ss
-    
-    if (length fs > 0) then do
-    
-        ic <- enbSelectedSourceFileIsClean ss       
-        set (ssMenuListGet ss "FileSave")      [enabled := not ic]        
-        set (ssMenuListGet ss "FileSaveAs")    [enabled := True]       
-        b <- allFilesClean fs
-        set (ssMenuListGet ss "FileSaveAll")   [enabled := not b]
-        set (ssMenuListGet ss "FileClose")     [enabled := True]
-        set (ssMenuListGet ss "FileCloseAll")  [enabled := True]    
-        return ()
-        
-    else do
-    
-        set (ssMenuListGet ss "FileSave")      [enabled := False]
-        set (ssMenuListGet ss "FileSaveAs")    [enabled := False]
-        set (ssMenuListGet ss "FileClose")     [enabled := False]
-        set (ssMenuListGet ss "FileCloseAll")  [enabled := False]
-        set (ssMenuListGet ss "FileSaveAll")   [enabled := False]
-        return ()
-       
-    where allFilesClean fs = do
-            b <- doWhileTrueIO (\sf -> scnIsClean $ sfEditor sf) fs
-            return (b)
-    
--- updates the enabled state of the Save, SaveAs and SaveAll menus                                
-updateEditMenus :: Session -> IO ()   
-updateEditMenus ss = do
- 
-    fs <- ssReadSourceFiles ss
-        
-    if (length fs > 0) then do
-    
-        sf <- enbGetSelectedSourceFile ss
-        b <- scnSelectionIsEmpty $ sfEditor sf    
-        -- ssDebugInfo ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
-        
-        b <- scnCanUndo $ sfEditor sf
-        set (ssMenuListGet ss "EditUndo")           [enabled := b]
-        b <- scnCanRedo $ sfEditor sf
-        set (ssMenuListGet ss "EditRedo")           [enabled := b]
-        
-        b <- scnSelectionIsEmpty $ sfEditor sf        
-        set (ssMenuListGet ss "EditCut")            [enabled := not b]
-        set (ssMenuListGet ss "EditCopy")           [enabled := not b]        
-        b <- scnCanPaste $ sfEditor sf        
-        set (ssMenuListGet ss "EditPaste")          [enabled := b]
-        set (ssMenuListGet ss "EditAll")            [enabled := True]
-        set (ssMenuListGet ss "EditFind")           [enabled := True]
-        set (ssMenuListGet ss "EditFindForward")    [enabled := True]
-        set (ssMenuListGet ss "EditFindBackward")   [enabled := True]
-        return ()
-        
-    else do
-    
-        ssDebugError ss "updateEditMenus: no file"
-        set (ssMenuListGet ss "EditUndo")           [enabled := False]
-        set (ssMenuListGet ss "EditRedo")           [enabled := False]
-        set (ssMenuListGet ss "EditCut")            [enabled := False]
-        set (ssMenuListGet ss "EditCopy")           [enabled := False]
-        set (ssMenuListGet ss "EditPaste")          [enabled := False]
-        set (ssMenuListGet ss "EditAll")            [enabled := False]
-        set (ssMenuListGet ss "EditFind")           [enabled := False]
-        set (ssMenuListGet ss "EditFindForward")    [enabled := False]
-        set (ssMenuListGet ss "EditFindBackward")   [enabled := False]
-        return ()
- 
--- display line count, cursor position etc. 
-updateStatus :: Session -> IO ()   
-updateStatus ss = do
-    let st = ssStatus ss
-    fs <- ssReadSourceFiles ss
-    if (length fs > 0) then do
-        sf <- enbGetSelectedSourceFile ss   
-        (l, lp, dp, lc, cc) <- scnGetPositionInfo $ sfEditor sf
-        set st [text:= (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)]
-        return ()
-    else do
-        set st [text:= ""]
-        return ()           
-    
 -----------------------------------------------------------------
 -- Session management
 -----------------------------------------------------------------
-
-fileOpen :: Session -> String -> IO ()
-fileOpen ss fp = do
-
-    fs <- ssReadSourceFiles ss
-    b <- ssIsOpeningState fs
    
-    if b then do
-    
-        -- set 1st slot
-        let sf' = sfSetFilePath (head fs) fp
-        let nb = ssEditors ss
-        writeSourceFileEditor sf'
-        auiNotebookSetPageText nb 0 (takeFileName fp)
-        prUpdate ss (\_ -> prCreate [sf'])
-        return ()          
-    
-    else do
-    
-        if (sfIsInList fp fs) then do
-            
-            -- if already in file list then just switch focus to editor
-            setSourceFileFocus ss fp
-            return ()
-            
-         else do
-         
-            -- existing file so add to list, create window and set focus
-            sf' <- openSourceFileEditor ss fp
-            writeSourceFileEditor sf'
-            return ()          
 
-   
-setSourceFileFocus :: Session -> String -> IO ()
-setSourceFileFocus ss fp = do
-    msf <- sfGetSourceFile ss fp
-    case (msf) of
-        Just sf -> do
-            let nb = ssEditors ss
-            ix <- auiNotebookGetPageIndex nb $ sfPanel sf
-            auiNotebookSetSelection nb ix 
-            return ()
-        Nothing -> return ()
-
-writeSourceFileEditor :: SourceFile -> IO ()
-writeSourceFileEditor sf = do
-    let mfp = sfFilePath sf
-    case mfp of
-        Just fp -> do
-            text <- BS.readFile fp
-            let e = sfEditor sf
-            scnSetText e text
-            scnSetSavePoint e
-            return ()
-        Nothing -> return () -- error
-
-openSourceFileEditor :: Session -> String -> IO (SourceFile)
-openSourceFileEditor ss fp = do
-
-    let nb = ssEditors ss
-
-    -- create panel with scintilla editor inside
-    p <- panel nb []
-    hwnd <- windowGetHandle p
-    scn <- scnCreateEditor hwnd
-    scnConfigureHaskell scn
-    scn' <- scnSetEventHandler scn (scnCallback ss)
-    scnEnableEvents scn'
-    
-    -- add panel to notebook
-    auiNotebookAddPage nb p (takeFileName fp) False 0
-    ta <- auiSimpleTabArtCreate
-    auiNotebookSetArtProvider nb ta
-      
-    -- add source file to project
-    sf <- sfCreate p scn' (Just fp)
-    prUpdate ss (\pr -> prSetFiles pr (sf:(prFiles pr)))
-          
-    -- set focus to new page
-    ix <- auiNotebookGetPageIndex nb p
-    auiNotebookSetSelection nb ix  
-
-    return (sf) 
-  
