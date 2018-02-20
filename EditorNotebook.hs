@@ -58,7 +58,7 @@ enbAddNewFile ss callback = do
     ta <- auiSimpleTabArtCreate
     auiNotebookSetArtProvider nb ta
 
-    sf <- sfCreate p scn Nothing
+    sf <- sfCreate p scn Nothing Nothing
 
     -- enable events
     scn' <- scnSetEventHandler scn callback

@@ -321,7 +321,7 @@ openSourceFileEditor ss fp callback = do
     auiNotebookSetArtProvider nb ta
       
     -- add source file to project
-    sf <- sfCreate p scn' (Just fp)
+    sf <- sfCreate p scn' (Just fp) Nothing
     prUpdate ss (\pr -> prSetFiles pr (sf:(prFiles pr)))
           
     -- set focus to new page

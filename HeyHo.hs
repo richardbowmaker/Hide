@@ -17,7 +17,6 @@ import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Numeric (showHex)
 import System.IO
-import System.FilePath.Windows (takeFileName)
 import System.Process
 import System.Process.Common
 
@@ -27,7 +26,7 @@ import qualified EditMenu as EM
 import EditorNotebook
 import qualified FileMenu as FM
 import Misc
-import OutputPane
+import qualified OutputPane as OP
 import Scintilla
 import ScintillaConstants
 import Session
@@ -100,7 +99,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am enb api
    
     -- add output pane
-    (onb, oe) <- opCreate mf
+    (onb, oe) <- OP.createOutputPane mf
     
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Output"
@@ -130,7 +129,7 @@ setUpMainWindow mf sf = do
     menus <- setupMenus mf 
 
     -- create the session data
-    ss <- ssCreate mf am enb (prCreate []) menus sf oe scn
+    ss <- ssCreate mf am enb (prCreate []) menus sf onb oe scn 
     
     -- add blank file to editor
     enbAddNewFile ss (scnCallback ss)
@@ -154,11 +153,14 @@ setUpMainWindow mf sf = do
     set (ssMenuListGet ss "EditFindBackward")   [on command := onEditFindBackward   ss]
     set (ssMenuListGet ss "BuildBuild")         [on command := onBuildBuild         ss]
     set (ssMenuListGet ss "BuildCompile")       [on command := onBuildCompile       ss]
+    set (ssMenuListGet ss "BuildGhci")          [on command := onBuildGhci          ss]
     set (ssMenuListGet ss "DebugRun")           [on command := onDebugRun           ss]
     set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
+
+    set enb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
 
    -- enable events for output pane, dbl click = goto error
     scnSetEventHandler oe $ scnCallback ss
@@ -204,6 +206,7 @@ setupMenus mf  = do
     menuBuildBuild   <- menuItem menuBuild  [text := "Build\tF7",               help := "Build the project"]
     menuBuildReBuild <- menuItem menuBuild  [text := "Rebuild\tCtrl-Alt-F7",    help := "Rebuild the project"]
     menuBuildClean   <- menuItem menuBuild  [text := "Clean",                   help := "Clean the project"]
+    menuBuildGhci    <- menuItem menuBuild  [text := "Open GHCI\tF7",           help := "Compile and load file into GHCI"]
           
     menuDebug        <- menuPane            [text := "Debug"]
     menuDebugRun     <- menuItem menuDebug  [text := "Run\tF5",                 help := "Compiles current source file"]
@@ -236,6 +239,7 @@ setupMenus mf  = do
                                 ("EditFindBackward",    menuEditFindBackward),
                                 ("BuildBuild",          menuBuildBuild),
                                 ("BuildCompile",        menuBuildCompile),
+                                ("BuildGhci",           menuBuildGhci),
                                 ("DebugRun",            menuDebugRun),
                                 ("TestTest",            menuTestTest)]
 
@@ -275,6 +279,10 @@ onTabClose ss _ = do
     enbGetSelectedSourceFile ss >>= FM.closeEditor ss    
     FM.updateSaveMenus ss      
     EM.updateEditMenus ss
+    return ()
+
+onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
+onOutputTabClose ss _ = do
     return ()
     
 onFileClose :: Session -> IO ()
@@ -363,9 +371,6 @@ onEditFindBackward = EM.editFindBackward
 
 onTestTest :: Session -> IO ()
 onTestTest ss = do 
-    p <- panel (ssFrame ss) [size := (Size 300 300)]
-    h <- windowGetHandle p
-    ghcOpenGhci h "parsermain.hs"
     return ()
 
 
@@ -378,6 +383,7 @@ onBuildBuild ss = do
 
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
+    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -395,6 +401,7 @@ onBuildCompile ss = do
 
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
+    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -411,9 +418,43 @@ compileComplete :: Session -> IO ()
 compileComplete ss = do
     set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
     set (ssMenuListGet ss "BuildCompile") [enabled := True]
+    set (ssMenuListGet ss "BuildGhci")    [enabled := True]
     otAddText ss $ BS.pack "Compile complete\n"
     return ()
 
+onBuildGhci :: Session -> IO ()
+onBuildGhci ss = do
+
+    set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
+    set (ssMenuListGet ss "BuildCompile") [enabled := False]
+    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
+
+    -- save file first
+    sf <- enbGetSelectedSourceFile ss
+    ans <- FM.fileSave ss sf 
+    if ans then do
+        -- get again in case filename changed
+        sf <- enbGetSelectedSourceFile ss
+        case (sfFilePath sf) of
+            Just fp -> cpCompileFile ss fp (Just $ ghciComplete ss sf)
+            Nothing -> return () 
+    else return ()
+
+ghciComplete :: Session -> SourceFile -> IO ()
+ghciComplete ss sf = do
+    set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
+    set (ssMenuListGet ss "BuildCompile") [enabled := True]
+    set (ssMenuListGet ss "BuildGhci")    [enabled := True]
+    otAddText ss $ BS.pack "Compile complete\n"
+
+    ces <- atomically $ readTVar $ ssCompilerReport ss
+    case ces of
+        [] -> OP.openGhci ss sf -- no errors, open GHCI
+        _  -> do
+            ans <- proceedDialog (ssFrame ss) ssProgramTitle "There were compilation errors, continue ?"
+            case ans of
+                True -> OP.openGhci ss sf
+                False -> return ()
 
 ------------------------------------------------------------    
 -- Build Menu handlers
@@ -465,7 +506,7 @@ scnCallback ss sn = do
         case (scnNotifyGetCode sn) of
             
             2006 -> do -- sCN_DOUBLECLICK
-                opGotoCompileError ss (fromIntegral (snLine sn) :: Int) (FM.fileOpen ss $ scnCallback ss)
+                OP.gotoCompileError ss (fromIntegral (snLine sn) :: Int) (FM.fileOpen ss $ scnCallback ss)
                 ssDebugInfo ss "Output pane double click"
                 return ()
 
@@ -501,8 +542,5 @@ scnCallback ss sn = do
                 -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
                 return ()
          
------------------------------------------------------------------
--- Session management
------------------------------------------------------------------
-   
+
 

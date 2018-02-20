@@ -17,6 +17,7 @@ module Session
     ssStatus,
     ssTOutput,
     ssCFunc,
+    ssOutputs,
     ssOutput,
     ssDebugError,
     ssDebugWarn,
@@ -39,6 +40,7 @@ module Session
     sfPanelHwnd,
     sfEditor,
     sfFilePath,
+    sfGhci,
     sfFilePathString,
     sfIsInList,
     sfPathIs,
@@ -76,7 +78,12 @@ module Session
     ftCurrFile,
     ftCurrPos,
     ftStartFile,
-    ftStartPos,    
+    ftStartPos, 
+--
+    GhciPanel,
+    ghciPanel,
+    ghciHwnd,
+    sfCreateGhciPanel
 ) where
 
 
@@ -91,6 +98,7 @@ import Data.List (find)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.Char (toLower)
 import Data.Word (Word64)
+import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
 
 import Debug
@@ -109,6 +117,7 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssStatus            :: StatusField,
                             ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
+                            ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
                             ssOutput            :: ScnEditor,           -- The output pane
                             ssDebugError        :: String -> IO (),
                             ssDebugWarn         :: String -> IO (),
@@ -136,10 +145,13 @@ type FunctionChannel = TChan (IO ())
 data Project = Project { prFiles :: [SourceFile] }
 
 -- Session data
-data SourceFile = SourceFile {  sfPanel     :: Panel (),        -- The panel added to the AuiNotebookManager
-                                sfPanelHwnd :: Word64,          -- HWND of panel
-                                sfEditor    :: ScnEditor,       -- The Scintilla editor, child window of panel
-                                sfFilePath  :: Maybe String}    -- Source file path, Nothing = file name not set yet
+data SourceFile = SourceFile {  sfPanel     :: Panel (),          -- The panel added to the AuiNotebookManager
+                                sfPanelHwnd :: Word64,            -- HWND of panel
+                                sfEditor    :: ScnEditor,         -- The Scintilla editor, child window of panel
+                                sfFilePath  :: Maybe String,      -- Source file path, Nothing = file name not set yet
+                                sfGhci      :: Maybe GhciPanel }  -- Parent panel of GHCI window in the output pane
+
+data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 
 type SsNameMenuPair = (String, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
@@ -164,8 +176,8 @@ ssProgramTitle = "HeyHo"
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList -> StatusField -> ScnEditor -> ScnEditor -> IO (Session)
-ssCreate mf am nb pr ms sf ot db = do 
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList -> StatusField -> AuiNotebook () -> ScnEditor -> ScnEditor -> IO (Session)
+ssCreate mf am nb pr ms sf ots ot db = do 
     mtid <- myThreadId
     tpr  <- atomically $ newTVar $ prCreate []
     tot  <- atomically $ newTChan
@@ -175,7 +187,7 @@ ssCreate mf am nb pr ms sf ot db = do
     let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
-    return (Session mf am nb tpr ms sf tot cfn ot dbe dbw dbi mtid terr tfnd)
+    return (Session mf am nb tpr ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -211,7 +223,7 @@ ssToString ss = do
     return ("{Session} Main: " ++ fs ++ prs)
 
 ssIsOpeningState :: [SourceFile] -> IO Bool
-ssIsOpeningState [sf@(SourceFile _ _ e Nothing)] = do
+ssIsOpeningState [sf@(SourceFile _ _ e Nothing _)] = do
     b <- scnIsClean e
     return (b)
 ssIsOpeningState _ = return (False)
@@ -227,21 +239,21 @@ ssInvokeInGuiThread mtid chan f = do
 ----------------------------------------------------------------
                        
 sfEditorHwnd :: SourceFile -> Word64                        
-sfEditorHwnd (SourceFile _ _ e _) = ptrToWord64 $ scnGetHwnd e                        
+sfEditorHwnd (SourceFile _ _ e _ _) = ptrToWord64 $ scnGetHwnd e                        
 
 sfFilePathString :: SourceFile -> String                        
 sfFilePathString sf = maybe "" id (sfFilePath sf)
 
 sfSetFilePath :: SourceFile -> String -> SourceFile
-sfSetFilePath (SourceFile p hp e _) fp = (SourceFile p hp e (Just fp))
+sfSetFilePath (SourceFile p hp e _ ghci) fp = (SourceFile p hp e (Just fp) ghci)
 
 sfMatchesHwnd :: SourceFile -> Word64 -> Bool
 sfMatchesHwnd sf h = h == (sfPanelHwnd sf)
 
-sfCreate :: Panel() -> ScnEditor -> Maybe String -> IO SourceFile
-sfCreate p e mfp = do
+sfCreate :: Panel() -> ScnEditor -> Maybe String -> Maybe GhciPanel -> IO SourceFile
+sfCreate p e mfp ghci = do
     hp <- windowGetHandle p
-    return (SourceFile p (ptrToWord64 hp) e mfp)
+    return (SourceFile p (ptrToWord64 hp) e mfp ghci)
  
 sfIsInList :: String -> [SourceFile] -> Bool
 sfIsInList fp fs = 
@@ -250,7 +262,7 @@ sfIsInList fp fs =
         Nothing -> False
  
 sfPathIs :: SourceFile -> Maybe String -> Bool
-sfPathIs (SourceFile _ _ _ mfp1) mfp2 = fmap (map toLower) mfp1 == fmap (map toLower) mfp2
+sfPathIs (SourceFile _ _ _ mfp1 _) mfp2 = fmap (map toLower) mfp1 == fmap (map toLower) mfp2
 
 sfIsSame :: SourceFile -> SourceFile -> Bool
 sfIsSame sf1 sf2 = (sfPanelHwnd sf1) == (sfPanelHwnd sf2)
@@ -266,17 +278,20 @@ sfUpdate ss sf' = do
         updateFile sfs h = prCreate (map (\sf -> if (sfMatchesHwnd sf h) then sf' else sf) sfs)
 
 sfToString :: SourceFile -> String
-sfToString (SourceFile _ hp e mfp) = 
+sfToString (SourceFile _ hp e mfp _) = 
         "{SourceFile} Panel: 0x" ++ (showHex hp "" ) ++
         ", (" ++ show (e) ++ "), " ++ 
         ", File: " ++ show (mfp)
        
-
 sfGetSourceFile :: Session -> String -> IO (Maybe SourceFile)
 sfGetSourceFile ss fp = do 
     fs <- ssReadSourceFiles ss
     let sf = find (\sf -> sfPathIs sf (Just fp)) fs
     return (sf)
+
+sfCreateGhciPanel :: Panel () -> HWND -> GhciPanel
+sfCreateGhciPanel p h = (GhciPanel p h)
+
 ----------------------------------------------------------------
 -- Project helpers
 ----------------------------------------------------------------
