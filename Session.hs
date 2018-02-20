@@ -45,7 +45,8 @@ module Session
     sfUpdate,
     sfIsSame,    
     sfMatchesHwnd,
-    sfToString,    
+    sfToString, 
+    sfGetSourceFile,   
 --
     prFiles,
     prSetFiles,
@@ -269,7 +270,13 @@ sfToString (SourceFile _ hp e mfp) =
         "{SourceFile} Panel: 0x" ++ (showHex hp "" ) ++
         ", (" ++ show (e) ++ "), " ++ 
         ", File: " ++ show (mfp)
-        
+       
+
+sfGetSourceFile :: Session -> String -> IO (Maybe SourceFile)
+sfGetSourceFile ss fp = do 
+    fs <- ssReadSourceFiles ss
+    let sf = find (\sf -> sfPathIs sf (Just fp)) fs
+    return (sf)
 ----------------------------------------------------------------
 -- Project helpers
 ----------------------------------------------------------------

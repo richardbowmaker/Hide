@@ -23,11 +23,13 @@ import System.Process
 import System.Process.Common
 
 -- project imports
+import Compile
+import EditorNotebook
 import Misc
+import OutputPane
 import Scintilla
 import ScintillaConstants
 import Session
-import Compile
    
 --------------------------------------
 -- Main
@@ -86,7 +88,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am grid api
     
     -- add editor notebook
-    enb <- createEditorNoteBook mf
+    enb <- enbCreate mf
    
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Editor"
@@ -97,7 +99,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am enb api
    
     -- add output pane
-    (onb, oe) <- createNoteBook mf
+    (onb, oe) <- opCreate mf
     
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Output"
@@ -130,7 +132,7 @@ setUpMainWindow mf sf = do
     ss <- ssCreate mf am enb (prCreate []) menus sf oe scn
     
     -- add blank file to editor
-    editorAddNewFile ss
+    enbAddNewFile ss (scnCallback ss)
     
     -- setup menu handlers
     set (ssMenuListGet ss "FileOpen")           [on command := onFileOpen           ss]
@@ -322,7 +324,7 @@ onFileOpen ss = do
 
 onFileNew :: Session -> IO ()
 onFileNew ss = do
-    editorAddNewFile ss >>= enbSelectTab ss 
+    enbAddNewFile ss (scnCallback ss) >>= enbSelectTab ss 
     updateSaveMenus ss    
     updateEditMenus ss    
     return ()
@@ -350,7 +352,10 @@ onEditSelectAll :: Session -> IO ()
 onEditSelectAll ss = enbGetSelectedSourceFile ss >>= (scnSelectAll . sfEditor)
   
 onTestTest :: Session -> IO ()
-onTestTest ss = do
+onTestTest ss = do 
+    p <- panel (ssFrame ss) [size := (Size 300 300)]
+    h <- windowGetHandle p
+    ghcOpenGhci h "parsermain.hs"
     return ()
 
 onEditFind :: Session -> IO ()
@@ -750,7 +755,7 @@ scnCallback ss sn = do
         case (scnNotifyGetCode sn) of
             
             2006 -> do -- sCN_DOUBLECLICK
-                gotoCompileError ss (fromIntegral (snLine sn) :: Int)
+                opGotoCompileError ss (fromIntegral (snLine sn) :: Int) (fileOpen ss)
                 ssDebugInfo ss "Output pane double click"
                 return ()
 
@@ -915,7 +920,7 @@ fileOpen ss fp = do
    
 setSourceFileFocus :: Session -> String -> IO ()
 setSourceFileFocus ss fp = do
-    msf <- getSourceFile ss fp
+    msf <- sfGetSourceFile ss fp
     case (msf) of
         Just sf -> do
             let nb = ssEditors ss
@@ -923,12 +928,6 @@ setSourceFileFocus ss fp = do
             auiNotebookSetSelection nb ix 
             return ()
         Nothing -> return ()
-
-getSourceFile :: Session -> String -> IO (Maybe SourceFile)
-getSourceFile ss fp = do 
-    fs <- ssReadSourceFiles ss
-    let sf = find (\sf -> sfPathIs sf (Just fp)) fs
-    return (sf)
 
 writeSourceFileEditor :: SourceFile -> IO ()
 writeSourceFileEditor sf = do
@@ -970,259 +969,3 @@ openSourceFileEditor ss fp = do
 
     return (sf) 
   
-------------------------------------------------------------    
--- Create the source file editor notebook
-------------------------------------------------------------    
-
-createEditorNoteBook :: Frame mf -> IO (AuiNotebook ())
-createEditorNoteBook mf = do
-
-    -- create the notebook
-    nb <- auiNotebookCreate mf idAny (Point 0 0) (Size 0 0) (wxCLIP_CHILDREN + wxAUI_NB_TOP + wxAUI_NB_CLOSE_ON_ACTIVE_TAB)
-    return (nb)
-  
-editorAddNewFile :: Session -> IO (SourceFile)  
-editorAddNewFile ss = do
-    
-    let nb = ssEditors ss
-
-    -- create panel with scintilla editor inside
-    p <- panel nb []
-    scn <- windowGetHandle p >>= scnCreateEditor
-    scnConfigureHaskell scn
-
-    -- add panel to notebook
-    auiNotebookAddPage nb p "..." False 0
-    ta <- auiSimpleTabArtCreate
-    auiNotebookSetArtProvider nb ta
-
-    sf <- sfCreate p scn Nothing
-
-    -- enable events
-    scn' <- scnSetEventHandler scn (scnCallback ss)
-    scnEnableEvents scn'
-
-    -- update mutable project
-    prUpdate ss (\pr -> prSetFiles pr (sf:(prFiles pr)))
-    
-    scnSetSavePoint scn'
-    
-    return (sf)
-    
-------------------------------------------------------------    
--- Editor notebook helpers
-------------------------------------------------------------    
-    
--- returns the HWND of the child panel of the currently selected notebook page
-enbGetSelectedTabHwnd :: Session -> IO Word64
-enbGetSelectedTabHwnd ss = do
-    let nb = ssEditors ss
-    hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
-    return (ptrToWord64 hp)
- 
--- returns the source file for the currently selected tab
-enbGetSelectedSourceFile :: Session -> IO SourceFile
-enbGetSelectedSourceFile ss = do  
-    fs <- ssReadSourceFiles ss
-    hp <- enbGetSelectedTabHwnd ss
-   
-    case (find (\sf -> sfMatchesHwnd sf hp) fs) of
-        Just sf -> 
-            return (sf)
-        Nothing -> do 
-            -- should not occur, like this to simplfy calling code
-            ssDebugError ss "enbGetSelectedSourceFile no source file for current tab"
-            return (head fs) 
-                  
--- returns true if the source file of the currently selected tab is clean 
-enbSelectedSourceFileIsClean :: Session -> IO Bool
-enbSelectedSourceFileIsClean ss = do
-    sf <- enbGetSelectedSourceFile ss
-    ic <- scnIsClean $ sfEditor sf
-    return (ic)
-    
-enbSelectTab :: Session -> SourceFile -> IO (Bool)
-enbSelectTab ss sf = do
-    let nb = ssEditors ss
-    mix <- enbGetTabIndex ss sf
-    case mix of
-        Just ix -> do
-            auiNotebookSetSelection nb ix
-            return (True)            
-        Nothing -> return (False)
-
-enbCloseTab :: Session -> SourceFile -> IO ()
-enbCloseTab ss sf = do
-    let nb = ssEditors ss
-    mix <- enbGetTabIndex ss sf
-    case (mix) of
-        Just ix -> do
-            auiNotebookSetSelection nb ix
-            auiNotebookRemovePage nb ix
-            return ()
-        Nothing -> do
-            ssDebugError ss "enbCloseTab, source file not in tabs"
-            return ()
-
-enbGetTabIndex :: Session -> SourceFile -> IO (Maybe Int)
-enbGetTabIndex ss sf = do
-
-    let nb = ssEditors ss
-    pc <- auiNotebookGetPageCount nb
-
-    -- get list of window handles as ints
-    hs <- mapM (getHwnd nb) [0..(pc-1)]
-
-    -- find tab with hwnd that matches the source file
-    return (findIndex (\h -> sfMatchesHwnd sf h) hs)
-    
-    where getHwnd nb i = do
-            w <- auiNotebookGetPage nb i
-            h <- windowGetHandle w
-            return (ptrToWord64 h)
- 
-enbSetTabText :: Session -> SourceFile -> IO ()
-enbSetTabText ss sf = do
-    mix <- enbGetTabIndex ss sf
-    case mix of
-        Just ix -> do
-            case (sfFilePath sf) of
-                Just fp -> do
-                    auiNotebookSetPageText (ssEditors ss) ix $ takeFileName fp
-                    return ()
-                Nothing -> return ()                   
-        Nothing -> return ()
-    return ()
- 
-enbGetTabCount :: Session -> IO Int
-enbGetTabCount ss = do
-    pc <- auiNotebookGetPageCount $ ssEditors ss
-    return (pc)
-
-------------------------------------------------------------    
--- Output pane
-------------------------------------------------------------    
-
-createNoteBook :: Frame () -> IO (AuiNotebook (), ScnEditor)
-createNoteBook f = do
-
-    nb <- auiNotebookCreate f idAny (Point 0 0) (Size 0 0) (wxCLIP_CHILDREN + wxAUI_NB_TOP)
-    set nb [] 
-    p <- panel nb []
-    hwnd <- windowGetHandle p
-    e <- scnCreateEditor hwnd
-    auiNotebookAddPage nb p "Output" False 0
-    ta <- auiSimpleTabArtCreate
-    auiNotebookSetArtProvider nb ta
-    
-    -- configure editor
-    scnSetLexer e (fromIntegral sCLEX_CONTAINER :: Int)
-    scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
-    scnStyleClearAll e
-    scnSetAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
-    scnSetReadOnly e True
- 
-    return (nb, e)
-
--- jump to source file error location
-gotoCompileError :: Session -> Int -> IO ()
-gotoCompileError ss line = do
-
-    -- get compiler errors and lookup the error
-    ces <- atomically $ readTVar $ ssCompilerReport ss
-    let mce = find (\ce -> (ceErrLine ce) <= line ) (reverse ces)
-
-    case mce of
-        Nothing -> return ()
-        Just ce -> do
-
-            -- goto source file from list of open files
-            msf <- prGetSourceFile ss $ ceFilePath ce 
-            case msf of
-           
-                Just sf -> do
-                    b <- enbSelectTab ss sf
-                    if b then gotoLine (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
-                    else return ()
-
-                Nothing -> do
-                    -- source file not open
-                    fileOpen ss $ ceFilePath ce
-                    msf <- getSourceFile ss $ ceFilePath ce
-                    case msf of
-                        Just sf -> gotoLine (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
-                        Nothing -> return ()
-     
-    where gotoLine e l c = do
-            scnGotoLineCol e l c
-            scnGrabFocus e
-            
-
-------------------------------------------------------------    
--- Tree Control
-------------------------------------------------------------    
-    
-createTree :: Frame () ->  IO (TreeCtrl ())
-createTree f = do      
-    tree <- treeCtrl f [size := (Size 100 100)] 
-    root <- treeCtrlAddRoot tree "root" (-1) (-1) objectNull     
-    _    <- treeCtrlAppendItem tree root "item1" (-1) (-1) objectNull
-    _    <- treeCtrlAppendItem tree root "item2" (-1) (-1) objectNull
-    _    <- treeCtrlAppendItem tree root "item3" (-1) (-1) objectNull
-    treeCtrlExpand tree root
-    cs <- treeCtrlGetChildren tree root
-    return (tree)
-    
-------------------------------------------------------------    
--- Grid Control
-------------------------------------------------------------    
-
-createGrid :: Frame () -> IO (Grid ())
-createGrid f = do
-    -- grids
-    g <- gridCtrl f []
-    gridSetGridLineColour g (colorSystem Color3DFace)
-    gridSetCellHighlightColour g black
-    appendColumns g (head names)
-    appendRows    g (map show [1..length (tail names)])
-    mapM_ (setRow g) (zip [0..] (tail names))
-    gridAutoSize g  
-    return (g)
-    
-gridCtrl :: Window a -> [Prop (Grid ())] -> IO (Grid ())
-gridCtrl parent_ props_
-  = feed2 props_ 0 $
-    initialWindow $ \id_ rect' -> \props' flags ->
-    do g <- gridCreate parent_ id_ rect' flags
-       gridCreateGrid g 0 0 0
-       set g props'
-       return g
-
-appendColumns :: Grid a -> [String] -> IO ()
-appendColumns _g []
-  = return ()
-appendColumns g labels
-  = do n <- gridGetNumberCols g
-       _ <- gridAppendCols g (length labels) True
-       mapM_ (\(i, label_) -> gridSetColLabelValue g i label_) (zip [n..] labels)
-
-appendRows :: Grid a -> [String] -> IO ()
-appendRows _g []
-  = return ()
-appendRows g labels
-  = do n <- gridGetNumberRows g
-       _ <- gridAppendRows g (length labels) True
-       mapM_ (\(i, label_) -> gridSetRowLabelValue g i label_) (zip [n..] labels)
-
-setRow :: Grid a -> (Int, [String]) -> IO ()
-setRow g (row_, values)
-  = mapM_ (\(col,value_) -> gridSetCellValue g row_ col value_) (zip [0..] values)
-
-names :: [[String]]
-names
-  = [["First Name", "Last Name"]
-    ,["Daan","Leijen"],["Arjan","van IJzendoorn"]
-    ,["Martijn","Schrage"],["Andres","Loh"]]
-    
-    
-
