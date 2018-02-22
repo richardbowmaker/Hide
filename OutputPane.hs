@@ -32,8 +32,8 @@ import Session
 -----------------------
 
 -- imports from ScintillaProxy.dll
-foreign import ccall safe "ScnNewGhci"   c_ScnNewGhci   :: HWND -> CString -> IO HWND 
-foreign import ccall safe "ScnCloseGhci" c_ScnCloseGhci :: HWND -> IO ()
+foreign import ccall safe "GhciNew"   c_GhciNew   :: HWND -> CString -> IO HWND 
+foreign import ccall safe "GhciClose" c_GhciClose :: HWND -> IO ()
 
 openGhci :: Session -> SourceFile -> IO ()
 openGhci ss sf = do
@@ -59,7 +59,7 @@ openGhci ss sf = do
                     -- create panel and embed GHCI window
                     p <- panel nb []
                     hp <- windowGetHandle p
-                    hwnd <- withCString fp (\cs -> c_ScnNewGhci hp cs)
+                    hwnd <- withCString fp (\cs -> c_GhciNew hp cs)
 
                     -- add to outputs
                     auiNotebookAddPage nb p (takeFileName fp) False 0
@@ -80,7 +80,7 @@ closeGhci :: Session -> SourceFile -> IO ()
 closeGhci ss sf = do
     let nb = ssOutputs ss
     case (sfGhci sf) of
-        Just ghci -> c_ScnCloseGhci $ ghciHwnd ghci
+        Just ghci -> c_GhciClose $ ghciHwnd ghci
         Nothing   -> return ()
 
 ------------------------------------------------------------    

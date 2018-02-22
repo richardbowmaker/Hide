@@ -229,11 +229,12 @@ ssIsOpeningState [sf@(SourceFile _ _ e Nothing _)] = do
 ssIsOpeningState _ = return (False)
 
 ssInvokeInGuiThread :: ThreadId -> FunctionChannel -> (IO ()) -> IO ()
-ssInvokeInGuiThread mtid chan f = do
-    tid <- myThreadId
+ssInvokeInGuiThread mtid chan f = f -- do
+{-
+   tid <- myThreadId
     if mtid == tid then f
     else atomically $ writeTChan chan f
-              
+-}              
 ----------------------------------------------------------------
 -- Source file helpers
 ----------------------------------------------------------------

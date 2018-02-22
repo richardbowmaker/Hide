@@ -76,18 +76,10 @@ closeEditor ss sf = do
     ic <- scnIsClean e
     
     if ic then do
-        
-       -- save file
-        b <- fileSave ss sf
-        
-        if b then do
-        
-            closeTab ss sf         
-            return (True)
+                
+        closeTab ss sf         
+        return (True)
 
-        -- veto close, don't know how to do this yet ??
-        else return (False)         
-        
     else do
     
         -- file is dirty so prompt the user if they want to save it
@@ -137,7 +129,7 @@ fileOpen ss callback fp = do
     b <- ssIsOpeningState fs
    
     if b then do
-    
+
         -- set 1st slot
         let sf' = sfSetFilePath (head fs) fp
         let nb = ssEditors ss
@@ -149,16 +141,23 @@ fileOpen ss callback fp = do
     else do
     
         if (sfIsInList fp fs) then do
-            
+           
             -- if already in file list then just switch focus to editor
             setSourceFileFocus ss fp
             return ()
             
          else do
+
+            infoDialog (ssFrame ss) "5" ""
          
             -- existing file so add to list, create window and set focus
             sf' <- openSourceFileEditor ss fp callback
+
+            infoDialog (ssFrame ss) "6" ""
             writeSourceFileEditor sf'
+
+            infoDialog (ssFrame ss) "7" ""
+
             return ()          
 
 
@@ -314,19 +313,29 @@ openSourceFileEditor ss fp callback = do
     scnConfigureHaskell scn
     scn' <- scnSetEventHandler scn callback
     scnEnableEvents scn'
+
+    infoDialog (ssFrame ss) "10" ""
     
     -- add panel to notebook
     auiNotebookAddPage nb p (takeFileName fp) False 0
+    infoDialog (ssFrame ss) "11" ""
     ta <- auiSimpleTabArtCreate
+    infoDialog (ssFrame ss) "12" ""
     auiNotebookSetArtProvider nb ta
+    infoDialog (ssFrame ss) "13" ""
       
+
+
     -- add source file to project
     sf <- sfCreate p scn' (Just fp) Nothing
     prUpdate ss (\pr -> prSetFiles pr (sf:(prFiles pr)))
           
+
     -- set focus to new page
     ix <- auiNotebookGetPageIndex nb p
-    auiNotebookSetSelection nb ix  
+    auiNotebookSetSelection nb ix 
+
+ 
 
     return (sf) 
   

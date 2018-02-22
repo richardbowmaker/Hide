@@ -57,7 +57,7 @@ mainGUI = do
     
     -- create a timer that updates the display
     t <- timer mf [interval := 100, on command := onTimer ss] 
-        
+       
     return ()
    
 ------------------------------------------------------------    
@@ -156,11 +156,11 @@ setUpMainWindow mf sf = do
     set (ssMenuListGet ss "BuildGhci")          [on command := onBuildGhci          ss]
     set (ssMenuListGet ss "DebugRun")           [on command := onDebugRun           ss]
     set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
-    
+     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
 
-    set enb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
+    set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
 
    -- enable events for output pane, dbl click = goto error
     scnSetEventHandler oe $ scnCallback ss

@@ -130,7 +130,7 @@ type HHOOK = Word64
 foreign import ccall safe "ScnNewEditor"        c_ScnNewEditor       :: HWND -> IO (HWND)      
 foreign import ccall safe "ScnDestroyEditor"    c_ScnDestroyEditor   :: HWND -> IO ()      
 foreign import ccall safe "ScnSetEventHandler"  c_ScnSetEventHandler :: HWND -> FunPtr (Ptr (SCNotification) -> IO ()) -> IO ()
-foreign import ccall safe "ScnEnableEvents"     c_ScnEnableEvents    :: HWND -> IO (Int32)
+foreign import ccall safe "ScnEnableEvents"     c_ScnEnableEvents    :: HWND -> IO ()
 foreign import ccall safe "ScnDisableEvents"    c_ScnDisableEvents   :: HWND -> IO ()      
 
 -- direct call to Scintilla, different aliases simplify conversion to WPARAM and LPARAM types 
