@@ -41,7 +41,9 @@ enbCreate mf = do
 
     -- create the notebook
     nb <- auiNotebookCreate mf idAny (Point 0 0) (Size 0 0) (wxCLIP_CHILDREN + wxAUI_NB_TOP + wxAUI_NB_CLOSE_ON_ACTIVE_TAB)
-    return (nb)
+    ta <- auiSimpleTabArtCreate
+    auiNotebookSetArtProvider nb ta
+    return nb
   
 enbAddNewFile :: Session -> (SCNotification -> IO ()) -> IO (SourceFile)  
 enbAddNewFile ss callback = do
@@ -55,8 +57,6 @@ enbAddNewFile ss callback = do
 
     -- add panel to notebook
     auiNotebookAddPage nb p "..." False 0
-    ta <- auiSimpleTabArtCreate
-    auiNotebookSetArtProvider nb ta
 
     sf <- sfCreate p scn Nothing Nothing
 
@@ -76,11 +76,11 @@ enbAddNewFile ss callback = do
 ------------------------------------------------------------    
     
 -- returns the HWND of the child panel of the currently selected notebook page
-enbGetSelectedTabHwnd :: Session -> IO Word64
+enbGetSelectedTabHwnd :: Session -> IO HWND
 enbGetSelectedTabHwnd ss = do
     let nb = ssEditors ss
     hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
-    return (ptrToWord64 hp)
+    return hp
  
 -- returns the source file for the currently selected tab
 enbGetSelectedSourceFile :: Session -> IO SourceFile
@@ -138,10 +138,7 @@ enbGetTabIndex ss sf = do
     -- find tab with hwnd that matches the source file
     return (findIndex (\h -> sfMatchesHwnd sf h) hs)
     
-    where getHwnd nb i = do
-            w <- auiNotebookGetPage nb i
-            h <- windowGetHandle w
-            return (ptrToWord64 h)
+    where getHwnd nb i = auiNotebookGetPage nb i >>= windowGetHandle
  
 enbSetTabText :: Session -> SourceFile -> IO ()
 enbSetTabText ss sf = do

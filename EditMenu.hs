@@ -204,4 +204,4 @@ findTextInRange e s pos r1 r2 = do
     
     where 
         inRange a (b,c) = (a >= (min b c)) && (a <= (max b c))
-        gotoPos e p = scnGotoPosWithScroll e p >> scnGrabFocus e >> return p
+        gotoPos e p = scnGotoPosWithScroll e p >> scnGrabFocus e >> scnSelectWord e >> return p

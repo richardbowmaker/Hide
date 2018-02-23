@@ -48,13 +48,15 @@ module Session
     sfIsSame,    
     sfMatchesHwnd,
     sfToString, 
-    sfGetSourceFile,   
+    sfGetSourceFile,
+    sfSetGhciPanel,
 --
     prFiles,
     prSetFiles,
     prCreate,
     prToString,
     prUpdate,
+    prUpdateSourceFiles,
     prRead,
     prGetSourceFile,
 --
@@ -105,6 +107,15 @@ import Debug
 import Misc
 import Scintilla
 
+----------------------------------------------------------------
+-- Globals
+----------------------------------------------------------------
+
+debug = True
+
+ssProgramTitle :: String
+ssProgramTitle = "HIDE"
+                     
 ----------------------------------------------------------
 -- Session data and ToString functions
 ----------------------------------------------------------
@@ -146,7 +157,7 @@ data Project = Project { prFiles :: [SourceFile] }
 
 -- Session data
 data SourceFile = SourceFile {  sfPanel     :: Panel (),          -- The panel added to the AuiNotebookManager
-                                sfPanelHwnd :: Word64,            -- HWND of panel
+                                sfPanelHwnd :: HWND,            -- HWND of panel
                                 sfEditor    :: ScnEditor,         -- The Scintilla editor, child window of panel
                                 sfFilePath  :: Maybe String,      -- Source file path, Nothing = file name not set yet
                                 sfGhci      :: Maybe GhciPanel }  -- Parent panel of GHCI window in the output pane
@@ -163,14 +174,7 @@ data CompError = CompError {    ceFilePath  :: String,
                                 ceErrLine   :: Int, -- line in compiler output
                                 ceErrLines  :: [String] } deriving (Show)
 
-----------------------------------------------------------------
--- Globals
-----------------------------------------------------------------
-debug = True
-
-ssProgramTitle :: String
-ssProgramTitle = "HeyHo"
-                       
+  
 ----------------------------------------------------------------
 -- Session  helpers
 ----------------------------------------------------------------
@@ -229,12 +233,11 @@ ssIsOpeningState [sf@(SourceFile _ _ e Nothing _)] = do
 ssIsOpeningState _ = return (False)
 
 ssInvokeInGuiThread :: ThreadId -> FunctionChannel -> (IO ()) -> IO ()
-ssInvokeInGuiThread mtid chan f = f -- do
-{-
-   tid <- myThreadId
+ssInvokeInGuiThread mtid chan f = do
+    tid <- myThreadId
     if mtid == tid then f
     else atomically $ writeTChan chan f
--}              
+             
 ----------------------------------------------------------------
 -- Source file helpers
 ----------------------------------------------------------------
@@ -248,13 +251,16 @@ sfFilePathString sf = maybe "" id (sfFilePath sf)
 sfSetFilePath :: SourceFile -> String -> SourceFile
 sfSetFilePath (SourceFile p hp e _ ghci) fp = (SourceFile p hp e (Just fp) ghci)
 
-sfMatchesHwnd :: SourceFile -> Word64 -> Bool
-sfMatchesHwnd sf h = h == (sfPanelHwnd sf)
+sfMatchesHwnd :: SourceFile -> HWND -> Bool
+sfMatchesHwnd sf h = comparePtrs h (sfPanelHwnd sf)
 
 sfCreate :: Panel() -> ScnEditor -> Maybe String -> Maybe GhciPanel -> IO SourceFile
 sfCreate p e mfp ghci = do
     hp <- windowGetHandle p
-    return (SourceFile p (ptrToWord64 hp) e mfp ghci)
+    return (SourceFile p hp e mfp ghci)
+
+sfSetGhciPanel :: SourceFile -> Maybe GhciPanel -> SourceFile
+sfSetGhciPanel (SourceFile p hp e scn _) ghci = (SourceFile p hp e scn ghci)
  
 sfIsInList :: String -> [SourceFile] -> Bool
 sfIsInList fp fs = 
@@ -280,7 +286,7 @@ sfUpdate ss sf' = do
 
 sfToString :: SourceFile -> String
 sfToString (SourceFile _ hp e mfp _) = 
-        "{SourceFile} Panel: 0x" ++ (showHex hp "" ) ++
+        "{SourceFile} Panel: 0x" ++ (showHex (ptrToWord64 hp) "" ) ++
         ", (" ++ show (e) ++ "), " ++ 
         ", File: " ++ show (mfp)
        
@@ -311,13 +317,9 @@ prToString tpr = do
     return ("Files : " ++ s)
     
 prUpdate :: Session -> (Project -> Project) -> IO Project
-prUpdate ss f = atomically (do
-                        let tpr = ssProject ss
-                        pr <- readTVar $ tpr
-                        let pr' = f pr
-                        writeTVar tpr pr'
-                        return (pr))
-                           
+prUpdate ss f = atomically (modifyTVar tpr (\pr -> f pr) >> readTVar tpr) 
+    where tpr = ssProject ss
+
 prRead :: Session -> IO Project
 prRead ss = atomically $ readTVar $ ssProject ss
 
@@ -326,6 +328,9 @@ prGetSourceFile ss fp = do
     (Project fs) <- atomically $ readTVar $ ssProject ss
     return $ find (\sf -> sfPathIs sf (Just fp)) fs
 
+prUpdateSourceFiles :: Session -> (SourceFile -> SourceFile) -> IO Project
+prUpdateSourceFiles ss f = atomically (modifyTVar tpr (\pr -> prCreate $ map f (prFiles pr)) >> readTVar tpr)
+    where tpr = ssProject ss
 ----------------------------------------------------------------
 -- Output helpers
 ----------------------------------------------------------------

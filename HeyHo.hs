@@ -16,6 +16,7 @@ import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Numeric (showHex)
+import System.FilePath.Windows (takeFileName)
 import System.IO
 import System.Process
 import System.Process.Common
@@ -31,6 +32,8 @@ import Scintilla
 import ScintillaConstants
 import Session
    
+
+
 --------------------------------------
 -- Main
 --------------------------------------   
@@ -155,6 +158,7 @@ setUpMainWindow mf sf = do
     set (ssMenuListGet ss "BuildCompile")       [on command := onBuildCompile       ss]
     set (ssMenuListGet ss "BuildGhci")          [on command := onBuildGhci          ss]
     set (ssMenuListGet ss "DebugRun")           [on command := onDebugRun           ss]
+    set (ssMenuListGet ss "DebugGhci")          [on command := onDebugGhci          ss]
     set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
      
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
@@ -206,10 +210,11 @@ setupMenus mf  = do
     menuBuildBuild   <- menuItem menuBuild  [text := "Build\tF7",               help := "Build the project"]
     menuBuildReBuild <- menuItem menuBuild  [text := "Rebuild\tCtrl-Alt-F7",    help := "Rebuild the project"]
     menuBuildClean   <- menuItem menuBuild  [text := "Clean",                   help := "Clean the project"]
-    menuBuildGhci    <- menuItem menuBuild  [text := "Open GHCI\tF7",           help := "Compile and load file into GHCI"]
+    menuBuildGhci    <- menuItem menuBuild  [text := "Open GHCI\tAlt-F11",      help := "Compile and load file into GHCI"]
           
     menuDebug        <- menuPane            [text := "Debug"]
-    menuDebugRun     <- menuItem menuDebug  [text := "Run\tF5",                 help := "Compiles current source file"]
+    menuDebugRun     <- menuItem menuDebug  [text := "Run\tF5",   help := "Compiles current source file"]
+    menuDebugGhci    <- menuItem menuDebug  [text := "GHCI\tF11", help := "Compiles current source file"]
 
     menuTest         <- menuPane            [text := "Test"]
     menuTestTest     <- menuItem menuTest   [text := "Test\tCtrl-T"]
@@ -241,6 +246,7 @@ setupMenus mf  = do
                                 ("BuildCompile",        menuBuildCompile),
                                 ("BuildGhci",           menuBuildGhci),
                                 ("DebugRun",            menuDebugRun),
+                                ("DebugGhci",           menuDebugGhci),
                                 ("TestTest",            menuTestTest)]
 
     
@@ -265,13 +271,20 @@ onClosing ss = do
 
 onTabChanged :: Session -> EventAuiNotebook -> IO ()
 onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
+    set (ssMenuListGet ss "BuildCompile") [text := "Compile\tCtrl-F7"]        
+    set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI\tAlt-F11"] 
     c <- enbGetTabCount ss
     if c > 0 then do
-        enbGetSelectedSourceFile ss >>= (scnGrabFocus . sfEditor)
+        sf <- enbGetSelectedSourceFile ss 
+        (scnGrabFocus . sfEditor) sf
         FM.updateSaveMenus ss
         EM.updateEditMenus ss
         FM.updateStatus ss
-        return ()
+        case (sfFilePath sf) of
+            Just fp -> do
+                set (ssMenuListGet ss "BuildCompile") [text := "Compile " ++ (takeFileName fp) ++ "\tCtrl-F7"]        
+                set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI " ++ (takeFileName fp) ++ "\tAlt-F11"] 
+            Nothing -> return ()
     else return ()
 
 onTabClose :: Session -> EventAuiNotebook -> IO ()
@@ -282,9 +295,8 @@ onTabClose ss _ = do
     return ()
 
 onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
-onOutputTabClose ss _ = do
-    return ()
-    
+onOutputTabClose ss _ = OP.closeGhci ss
+  
 onFileClose :: Session -> IO ()
 onFileClose ss = do
     enbGetSelectedSourceFile ss >>= FM.fileClose ss 
@@ -324,9 +336,12 @@ onFileOpen ss = do
     ans <- dialogShowModal fd
     if ans == wxID_OK
     then do
-        fileDialogGetPath fd >>= FM.fileOpen ss (scnCallback ss)
+        fp <- fileDialogGetPath fd 
+        FM.fileOpen ss (scnCallback ss) fp
         FM.updateSaveMenus ss    
-        EM.updateEditMenus ss        
+        EM.updateEditMenus ss   
+        set (ssMenuListGet ss "BuildCompile") [text := "Compile " ++ (takeFileName fp) ++ "\tCtrl-F7"]        
+        set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI " ++ (takeFileName fp) ++ "\tAlt-F11"]      
         return ()
     else
         return ()
@@ -449,15 +464,15 @@ ghciComplete ss sf = do
 
     ces <- atomically $ readTVar $ ssCompilerReport ss
     case ces of
-        [] -> OP.openGhci ss sf -- no errors, open GHCI
+        [] -> OP.openGhciFile ss sf -- no errors, open GHCI
         _  -> do
             ans <- proceedDialog (ssFrame ss) ssProgramTitle "There were compilation errors, continue ?"
             case ans of
-                True -> OP.openGhci ss sf
+                True -> OP.openGhciFile ss sf
                 False -> return ()
 
 ------------------------------------------------------------    
--- Build Menu handlers
+-- Debug menu handlers
 ------------------------------------------------------------    
     
 onDebugRun :: Session -> IO ()
@@ -467,6 +482,9 @@ onDebugRun ss = do
         Just fp -> cpDebugRun ss fp 
         Nothing -> warningDialog (ssFrame ss) ssProgramTitle "Source file has not been given a name" 
     return ()
+
+onDebugGhci :: Session -> IO ()
+onDebugGhci = OP.openGhci
 
 ------------------------------------------------------------    
 -- Timer handler

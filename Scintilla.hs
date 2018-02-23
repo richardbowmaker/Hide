@@ -89,7 +89,11 @@ module Scintilla
     scnSetTargetRange,
     scnSetSearchFlags,
     scnGotoPosWithScroll,
-    scnGetSelText
+    scnGetSelText,
+    scnSelectWord,
+    scnSetSelectionStart,
+    scnSetSelectionEnd,
+    scnSetSelectionRange
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -684,6 +688,23 @@ scnGetSelText e = do
         unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (scnGetHwnd e) sCI_GETSELTEXT 0 cs)   
         return $ BS.unpack $ BS.init bs
     else return ""
+
+scnSelectWord :: ScnEditor -> IO ()
+scnSelectWord e = do
+    p1 <- scnGetCurrentPos e
+    l  <- scnGetTextLen e
+    p2 <- scnFindText e " " 0 p1 l
+    if (p1 < p2) then scnSetSelectionRange e p1 p2
+    else return ()
+
+scnSetSelectionStart :: ScnEditor -> Int -> IO ()
+scnSetSelectionStart e p = c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONSTART (fromIntegral p :: Word64) 0 >> ioNull 
+
+scnSetSelectionEnd :: ScnEditor -> Int -> IO ()
+scnSetSelectionEnd e p = c_ScnSendEditorII (scnGetHwnd e) sCI_SETSELECTIONEND (fromIntegral p :: Word64) 0 >> ioNull 
+
+scnSetSelectionRange :: ScnEditor -> Int -> Int -> IO ()
+scnSetSelectionRange e p1 p2 = scnSetSelectionStart e p1 >> scnSetSelectionEnd e p2
 
 ----------------------------------------------
 -- Brace Highlighting 
