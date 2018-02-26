@@ -1,5 +1,6 @@
 
 -- main IDE for Haskell --
+--------------------------
 
 module Main where
 
