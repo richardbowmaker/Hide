@@ -54,7 +54,7 @@ cpBuildProject ss fp mfinally = do
     forkIO $ runGHC 
         ss
         ["-fasm", "-L.", "-lScintillaProxy", "-threaded", "-o", Win.dropExtension fp, fp] 
-        "D:\\_Rick's\\haskell\\HeyHo"
+        "D:\\_Rick's\\haskell\\Hide"
         (ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
@@ -76,7 +76,7 @@ cpCompileFile ss fp mfinally = do
     forkIO $ runGHC 
         ss
         ["-c", fp] 
-        "D:\\_Rick's\\haskell\\HeyHo"
+        "D:\\_Rick's\\haskell\\Hide"
         (ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
@@ -126,7 +126,7 @@ runGHC ss args dir cerr mfinally = do
 
     (hr, hw) <- createPipe
 
-    (_, _, _, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc" args)
+    (_, _, _, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc.exe" args)
         {cwd = Just dir, std_out = UseHandle hw, std_err = UseHandle hw}
 
     -- stream compiler output to output pane
