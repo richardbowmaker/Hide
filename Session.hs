@@ -155,12 +155,13 @@ type FunctionChannel = TChan (IO ())
 
 data Project = Project { prFiles :: [SourceFile] }
 
--- Session data
-data SourceFile = SourceFile {  sfPanel     :: Panel (),          -- The panel added to the AuiNotebookManager
-                                sfPanelHwnd :: HWND,            -- HWND of panel
-                                sfEditor    :: ScnEditor,         -- The Scintilla editor, child window of panel
-                                sfFilePath  :: Maybe String,      -- Source file path, Nothing = file name not set yet
-                                sfGhci      :: Maybe GhciPanel }  -- Parent panel of GHCI window in the output pane
+-- | Source File Data
+data SourceFile 
+    = SourceFile {  sfPanel     :: Panel (),            -- ^ The panel added to the AuiNotebookManager
+                    sfPanelHwnd :: HWND,                -- ^ HWND of panel
+                    sfEditor    :: ScnEditor,           -- ^ The Scintilla editor, child window of panel
+                    sfFilePath  :: Maybe String,        -- ^ Source file path, Nothing = file name not set yet
+                    sfGhci      :: Maybe GhciPanel }    -- ^ Parent panel of GHCI window in the output pane
 
 data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 

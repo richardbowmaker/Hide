@@ -36,9 +36,11 @@ import System.Process.Common
 import Misc
 import Session
 
--- build the project
--- optional final function called in GUI thread on completion  
-cpBuildProject :: Session -> String -> Maybe (IO ()) -> IO ()
+-- | Build the project
+cpBuildProject ::   Session             -- ^ The HIDE session
+                    -> String           -- ^ Filename of project to build
+                    -> Maybe (IO ())    -- ^ Optional function called on completion in GUI thread
+                    -> IO ()            
 cpBuildProject ss fp mfinally = do  
    
 -- ghc -fasm -L. -lScintillaProxy -threaded -o %1 %1.hs
@@ -60,7 +62,7 @@ cpBuildProject ss fp mfinally = do
 
     return ()
   
--- compile the specified file
+-- | compile the specified file
 -- optional final function called in GUI thread on completion  
 cpCompileFile :: Session -> String -> Maybe (IO ()) -> IO ()
 cpCompileFile ss fp mfinally = do

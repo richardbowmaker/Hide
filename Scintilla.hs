@@ -67,6 +67,7 @@ module Scintilla
     scnShowLastLine,
     scnSetFocus,
     scnGrabFocus,
+    scnGetFocus,
 -- notification gets
     snPosition,
     snLine,
@@ -858,6 +859,9 @@ scnSetFocus e b = do
 
 scnGrabFocus :: ScnEditor -> IO ()
 scnGrabFocus e = c_ScnSendEditorII (scnGetHwnd e) sCI_GRABFOCUS 0 0 >> ioNull
+
+scnGetFocus :: ScnEditor -> IO Bool
+scnGetFocus e = c_ScnSendEditorII (scnGetHwnd e) sCI_GETFOCUS 0 0 >>= ioBool
 
 ----------------------------------------------
 -- Search and replace

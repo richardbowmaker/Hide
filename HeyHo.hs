@@ -33,8 +33,6 @@ import Scintilla
 import ScintillaConstants
 import Session
    
-
-
 --------------------------------------
 -- Main
 --------------------------------------   
@@ -359,23 +357,34 @@ onFileNew ss = do
 ------------------------------------------------------------    
 
 onEditUndo :: Session -> IO ()
-onEditUndo ss = enbGetSelectedSourceFile ss >>= (scnUndo . sfEditor)
+onEditUndo ss = ifEditorHasFocus ss (scnUndo . sfEditor)
 
 onEditRedo :: Session -> IO ()
-onEditRedo ss = enbGetSelectedSourceFile ss >>= (scnRedo . sfEditor)
+onEditRedo ss = ifEditorHasFocus ss (scnRedo . sfEditor)
 
 onEditCut :: Session -> IO ()
-onEditCut ss = enbGetSelectedSourceFile ss >>= (scnCut . sfEditor)
+onEditCut ss = ifEditorHasFocus ss (scnCut . sfEditor) >> ifGhciHasFocus OP.ghciCut
 
 onEditCopy :: Session -> IO ()
-onEditCopy ss = enbGetSelectedSourceFile ss >>= (scnCopy . sfEditor)
+onEditCopy ss = ifEditorHasFocus ss (scnCopy . sfEditor) >> ifGhciHasFocus OP.ghciCopy
     
 onEditPaste :: Session -> IO ()
-onEditPaste ss = enbGetSelectedSourceFile ss >>= (scnPaste . sfEditor)
-  
+onEditPaste ss = ifEditorHasFocus ss (scnPaste . sfEditor) >> ifGhciHasFocus OP.ghciPaste
+
 onEditSelectAll :: Session -> IO ()
-onEditSelectAll ss = enbGetSelectedSourceFile ss >>= (scnSelectAll . sfEditor)
-  
+onEditSelectAll ss = ifEditorHasFocus ss (scnSelectAll . sfEditor) >> ifGhciHasFocus OP.ghciSelectAll
+ 
+ifEditorHasFocus :: Session -> (SourceFile -> IO ()) -> IO ()
+ifEditorHasFocus ss action = do
+    sf <- enbGetSelectedSourceFile ss
+    f <- (scnGetFocus . sfEditor ) sf
+    if f then action sf else return ()
+ 
+ifGhciHasFocus :: (IO Bool) -> IO ()
+ifGhciHasFocus action = do
+    h <- OP.ghciHasFocus
+    if ((ptrToWord64 h) /= 0) then action >> return () else return ()
+
 onEditFind :: Session -> IO ()
 onEditFind = EM.editFind
 

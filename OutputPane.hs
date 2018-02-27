@@ -5,7 +5,12 @@ module OutputPane
     gotoCompileError,
     openGhciFile,
     openGhci,
-    closeGhci
+    closeGhci,
+    ghciPaste,
+    ghciCut,
+    ghciCopy,
+    ghciSelectAll,
+    ghciHasFocus
 ) where 
     
 import Control.Concurrent 
@@ -34,8 +39,13 @@ import Session
 -----------------------
 
 -- imports from ScintillaProxy.dll
-foreign import ccall safe "GhciNew"   c_GhciNew   :: HWND -> CString -> CString -> IO HWND 
-foreign import ccall safe "GhciClose" c_GhciClose :: HWND -> IO ()
+foreign import ccall safe "GhciNew"         c_GhciNew       :: HWND -> CString -> CString -> IO HWND 
+foreign import ccall safe "GhciClose"       c_GhciClose     :: HWND -> IO ()
+foreign import ccall safe "GhciPaste"       c_GhciPaste     :: IO Bool 
+foreign import ccall safe "GhciCut"         c_GhciCut       :: IO Bool 
+foreign import ccall safe "GhciCopy"        c_GhciCopy      :: IO Bool 
+foreign import ccall safe "GhciSelectAll"   c_GhciSelectAll :: IO Bool 
+foreign import ccall safe "GhciHasFocus"    c_GhciHasFocus  :: IO HWND 
 
 openGhciFile :: Session -> SourceFile -> IO ()
 openGhciFile ss sf = do
@@ -100,6 +110,21 @@ closeGhci ss = do
     prUpdateSourceFiles ss (\sf -> maybe sf 
         (\ghci -> if (sfMatchesHwnd sf hwnd) then sfSetGhciPanel sf Nothing else sf) $ sfGhci sf)
     return ()
+
+ghciPaste :: IO Bool
+ghciPaste = c_GhciPaste
+
+ghciCut :: IO Bool
+ghciCut = c_GhciCut
+
+ghciCopy :: IO Bool
+ghciCopy = c_GhciCopy
+
+ghciSelectAll :: IO Bool
+ghciSelectAll = c_GhciSelectAll
+
+ghciHasFocus :: IO HWND
+ghciHasFocus = c_GhciHasFocus
 
 ------------------------------------------------------------    
 -- Output pane
