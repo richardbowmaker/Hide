@@ -10,7 +10,15 @@ module OutputPane
     ghciCut,
     ghciCopy,
     ghciSelectAll,
-    ghciHasFocus
+    ghciHasFocus,
+    ghciSendCommand,
+    ghciSetEventHandler,
+    ghciEnableEvents,
+    ghciDisableEvents,
+    ghciEventGotFocus,
+    ghciEventLostFocus,
+    ghciEventSelectionSet,
+    ghciEventSelectionClear
 ) where 
     
 import Control.Concurrent 
@@ -57,7 +65,6 @@ foreign import ccall safe "wrapper" createCallback ::
     (HWND -> Int -> IO ()) -> IO (FunPtr (HWND -> Int -> IO ()))
 
 --------------------------------------------------------------------------
-
 
 openGhciFile :: Session -> SourceFile -> IO ()
 openGhciFile ss sf = do
@@ -159,6 +166,18 @@ ghciDisableEvents = c_GhciDisableEvents
 
 ghciEventHandler :: Session -> HWND -> Int -> IO ()
 ghciEventHandler ss hwnd code = ssDebugInfo ss $ "GHCI event: " ++ (show code)
+
+ghciEventGotFocus :: Int
+ghciEventGotFocus = 1
+
+ghciEventLostFocus :: Int
+ghciEventLostFocus = 2
+
+ghciEventSelectionSet :: Int
+ghciEventSelectionSet = 3
+
+ghciEventSelectionClear :: Int
+ghciEventSelectionClear = 4
 
 ------------------------------------------------------------    
 -- Output pane
