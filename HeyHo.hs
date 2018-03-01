@@ -16,6 +16,7 @@ import Data.List (find, findIndex)
 import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
+import Graphics.UI.WXCore.Events
 import Numeric (showHex)
 import System.FilePath.Windows (takeFileName)
 import System.IO
@@ -253,8 +254,7 @@ setupMenus mf  = do
     tbar   <- toolBar mf []
     _      <- toolMenu tbar menuFileSave    "" "save.png"    []
     _      <- toolMenu tbar menuFileSaveAll "" "saveall.png" []
-
-   
+  
     return (ml)
     
 ------------------------------------------------------------    
@@ -287,7 +287,40 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
     else return ()
 
 onTabClose :: Session -> EventAuiNotebook -> IO ()
-onTabClose ss _ = do
+onTabClose ss enb = do
+{-
+got EventAuiNotebook
+expected Object (CWxObject (CEvtHandler (CAuiManagerEvent a0)))
+
+auiManagerEventVeto :: AuiManagerEvent  a -> Bool ->  IO ()
+
+data EventAuiNotebook = AuiNotebookAllowDnd { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookBeginDrag  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookBgDclick  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookButton  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookDragDone  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookDragMotion  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookEndDrag  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookPageChanged  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookPageChanging  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookPageClose  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookPageClosed  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookTabMiddleDown  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookTabMiddleUp  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookTabRightDown  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookTabRightUp  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiNotebookUnknown
+                      | AuiTabCtrlPageChanging  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
+                      | AuiTabCtrlUnknown
+                      deriving (Show, Eq)
+
+eventGetEventObject :: Event a -> IO (WxObject ())
+withCurrentEvent :: (Event () -> IO ()) -> IO ()
+
+    withCurrentEvent (\ev -> do
+                            x <- (eventGetEventObject (objectCast ev))                          
+                            auiManagerEventVeto x  True)
+-}
     enbGetSelectedSourceFile ss >>= FM.closeEditor ss    
     FM.updateSaveMenus ss      
     EM.updateEditMenus ss
@@ -356,6 +389,9 @@ onFileNew ss = do
 -- Edit Menu handlers
 ------------------------------------------------------------    
 
+onEdit :: Session -> IO ()
+onEdit ss = infoDialog (ssFrame ss) "edit" "edit"
+
 onEditUndo :: Session -> IO ()
 onEditUndo ss = ifEditorHasFocus ss (scnUndo . sfEditor)
 
@@ -363,16 +399,16 @@ onEditRedo :: Session -> IO ()
 onEditRedo ss = ifEditorHasFocus ss (scnRedo . sfEditor)
 
 onEditCut :: Session -> IO ()
-onEditCut ss = ifEditorHasFocus ss (scnCut . sfEditor) >> ifGhciHasFocus OP.ghciCut
+onEditCut ss = ifEditorHasFocus ss (scnCut . sfEditor) -- >> ifGhciHasFocus OP.ghciCut
 
 onEditCopy :: Session -> IO ()
-onEditCopy ss = ifEditorHasFocus ss (scnCopy . sfEditor) >> ifGhciHasFocus OP.ghciCopy
+onEditCopy ss = ifEditorHasFocus ss (scnCopy . sfEditor) -- >> ifGhciHasFocus OP.ghciCopy
     
 onEditPaste :: Session -> IO ()
-onEditPaste ss = ifEditorHasFocus ss (scnPaste . sfEditor) >> ifGhciHasFocus OP.ghciPaste
+onEditPaste ss = ifEditorHasFocus ss (scnPaste . sfEditor) -- >> ifGhciHasFocus OP.ghciPaste
 
 onEditSelectAll :: Session -> IO ()
-onEditSelectAll ss = ifEditorHasFocus ss (scnSelectAll . sfEditor) >> ifGhciHasFocus OP.ghciSelectAll
+onEditSelectAll ss = ifEditorHasFocus ss (scnSelectAll . sfEditor) -- >> ifGhciHasFocus OP.ghciSelectAll
  
 ifEditorHasFocus :: Session -> (SourceFile -> IO ()) -> IO ()
 ifEditorHasFocus ss action = do

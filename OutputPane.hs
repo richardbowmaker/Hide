@@ -19,6 +19,7 @@ import Data.List (find, findIndex)
 
 import Data.Word (Word64)
 import Foreign.C.String (CString, withCString)
+import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Graphics.Win32.GDI.Types (HWND)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
@@ -39,13 +40,24 @@ import Session
 -----------------------
 
 -- imports from ScintillaProxy.dll
-foreign import ccall safe "GhciNew"         c_GhciNew       :: HWND -> CString -> CString -> IO HWND 
-foreign import ccall safe "GhciClose"       c_GhciClose     :: HWND -> IO ()
-foreign import ccall safe "GhciPaste"       c_GhciPaste     :: IO Bool 
-foreign import ccall safe "GhciCut"         c_GhciCut       :: IO Bool 
-foreign import ccall safe "GhciCopy"        c_GhciCopy      :: IO Bool 
-foreign import ccall safe "GhciSelectAll"   c_GhciSelectAll :: IO Bool 
-foreign import ccall safe "GhciHasFocus"    c_GhciHasFocus  :: IO HWND 
+foreign import ccall safe "GhciNew"             c_GhciNew               :: HWND -> CString -> CString -> IO HWND 
+foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> IO ()) -> IO ()
+foreign import ccall safe "GhciEnableEvents"    c_GhciEnableEvents      :: HWND -> IO ()
+foreign import ccall safe "GhciDisableEvents"   c_GhciDisableEvents     :: HWND -> IO ()
+foreign import ccall safe "GhciClose"           c_GhciClose             :: HWND -> IO ()
+foreign import ccall safe "GhciPaste"           c_GhciPaste             :: HWND -> IO ()
+foreign import ccall safe "GhciCut"             c_GhciCut               :: HWND -> IO () 
+foreign import ccall safe "GhciCopy"            c_GhciCopy              :: HWND -> IO ()
+foreign import ccall safe "GhciSelectAll"       c_GhciSelectAll         :: HWND -> IO () 
+foreign import ccall safe "GhciHasFocus"        c_GhciHasFocus          :: IO HWND 
+foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
+
+-- callback wrapper
+foreign import ccall safe "wrapper" createCallback ::
+    (HWND -> Int -> IO ()) -> IO (FunPtr (HWND -> Int -> IO ()))
+
+--------------------------------------------------------------------------
+
 
 openGhciFile :: Session -> SourceFile -> IO ()
 openGhciFile ss sf = do
@@ -97,7 +109,11 @@ openGhciFile' ss fp = do
 
             -- set focus to new page
             ix <- auiNotebookGetPageIndex nb p
-            auiNotebookSetSelection nb ix  
+            auiNotebookSetSelection nb ix 
+
+            -- enable events
+            ghciSetEventHandler hwnd $ ghciEventHandler ss
+            ghciEnableEvents hwnd
 
             return (Just (p, hp))
                 
@@ -111,20 +127,38 @@ closeGhci ss = do
         (\ghci -> if (sfMatchesHwnd sf hwnd) then sfSetGhciPanel sf Nothing else sf) $ sfGhci sf)
     return ()
 
-ghciPaste :: IO Bool
+ghciSendCommand :: HWND -> String -> IO ()
+ghciSendCommand hwnd cmd = withCString cmd (\cs -> c_GhciSendCommand hwnd cs) >> return ()
+
+ghciPaste :: HWND -> IO ()
 ghciPaste = c_GhciPaste
 
-ghciCut :: IO Bool
+ghciCut :: HWND -> IO ()
 ghciCut = c_GhciCut
 
-ghciCopy :: IO Bool
+ghciCopy :: HWND -> IO ()
 ghciCopy = c_GhciCopy
 
-ghciSelectAll :: IO Bool
+ghciSelectAll :: HWND -> IO ()
 ghciSelectAll = c_GhciSelectAll
 
 ghciHasFocus :: IO HWND
 ghciHasFocus = c_GhciHasFocus
+
+ghciSetEventHandler :: HWND -> (HWND -> Int -> IO ()) -> IO ()
+ghciSetEventHandler hwnd eh = do
+    cb <- createCallback eh
+    c_GhciSetEventHandler hwnd cb    
+    return ()
+
+ghciEnableEvents :: HWND -> IO ()
+ghciEnableEvents = c_GhciEnableEvents
+
+ghciDisableEvents :: HWND -> IO ()
+ghciDisableEvents = c_GhciDisableEvents
+
+ghciEventHandler :: Session -> HWND -> Int -> IO ()
+ghciEventHandler ss hwnd code = ssDebugInfo ss $ "GHCI event: " ++ (show code)
 
 ------------------------------------------------------------    
 -- Output pane

@@ -2,4 +2,8 @@
 *.exe
 *.hi
 *.dll
+*.html
+*.gif
+*.css
+
 

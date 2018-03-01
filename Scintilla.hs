@@ -536,7 +536,7 @@ scnConfigureHaskell e = do
     scnSetLexer e (fromIntegral sCLEX_HASKELL :: Int)
     scnSetKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
                         "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let",
-                        "newtype", "type"]
+                        "newtype", "type", "class"]
     scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
     scnStyleClearAll e
     scnSetAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
@@ -695,7 +695,8 @@ scnSelectWord e = do
     p1 <- scnGetCurrentPos e
     l  <- scnGetTextLen e
     p2 <- scnFindText e " " 0 p1 l
-    if (p1 < p2) then scnSetSelectionRange e p1 p2
+    p3 <- scnFindText e "\r" 0 p1 l
+    if (p1 < p2) then scnSetSelectionRange e p1 (min p2 p3)
     else return ()
 
 scnSetSelectionStart :: ScnEditor -> Int -> IO ()
