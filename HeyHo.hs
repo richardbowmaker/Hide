@@ -28,6 +28,7 @@ import Compile
 import qualified EditMenu as EM
 import EditorNotebook
 import qualified FileMenu as FM
+import qualified Ghci as GH
 import Misc
 import qualified OutputPane as OP
 import Scintilla
@@ -327,7 +328,7 @@ withCurrentEvent :: (Event () -> IO ()) -> IO ()
     return ()
 
 onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
-onOutputTabClose ss _ = OP.closeGhci ss
+onOutputTabClose ss _ = GH.closeWindow ss
   
 onFileClose :: Session -> IO ()
 onFileClose ss = do
@@ -418,7 +419,7 @@ ifEditorHasFocus ss action = do
  
 ifGhciHasFocus :: (IO Bool) -> IO ()
 ifGhciHasFocus action = do
-    h <- OP.ghciHasFocus
+    h <- GH.getFocus
     if ((ptrToWord64 h) /= 0) then action >> return () else return ()
 
 onEditFind :: Session -> IO ()
@@ -510,11 +511,11 @@ ghciComplete ss sf = do
 
     ces <- atomically $ readTVar $ ssCompilerReport ss
     case ces of
-        [] -> OP.openGhciFile ss sf -- no errors, open GHCI
+        [] -> GH.openWindowFile ss sf -- no errors, open GHCI
         _  -> do
             ans <- proceedDialog (ssFrame ss) ssProgramTitle "There were compilation errors, continue ?"
             case ans of
-                True -> OP.openGhciFile ss sf
+                True -> GH.openWindowFile ss sf
                 False -> return ()
 
 ------------------------------------------------------------    
@@ -530,7 +531,7 @@ onDebugRun ss = do
     return ()
 
 onDebugGhci :: Session -> IO ()
-onDebugGhci = OP.openGhci
+onDebugGhci = GH.openWindow
 
 ------------------------------------------------------------    
 -- Timer handler

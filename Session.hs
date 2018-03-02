@@ -22,6 +22,7 @@ module Session
     ssDebugError,
     ssDebugWarn,
     ssDebugInfo,
+    ssTextWindows,
     ssMenuListNew,
     ssMenuListCreate,
     ssMenuListAdd,
@@ -85,7 +86,33 @@ module Session
     GhciPanel,
     ghciPanel,
     ghciHwnd,
-    sfCreateGhciPanel
+    sfCreateGhciPanel,
+--
+    createGhciWindowType,
+    createTextWindow,
+    twCreate,
+    twFind,
+    TextWindow,
+    TextWindowType,
+    twType,
+    twPanel,
+    twPanelHwnd,
+    twCut,
+    twCopy,
+    twPaste,
+    twSelectAll,
+    twUndo,
+    twRedo,
+    twCanCut,
+    twCanCopy,      
+    twCanPaste,
+    twCanSelectAll,
+    twCanUndo,
+    twCanRedo,
+    twFilePath,
+    twUpdateTextWindows,
+    twUpdate,
+    txWindows
 ) where
 
 
@@ -135,7 +162,8 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssDebugInfo         :: String -> IO (),
                             ssMainThreadId      :: ThreadId,
                             ssCompilerReport    :: TErrors,
-                            ssFindText          :: TFindText}
+                            ssFindText          :: TFindText,
+                            ssTextWindows       :: TvTextWindows}
    
 data FindText = FindText { ftText :: String, ftCurrFile :: String, ftCurrPos :: Int, ftStartFile :: String, ftStartPos :: Int }
 
@@ -153,6 +181,8 @@ type TFindText = TVar FindText
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
+type TvTextWindows = TVar TextWindows
+data TextWindows = TextWindows { txWindows :: [TextWindow] }
 data Project = Project { prFiles :: [SourceFile] }
 
 -- | Source File Data
@@ -165,6 +195,27 @@ data SourceFile
 
 data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 
+data TextWindowType = Scintilla ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
+
+-- | Text Window
+data TextWindow 
+    = TextWindow {  twType          :: TextWindowType,
+                    twPanel         :: Panel (),            -- ^ The parent panel of text window
+                    twPanelHwnd     :: HWND,                -- ^ HWND of panel
+                    twCut           :: IO (),               -- ^ Function to perform cut operation
+                    twCopy          :: IO (),
+                    twPaste         :: IO (),
+                    twSelectAll     :: IO (),
+                    twUndo          :: IO (),
+                    twRedo          :: IO (),
+                    twCanCut        :: IO Bool,             -- ^ Whether the cut is currently valid, i.e. text is selected
+                    twCanCopy       :: IO Bool,              
+                    twCanPaste      :: IO Bool,
+                    twCanSelectAll  :: IO Bool,
+                    twCanUndo       :: IO Bool,
+                    twCanRedo       :: IO Bool,
+                    twFilePath      :: Maybe String }       -- ^ File name associated with window
+
 type SsNameMenuPair = (String, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
 
@@ -175,7 +226,6 @@ data CompError = CompError {    ceFilePath  :: String,
                                 ceErrLine   :: Int, -- line in compiler output
                                 ceErrLines  :: [String] } deriving (Show)
 
-  
 ----------------------------------------------------------------
 -- Session  helpers
 ----------------------------------------------------------------
@@ -192,7 +242,8 @@ ssCreate mf am nb pr ms sf ots ot db = do
     let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
-    return (Session mf am nb tpr ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd)
+    tws  <- atomically $ newTVar $ twCreate [] 
+    return (Session mf am nb tpr ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd tws)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -373,7 +424,7 @@ compErrorToString :: CompError -> String
 compErrorToString c =
     "Filename: " ++ (show $ ceFilePath c) ++ " (" ++ (show $ ceSrcLine c) ++ "," ++ (show $ ceSrcCol c) ++ ") errout = " ++ (show $ ceErrLine c) ++ "\n" ++
         (concat $ map (\s -> " " ++ s ++ "\n") (ceErrLines c))
-      
+     
 
 ----------------------------------------------------------------
 -- Find Text
@@ -382,3 +433,48 @@ compErrorToString c =
 -- search string -> current file -> start file -> start pos
 ftFindText :: String -> String -> Int -> String -> Int -> FindText
 ftFindText text currFile currPos startFile startPos = (FindText text currFile currPos startFile startPos)
+
+----------------------------------------------------------------
+-- Text windows
+----------------------------------------------------------------
+
+twCreate :: [TextWindow] -> TextWindows
+twCreate tws = (TextWindows tws)
+
+createGhciWindowType :: TextWindowType
+createGhciWindowType = (Ghci)
+
+createTextWindow :: TextWindowType
+                    -> Panel ()
+                    -> HWND
+                    -> IO ()        -- ^ Cut function
+                    -> IO ()        -- ^ Copy
+                    -> IO ()        -- ^ Paste
+                    -> IO ()        -- ^ Select all
+                    -> IO ()        -- ^ Undo
+                    -> IO ()        -- ^ Redo
+                    -> IO Bool      -- ^ Cut valid
+                    -> IO Bool      -- ^ Copy
+                    -> IO Bool      -- ^ Paste
+                    -> IO Bool      -- ^ Select all
+                    -> IO Bool      -- ^ Undo
+                    -> IO Bool      -- ^ Redo
+                    -> Maybe String -- ^ Filname
+                    -> TextWindow
+createTextWindow wtype p hp cuf cof paf saf unf ref cuv cov pav sav unv rev mfp =
+    (TextWindow wtype p hp cuf cof paf saf unf ref cuv cov pav sav unv rev mfp)
+
+twFind :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
+twFind ss p = do
+    tws <- atomically (readTVar $ ssTextWindows ss)
+    return $ find p $ txWindows tws
+
+twUpdateTextWindows :: Session -> (TextWindow -> TextWindow) -> IO TextWindows
+twUpdateTextWindows ss f = atomically (modifyTVar tws (\ws -> twCreate $ map f (txWindows ws)) >> readTVar tws)
+    where tws = ssTextWindows ss
+
+twUpdate :: Session -> (TextWindows -> TextWindows) -> IO TextWindows
+twUpdate ss f = atomically (modifyTVar tws (\ws -> f ws) >> readTVar tws) 
+    where tws = ssTextWindows ss
+
+
