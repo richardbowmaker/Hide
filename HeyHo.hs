@@ -417,11 +417,6 @@ ifEditorHasFocus ss action = do
     f <- (scnGetFocus . sfEditor ) sf
     if f then action sf else return ()
  
-ifGhciHasFocus :: (IO Bool) -> IO ()
-ifGhciHasFocus action = do
-    h <- GH.getFocus
-    if ((ptrToWord64 h) /= 0) then action >> return () else return ()
-
 onEditFind :: Session -> IO ()
 onEditFind = EM.editFind
 
@@ -435,7 +430,6 @@ onTestTest :: Session -> IO ()
 onTestTest ss = do 
     return ()
 
-
 ------------------------------------------------------------    
 -- Build Menu handlers
 ------------------------------------------------------------    
@@ -446,6 +440,7 @@ onBuildBuild ss = do
     set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
     set (ssMenuListGet ss "BuildCompile") [enabled := False]
     set (ssMenuListGet ss "BuildGhci")    [enabled := False]
+    set (ssMenuListGet ss "DebugRun")     [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -481,6 +476,7 @@ compileComplete ss = do
     set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
     set (ssMenuListGet ss "BuildCompile") [enabled := True]
     set (ssMenuListGet ss "BuildGhci")    [enabled := True]
+    set (ssMenuListGet ss "DebugRun")     [enabled := True]
     otAddText ss $ BS.pack "Compile complete\n"
     return ()
 
@@ -511,12 +507,16 @@ ghciComplete ss sf = do
 
     ces <- atomically $ readTVar $ ssCompilerReport ss
     case ces of
-        [] -> GH.openWindowFile ss sf -- no errors, open GHCI
+        [] -> GH.openWindowFile ss sf (ghciCallback ss)
         _  -> do
             ans <- proceedDialog (ssFrame ss) ssProgramTitle "There were compilation errors, continue ?"
             case ans of
-                True -> GH.openWindowFile ss sf
+                True -> GH.openWindowFile ss sf (ghciCallback ss)
                 False -> return ()
+
+
+ghciCallback :: Session -> TextWindow -> Int -> IO ()
+ghciCallback ss tw n = EM.updateEditMenu ss tw
 
 ------------------------------------------------------------    
 -- Debug menu handlers
@@ -531,7 +531,7 @@ onDebugRun ss = do
     return ()
 
 onDebugGhci :: Session -> IO ()
-onDebugGhci = GH.openWindow
+onDebugGhci ss = GH.openWindow ss (ghciCallback ss)
 
 ------------------------------------------------------------    
 -- Timer handler

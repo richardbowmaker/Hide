@@ -29,6 +29,7 @@ import Text.Printf (printf)
 import System.Directory 
 import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName, takeDirectory)
 import System.IO
+import System.IO.Error (catchIOError)
 import System.Process
 import System.Process.Common
 
@@ -114,7 +115,9 @@ cpDebugRun ss fp = do
     b <- doesFileExist exe
 
     if b then do
-        createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)}
+        catchIOError
+            (createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)} >> return ())
+            (\err -> ssDebugError ss $ show err)
         return ()
     else infoDialog (ssFrame ss) ssProgramTitle $ "File: " ++ exe ++ " does not exist"
 

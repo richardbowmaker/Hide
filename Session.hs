@@ -91,7 +91,7 @@ module Session
     createGhciWindowType,
     createTextWindow,
     twCreate,
-    twFind,
+    twFindWindow,
     TextWindow,
     TextWindowType,
     twType,
@@ -103,13 +103,20 @@ module Session
     twSelectAll,
     twUndo,
     twRedo,
+    twFind,
+    twFindForward,
+    twFindBackward,
     twCanCut,
     twCanCopy,      
     twCanPaste,
     twCanSelectAll,
     twCanUndo,
     twCanRedo,
+    twCanFind,
+    twCanFindForward,
+    twCanFindBackward,
     twFilePath,
+    twHasFocus,
     twUpdateTextWindows,
     twUpdate,
     txWindows
@@ -141,7 +148,7 @@ import Scintilla
 debug = True
 
 ssProgramTitle :: String
-ssProgramTitle = "HIDE"
+ssProgramTitle = "HIDE 03/03/18"
                      
 ----------------------------------------------------------
 -- Session data and ToString functions
@@ -199,22 +206,29 @@ data TextWindowType = Scintilla ScnEditor | Ghci | Debug ScnEditor | Output ScnE
 
 -- | Text Window
 data TextWindow 
-    = TextWindow {  twType          :: TextWindowType,
-                    twPanel         :: Panel (),            -- ^ The parent panel of text window
-                    twPanelHwnd     :: HWND,                -- ^ HWND of panel
-                    twCut           :: IO (),               -- ^ Function to perform cut operation
-                    twCopy          :: IO (),
-                    twPaste         :: IO (),
-                    twSelectAll     :: IO (),
-                    twUndo          :: IO (),
-                    twRedo          :: IO (),
-                    twCanCut        :: IO Bool,             -- ^ Whether the cut is currently valid, i.e. text is selected
-                    twCanCopy       :: IO Bool,              
-                    twCanPaste      :: IO Bool,
-                    twCanSelectAll  :: IO Bool,
-                    twCanUndo       :: IO Bool,
-                    twCanRedo       :: IO Bool,
-                    twFilePath      :: Maybe String }       -- ^ File name associated with window
+    = TextWindow {  twType              :: TextWindowType,
+                    twPanel             :: Panel (),            -- ^ The parent panel of text window
+                    twPanelHwnd         :: HWND,                -- ^ HWND of panel
+                    twCut               :: IO (),               -- ^ Function to perform cut operation
+                    twCopy              :: IO (),
+                    twPaste             :: IO (),
+                    twSelectAll         :: IO (),
+                    twUndo              :: IO (),
+                    twRedo              :: IO (),
+                    twFind              :: IO (),
+                    twFindForward       :: IO (),
+                    twFindBackward      :: IO (),
+                    twCanCut            :: IO Bool,             -- ^ Whether the cut is currently valid, i.e. text is selected
+                    twCanCopy           :: IO Bool,              
+                    twCanPaste          :: IO Bool,
+                    twCanSelectAll      :: IO Bool,
+                    twCanUndo           :: IO Bool,
+                    twCanRedo           :: IO Bool,
+                    twCanFind           :: IO Bool,
+                    twCanFindForward    :: IO Bool,
+                    twCanFindBackward   :: IO Bool,
+                    twHasFocus          :: IO Bool,
+                    twFilePath          :: Maybe String }       -- ^ File name associated with window
 
 type SsNameMenuPair = (String, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
@@ -453,19 +467,26 @@ createTextWindow :: TextWindowType
                     -> IO ()        -- ^ Select all
                     -> IO ()        -- ^ Undo
                     -> IO ()        -- ^ Redo
-                    -> IO Bool      -- ^ Cut valid
-                    -> IO Bool      -- ^ Copy
-                    -> IO Bool      -- ^ Paste
-                    -> IO Bool      -- ^ Select all
-                    -> IO Bool      -- ^ Undo
-                    -> IO Bool      -- ^ Redo
+                    -> IO ()        -- ^ Find
+                    -> IO ()        -- ^ Find forward
+                    -> IO ()        -- ^ Find backward
+                    -> IO Bool      -- ^ Can Cut 
+                    -> IO Bool      -- ^ Can Copy
+                    -> IO Bool      -- ^ Can Paste
+                    -> IO Bool      -- ^ Can Select all
+                    -> IO Bool      -- ^ Can Undo
+                    -> IO Bool      -- ^ Can Redo
+                    -> IO Bool      -- ^ Can Find
+                    -> IO Bool      -- ^ Can Find forward
+                    -> IO Bool      -- ^ Can Find backward
+                    -> IO Bool      -- ^ Has focus
                     -> Maybe String -- ^ Filname
                     -> TextWindow
-createTextWindow wtype p hp cuf cof paf saf unf ref cuv cov pav sav unv rev mfp =
-    (TextWindow wtype p hp cuf cof paf saf unf ref cuv cov pav sav unv rev mfp)
+createTextWindow wtype p hp cuf cof paf saf unf ref fnd fnf fnb cuv cov pav sav unv rev cfn cff cfb foc mfp =
+    (TextWindow wtype p hp cuf cof paf saf unf ref fnd fnf fnb cuv cov pav sav unv rev cfn cff cfb foc mfp)
 
-twFind :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
-twFind ss p = do
+twFindWindow :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
+twFindWindow ss p = do
     tws <- atomically (readTVar $ ssTextWindows ss)
     return $ find p $ txWindows tws
 

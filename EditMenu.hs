@@ -4,7 +4,8 @@ module EditMenu
     editFindBackward,
     editFindForward,
     editFind,
-    updateEditMenus
+    updateEditMenus,
+    updateEditMenu
 ) where 
     
 import Control.Concurrent 
@@ -69,7 +70,37 @@ updateEditMenus ss = do
         set (ssMenuListGet ss "EditFindForward")    [enabled := False]
         set (ssMenuListGet ss "EditFindBackward")   [enabled := False]
         return ()
- 
+
+updateEditMenu :: Session -> TextWindow -> IO ()
+updateEditMenu ss tw = do
+
+        f <- twHasFocus tw 
+
+        if (f) then do
+            setm ss "EditUndo"          (twCanUndo         tw) (twUndo         tw)
+            setm ss "EditRedo"          (twCanRedo         tw) (twRedo         tw)
+            setm ss "EditCut"           (twCanCut          tw) (twCut          tw) 
+            setm ss "EditCopy"          (twCanCopy         tw) (twCopy         tw)
+            setm ss "EditPaste"         (twCanPaste        tw) (twPaste        tw)
+            setm ss "EditAll"           (twCanSelectAll    tw) (twSelectAll    tw)
+            setm ss "EditFind"          (twCanFind         tw) (twFind         tw)
+            setm ss "EditFindForward"   (twCanFindForward  tw) (twFindForward  tw)
+            setm ss "EditFindBackward"  (twCanFindBackward tw) (twFindBackward tw)
+        else do
+            setm ss "EditUndo"          (return False) (return ())
+            setm ss "EditCut"           (return False) (return ())
+            setm ss "EditCopy"          (return False) (return ())
+            setm ss "EditPaste"         (return False) (return ())
+            setm ss "EditAll"           (return False) (return ())
+            setm ss "EditFind"          (return False) (return ())
+            setm ss "EditFindForward"   (return False) (return ())
+            setm ss "EditFindBackward"  (return False) (return ())
+
+        where   setm :: Session -> String -> IO Bool -> IO() -> IO ()
+                setm ss m ioe ioc = do
+                    e <- ioe
+                    set (ssMenuListGet ss m) [on command := ioc, enabled := e]
+
 editFind :: Session -> IO ()
 editFind ss = do
 

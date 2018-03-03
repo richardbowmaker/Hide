@@ -8,7 +8,7 @@ module Ghci
     cut,
     copy,
     selectAll,
-    getFocus,
+    hasFocus,
     sendCommand,
     setEventHandler,
     enableEvents,
@@ -17,6 +17,7 @@ module Ghci
     eventLostFocus,
     eventSelectionSet,
     eventSelectionClear,
+    eventHandler,
     GhciPanel
 ) where 
     
@@ -55,7 +56,7 @@ foreign import ccall safe "GhciPaste"           c_GhciPaste             :: HWND 
 foreign import ccall safe "GhciCut"             c_GhciCut               :: HWND -> IO () 
 foreign import ccall safe "GhciCopy"            c_GhciCopy              :: HWND -> IO ()
 foreign import ccall safe "GhciSelectAll"       c_GhciSelectAll         :: HWND -> IO () 
-foreign import ccall safe "GhciHasFocus"        c_GhciHasFocus          :: IO HWND 
+foreign import ccall safe "GhciHasFocus"        c_GhciHasFocus          :: HWND -> IO Int32 
 foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
 foreign import ccall safe "GhciIsTextSelected"  c_GhciIsTextSelected    :: HWND -> IO Int32
 
@@ -65,9 +66,9 @@ foreign import ccall safe "wrapper" createCallback ::
 
 --------------------------------------------------------------------------
 
-openWindowFile :: SS.Session -> SourceFile -> IO ()
-openWindowFile ss sf = do
-    mtw <- twFind ss (\tw -> sfPathIs sf $ twFilePath tw) 
+openWindowFile :: SS.Session -> SourceFile -> (TextWindow -> Int -> IO ()) -> IO ()
+openWindowFile ss sf eh = do
+    mtw <- twFindWindow ss (\tw -> sfPathIs sf $ twFilePath tw) 
     case mtw of
         Just tw -> do
             -- GHCI already open so select it
@@ -80,15 +81,18 @@ openWindowFile ss sf = do
             -- GHCI not open so open a new tab
             case (sfFilePath sf) of
                 Just fp -> do
-                    m <- open ss fp                  
+                    m <- open ss fp                 
                     case m of
                         Just (panel, hwnd) -> do
-                                twUpdate ss (\tws -> twCreate ((newTW panel hwnd fp) : txWindows tws))
+                                let tw = newtw panel hwnd fp
+                                twUpdate ss (\tws -> twCreate (tw : txWindows tws))
+                                setEventHandler tw eh
+                                enableEvents hwnd
                                 return ()
                         Nothing -> return ()
                 Nothing -> return ()
 
-    where newTW panel hwnd fp = (SS.createTextWindow
+    where newtw panel hwnd fp = (SS.createTextWindow
                                 SS.createGhciWindowType
                                 panel
                                 hwnd
@@ -98,24 +102,34 @@ openWindowFile ss sf = do
                                 (selectAll hwnd)
                                 (undo hwnd)
                                 (redo hwnd)
-                                (isTextSelected hwnd)
+                                (return ())
+                                (return ())
+                                (return ())
+                                (return False)
                                 (isTextSelected hwnd)
                                 (return True)
                                 (return True)
                                 (return False)
                                 (return False)
+                                (return False)
+                                (return False)
+                                (return False)
+                                (hasFocus hwnd)
                                 (Just fp))
 
-openWindow :: SS.Session -> IO ()
-openWindow ss = do
+openWindow :: SS.Session -> (TextWindow -> Int -> IO ()) -> IO ()
+openWindow ss eh = do
     m <- open ss "" 
     case m of
         Just (panel, hwnd) -> do
-            twUpdate ss (\tws -> twCreate ((newTW panel hwnd) : txWindows tws))
+            let tw = newtw panel hwnd
+            twUpdate ss (\tws -> twCreate (tw : txWindows tws))
+            setEventHandler tw eh
+            enableEvents hwnd
             return ()
         Nothing -> return ()
 
-    where newTW panel hwnd = (SS.createTextWindow
+    where newtw panel hwnd = (SS.createTextWindow
                                 SS.createGhciWindowType
                                 panel
                                 hwnd
@@ -125,12 +139,19 @@ openWindow ss = do
                                 (selectAll hwnd)
                                 (undo hwnd)
                                 (redo hwnd)
-                                (isTextSelected hwnd)
+                                (return ())
+                                (return ())
+                                (return ())
+                                (return False)
                                 (isTextSelected hwnd)
                                 (return True)
                                 (return True)
                                 (return False)
                                 (return False)
+                                (return False)
+                                (return False)
+                                (return False)
+                                (hasFocus hwnd)
                                 Nothing)
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND))
@@ -154,10 +175,6 @@ open ss fp = do
             -- set focus to new page
             ix <- auiNotebookGetPageIndex nb p
             auiNotebookSetSelection nb ix 
-
-            -- enable events
-            setEventHandler hwnd $ eventHandler ss
-            enableEvents hwnd
 
             return (Just (p, hp))
                 
@@ -197,14 +214,19 @@ isTextSelected hwnd = do
     n <- c_GhciIsTextSelected hwnd
     return (n /= 0)
 
-getFocus :: IO HWND
-getFocus = c_GhciHasFocus
+hasFocus :: HWND -> IO Bool
+hasFocus h = do 
+        b <- c_GhciHasFocus h
+        return (b /= 0)
 
-setEventHandler :: HWND -> (HWND -> Int -> IO ()) -> IO ()
-setEventHandler hwnd eh = do
-    cb <- createCallback eh
-    c_GhciSetEventHandler hwnd cb    
+setEventHandler :: SS.TextWindow -> (SS.TextWindow -> Int -> IO ()) -> IO ()
+setEventHandler tw eh = do
+    cb <- createCallback (eventHandler $ eh tw)
+    c_GhciSetEventHandler (twPanelHwnd tw) cb    
     return ()
+
+eventHandler :: (Int -> IO ()) -> HWND -> Int -> IO ()
+eventHandler f h n = f n
 
 enableEvents :: HWND -> IO ()
 enableEvents = c_GhciEnableEvents
@@ -212,8 +234,6 @@ enableEvents = c_GhciEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = c_GhciDisableEvents
 
-eventHandler :: Session -> HWND -> Int -> IO ()
-eventHandler ss hwnd code = ssDebugInfo ss $ "GHCI event: " ++ (show code)
 
 eventGotFocus :: Int
 eventGotFocus = 1
