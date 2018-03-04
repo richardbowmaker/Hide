@@ -38,6 +38,7 @@ import System.Win32.Types (nullHANDLE)
 
 -- project imports
 
+import Constants as CN
 import EditorNotebook
 import Misc
 import Session as SS
@@ -83,8 +84,8 @@ openWindowFile ss sf eh = do
                 Just fp -> do
                     m <- open ss fp                 
                     case m of
-                        Just (panel, hwnd) -> do
-                                let tw = newtw panel hwnd fp
+                        Just (panel, hwndp, hwnd) -> do
+                                let tw = newtw panel hwndp hwnd fp
                                 twUpdate ss (\tws -> twCreate (tw : txWindows tws))
                                 setEventHandler tw eh
                                 enableEvents hwnd
@@ -92,69 +93,51 @@ openWindowFile ss sf eh = do
                         Nothing -> return ()
                 Nothing -> return ()
 
-    where newtw panel hwnd fp = (SS.createTextWindow
+    where   newtw panel hwndp hwnd fp = (SS.createTextWindow
                                 SS.createGhciWindowType
                                 panel
+                                hwndp
                                 hwnd
-                                (cut hwnd)
-                                (copy hwnd)
-                                (paste hwnd)
-                                (selectAll hwnd)
-                                (undo hwnd)
-                                (redo hwnd)
-                                (return ())
-                                (return ())
-                                (return ())
-                                (return False)
-                                (isTextSelected hwnd)
-                                (return True)
-                                (return True)
-                                (return False)
-                                (return False)
-                                (return False)
-                                (return False)
-                                (return False)
+                                [   
+                                    (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
+                                    (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
+                                    (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
+                                    (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
+
+                                ]
                                 (hasFocus hwnd)
                                 (Just fp))
+
+
 
 openWindow :: SS.Session -> (TextWindow -> Int -> IO ()) -> IO ()
 openWindow ss eh = do
     m <- open ss "" 
     case m of
-        Just (panel, hwnd) -> do
-            let tw = newtw panel hwnd
+        Just (panel, hwndp, hwnd) -> do
+            let tw = newtw panel hwndp hwnd
             twUpdate ss (\tws -> twCreate (tw : txWindows tws))
             setEventHandler tw eh
             enableEvents hwnd
             return ()
         Nothing -> return ()
 
-    where newtw panel hwnd = (SS.createTextWindow
+   where   newtw panel hwndp hwnd = (SS.createTextWindow
                                 SS.createGhciWindowType
                                 panel
+                                hwndp
                                 hwnd
-                                (cut hwnd)
-                                (copy hwnd)
-                                (paste hwnd)
-                                (selectAll hwnd)
-                                (undo hwnd)
-                                (redo hwnd)
-                                (return ())
-                                (return ())
-                                (return ())
-                                (return False)
-                                (isTextSelected hwnd)
-                                (return True)
-                                (return True)
-                                (return False)
-                                (return False)
-                                (return False)
-                                (return False)
-                                (return False)
+                                [   
+                                    (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
+                                    (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
+                                    (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
+                                    (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
+
+                                ]
                                 (hasFocus hwnd)
                                 Nothing)
 
-open :: SS.Session -> String -> IO (Maybe (Panel (), HWND))
+open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
 open ss fp = do
 
     -- create panel and embed GHCI window
@@ -176,7 +159,7 @@ open ss fp = do
             ix <- auiNotebookGetPageIndex nb p
             auiNotebookSetSelection nb ix 
 
-            return (Just (p, hp))
+            return (Just (p, hp, hwnd))
                 
 closeWindow :: Session -> IO ()
 closeWindow ss = do
@@ -202,12 +185,6 @@ copy = c_GhciCopy
 
 selectAll :: HWND -> IO ()
 selectAll = c_GhciSelectAll
-
-undo :: HWND -> IO ()
-undo h = return ()
-
-redo :: HWND -> IO ()
-redo h = return ()
 
 isTextSelected :: HWND -> IO Bool
 isTextSelected hwnd = do

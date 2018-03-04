@@ -34,6 +34,7 @@ import System.Process
 import System.Process.Common
 
 -- project imports
+import qualified Constants as CN
 import Misc
 import Session
 
@@ -119,7 +120,7 @@ cpDebugRun ss fp = do
             (createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)} >> return ())
             (\err -> ssDebugError ss $ show err)
         return ()
-    else infoDialog (ssFrame ss) ssProgramTitle $ "File: " ++ exe ++ " does not exist"
+    else infoDialog (ssFrame ss) CN.programTitle $ "File: " ++ exe ++ " does not exist"
 
 
 -- run command and redirect std out to the output pane

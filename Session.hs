@@ -6,7 +6,6 @@ module Session
     TOutput,
     FunctionChannel,
     TErrors,
-    ssProgramTitle,
 --
     ssCreate,
     ssFrame,
@@ -97,29 +96,17 @@ module Session
     twType,
     twPanel,
     twPanelHwnd,
-    twCut,
-    twCopy,
-    twPaste,
-    twSelectAll,
-    twUndo,
-    twRedo,
-    twFind,
-    twFindForward,
-    twFindBackward,
-    twCanCut,
-    twCanCopy,      
-    twCanPaste,
-    twCanSelectAll,
-    twCanUndo,
-    twCanRedo,
-    twCanFind,
-    twCanFindForward,
-    twCanFindBackward,
+    twHwnd,
+    twMenuFunctions,
     twFilePath,
     twHasFocus,
     twUpdateTextWindows,
     twUpdate,
-    txWindows
+    txWindows,
+    createMenuFunction,
+    MenuFunction,
+    twGetMenuFunction,
+    twGetMenuEnabled
 ) where
 
 
@@ -137,19 +124,12 @@ import Data.Word (Word64)
 import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
 
+import qualified Constants as CN
 import Debug
 import Misc
 import Scintilla
 
-----------------------------------------------------------------
--- Globals
-----------------------------------------------------------------
-
-debug = True
-
-ssProgramTitle :: String
-ssProgramTitle = "HIDE 03/03/18"
-                     
+                  
 ----------------------------------------------------------
 -- Session data and ToString functions
 ----------------------------------------------------------
@@ -203,34 +183,19 @@ data SourceFile
 data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 
 data TextWindowType = Scintilla ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
+data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
 
 -- | Text Window
 data TextWindow 
     = TextWindow {  twType              :: TextWindowType,
                     twPanel             :: Panel (),            -- ^ The parent panel of text window
                     twPanelHwnd         :: HWND,                -- ^ HWND of panel
-                    twCut               :: IO (),               -- ^ Function to perform cut operation
-                    twCopy              :: IO (),
-                    twPaste             :: IO (),
-                    twSelectAll         :: IO (),
-                    twUndo              :: IO (),
-                    twRedo              :: IO (),
-                    twFind              :: IO (),
-                    twFindForward       :: IO (),
-                    twFindBackward      :: IO (),
-                    twCanCut            :: IO Bool,             -- ^ Whether the cut is currently valid, i.e. text is selected
-                    twCanCopy           :: IO Bool,              
-                    twCanPaste          :: IO Bool,
-                    twCanSelectAll      :: IO Bool,
-                    twCanUndo           :: IO Bool,
-                    twCanRedo           :: IO Bool,
-                    twCanFind           :: IO Bool,
-                    twCanFindForward    :: IO Bool,
-                    twCanFindBackward   :: IO Bool,
+                    twHwnd              :: HWND,
+                    twMenuFunctions     :: [MenuFunction],
                     twHasFocus          :: IO Bool,
                     twFilePath          :: Maybe String }       -- ^ File name associated with window
 
-type SsNameMenuPair = (String, MenuItem ())                               
+type SsNameMenuPair = (Int, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
 
 -- compilation error
@@ -253,9 +218,9 @@ ssCreate mf am nb pr ms sf ots ot db = do
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
     tfnd <- atomically $ newTVar (FindText "" "" 0 "" 0)
-    let dbe = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
-    let dbw = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
-    let dbi = if debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
+    let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
+    let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
+    let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
     tws  <- atomically $ newTVar $ twCreate [] 
     return (Session mf am nb tpr ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd tws)
 
@@ -264,7 +229,7 @@ ssCreate mf am nb pr ms sf ots ot db = do
 ssMenuListNew :: IO SsMenuList 
 ssMenuListNew = do
     mi <- menuItemCreate
-    return ([("", mi)])
+    return ([(0, mi)])
 
 ssMenuListCreate :: [SsNameMenuPair] -> IO SsMenuList
 ssMenuListCreate nmps = do
@@ -274,9 +239,9 @@ ssMenuListCreate nmps = do
 ssMenuListAdd :: [SsNameMenuPair] -> SsMenuList -> SsMenuList
 ssMenuListAdd nmps ml = ml ++ nmps
 
-ssMenuListGet :: Session -> String -> MenuItem ()
-ssMenuListGet ss s = 
-    case (lookup s ml) of
+ssMenuListGet :: Session -> Int -> MenuItem ()
+ssMenuListGet ss n = 
+    case (lookup n ml) of
         Just mi -> mi
         Nothing -> snd $ last ml
     where ml = ssMenus ss
@@ -461,29 +426,13 @@ createGhciWindowType = (Ghci)
 createTextWindow :: TextWindowType
                     -> Panel ()
                     -> HWND
-                    -> IO ()        -- ^ Cut function
-                    -> IO ()        -- ^ Copy
-                    -> IO ()        -- ^ Paste
-                    -> IO ()        -- ^ Select all
-                    -> IO ()        -- ^ Undo
-                    -> IO ()        -- ^ Redo
-                    -> IO ()        -- ^ Find
-                    -> IO ()        -- ^ Find forward
-                    -> IO ()        -- ^ Find backward
-                    -> IO Bool      -- ^ Can Cut 
-                    -> IO Bool      -- ^ Can Copy
-                    -> IO Bool      -- ^ Can Paste
-                    -> IO Bool      -- ^ Can Select all
-                    -> IO Bool      -- ^ Can Undo
-                    -> IO Bool      -- ^ Can Redo
-                    -> IO Bool      -- ^ Can Find
-                    -> IO Bool      -- ^ Can Find forward
-                    -> IO Bool      -- ^ Can Find backward
+                    -> HWND
+                    -> [MenuFunction]
                     -> IO Bool      -- ^ Has focus
                     -> Maybe String -- ^ Filname
                     -> TextWindow
-createTextWindow wtype p hp cuf cof paf saf unf ref fnd fnf fnb cuv cov pav sav unv rev cfn cff cfb foc mfp =
-    (TextWindow wtype p hp cuf cof paf saf unf ref fnd fnf fnb cuv cov pav sav unv rev cfn cff cfb foc mfp)
+createTextWindow wtype panel hwndp hwnd mfs focus file =
+    (TextWindow wtype panel hwndp hwnd mfs focus file)
 
 twFindWindow :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
 twFindWindow ss p = do
@@ -498,4 +447,12 @@ twUpdate :: Session -> (TextWindows -> TextWindows) -> IO TextWindows
 twUpdate ss f = atomically (modifyTVar tws (\ws -> f ws) >> readTVar tws) 
     where tws = ssTextWindows ss
 
+createMenuFunction :: Int -> IO () -> IO Bool -> MenuFunction
+createMenuFunction id mf me = (MenuFunction id mf me)
+
+twGetMenuFunction :: TextWindow -> Int -> IO ()
+twGetMenuFunction tw id = maybe (return ()) (\(MenuFunction _ mf _) -> mf)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
+
+twGetMenuEnabled :: TextWindow -> Int -> IO Bool
+twGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
 

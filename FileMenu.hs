@@ -32,6 +32,7 @@ import Text.Printf (printf)
 
 -- project imports
 
+import qualified Constants as CN
 import qualified EditMenu as EM
 import EditorNotebook
 import Misc
@@ -48,21 +49,21 @@ updateSaveMenus ss = do
     if (length fs > 0) then do
     
         ic <- enbSelectedSourceFileIsClean ss       
-        set (ssMenuListGet ss "FileSave")      [enabled := not ic]        
-        set (ssMenuListGet ss "FileSaveAs")    [enabled := True]       
+        set (ssMenuListGet ss CN.menuFileSave)      [enabled := not ic]        
+        set (ssMenuListGet ss CN.menuFileSaveAs)    [enabled := True]       
         b <- allFilesClean fs
-        set (ssMenuListGet ss "FileSaveAll")   [enabled := not b]
-        set (ssMenuListGet ss "FileClose")     [enabled := True]
-        set (ssMenuListGet ss "FileCloseAll")  [enabled := True]    
+        set (ssMenuListGet ss CN.menuFileSaveAll)   [enabled := not b]
+        set (ssMenuListGet ss CN.menuFileClose)     [enabled := True]
+        set (ssMenuListGet ss CN.menuFileCloseAll)  [enabled := True]    
         return ()
         
     else do
     
-        set (ssMenuListGet ss "FileSave")      [enabled := False]
-        set (ssMenuListGet ss "FileSaveAs")    [enabled := False]
-        set (ssMenuListGet ss "FileClose")     [enabled := False]
-        set (ssMenuListGet ss "FileCloseAll")  [enabled := False]
-        set (ssMenuListGet ss "FileSaveAll")   [enabled := False]
+        set (ssMenuListGet ss CN.menuFileSave)      [enabled := False]
+        set (ssMenuListGet ss CN.menuFileSaveAs)    [enabled := False]
+        set (ssMenuListGet ss CN.menuFileClose)     [enabled := False]
+        set (ssMenuListGet ss CN.menuFileCloseAll)  [enabled := False]
+        set (ssMenuListGet ss CN.menuFileSaveAll)   [enabled := False]
         return ()
        
     where allFilesClean fs = do

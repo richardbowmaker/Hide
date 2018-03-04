@@ -23,6 +23,7 @@ import System.IO
 
 -- project imports
 
+import qualified Constants as CN
 import EditorNotebook
 import Misc
 import Scintilla
@@ -42,33 +43,33 @@ updateEditMenus ss = do
         -- ssDebugInfo ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
         
         b <- scnCanUndo $ sfEditor sf
-        set (ssMenuListGet ss "EditUndo")           [enabled := b]
+        set (ssMenuListGet ss CN.menuEditUndo)           [enabled := b]
         b <- scnCanRedo $ sfEditor sf
-        set (ssMenuListGet ss "EditRedo")           [enabled := b]
+        set (ssMenuListGet ss CN.menuEditRedo)           [enabled := b]
         
         b <- scnSelectionIsEmpty $ sfEditor sf        
-        set (ssMenuListGet ss "EditCut")            [enabled := not b]
-        set (ssMenuListGet ss "EditCopy")           [enabled := not b]        
+        set (ssMenuListGet ss CN.menuEditCut)            [enabled := not b]
+        set (ssMenuListGet ss CN.menuEditCopy)           [enabled := not b]        
         b <- scnCanPaste $ sfEditor sf        
-        set (ssMenuListGet ss "EditPaste")          [enabled := b]
-        set (ssMenuListGet ss "EditAll")            [enabled := True]
-        set (ssMenuListGet ss "EditFind")           [enabled := True]
-        set (ssMenuListGet ss "EditFindForward")    [enabled := True]
-        set (ssMenuListGet ss "EditFindBackward")   [enabled := True]
+        set (ssMenuListGet ss CN.menuEditPaste)          [enabled := b]
+        set (ssMenuListGet ss CN.menuEditSelectAll)      [enabled := True]
+        set (ssMenuListGet ss CN.menuEditFind)           [enabled := True]
+        set (ssMenuListGet ss CN.menuEditFindForward)    [enabled := True]
+        set (ssMenuListGet ss CN.menuEditFindBackward)   [enabled := True]
         return ()
         
     else do
     
         ssDebugError ss "updateEditMenus: no file"
-        set (ssMenuListGet ss "EditUndo")           [enabled := False]
-        set (ssMenuListGet ss "EditRedo")           [enabled := False]
-        set (ssMenuListGet ss "EditCut")            [enabled := False]
-        set (ssMenuListGet ss "EditCopy")           [enabled := False]
-        set (ssMenuListGet ss "EditPaste")          [enabled := False]
-        set (ssMenuListGet ss "EditAll")            [enabled := False]
-        set (ssMenuListGet ss "EditFind")           [enabled := False]
-        set (ssMenuListGet ss "EditFindForward")    [enabled := False]
-        set (ssMenuListGet ss "EditFindBackward")   [enabled := False]
+        set (ssMenuListGet ss CN.menuEditUndo)           [enabled := False]
+        set (ssMenuListGet ss CN.menuEditRedo)           [enabled := False]
+        set (ssMenuListGet ss CN.menuEditCut)            [enabled := False]
+        set (ssMenuListGet ss CN.menuEditCopy)           [enabled := False]
+        set (ssMenuListGet ss CN.menuEditPaste)          [enabled := False]
+        set (ssMenuListGet ss CN.menuEditSelectAll)      [enabled := False]
+        set (ssMenuListGet ss CN.menuEditFind)           [enabled := False]
+        set (ssMenuListGet ss CN.menuEditFindForward)    [enabled := False]
+        set (ssMenuListGet ss CN.menuEditFindBackward)   [enabled := False]
         return ()
 
 updateEditMenu :: Session -> TextWindow -> IO ()
@@ -77,29 +78,33 @@ updateEditMenu ss tw = do
         f <- twHasFocus tw 
 
         if (f) then do
-            setm ss "EditUndo"          (twCanUndo         tw) (twUndo         tw)
-            setm ss "EditRedo"          (twCanRedo         tw) (twRedo         tw)
-            setm ss "EditCut"           (twCanCut          tw) (twCut          tw) 
-            setm ss "EditCopy"          (twCanCopy         tw) (twCopy         tw)
-            setm ss "EditPaste"         (twCanPaste        tw) (twPaste        tw)
-            setm ss "EditAll"           (twCanSelectAll    tw) (twSelectAll    tw)
-            setm ss "EditFind"          (twCanFind         tw) (twFind         tw)
-            setm ss "EditFindForward"   (twCanFindForward  tw) (twFindForward  tw)
-            setm ss "EditFindBackward"  (twCanFindBackward tw) (twFindBackward tw)
+            setm ss tw CN.menuEditUndo          
+            setm ss tw CN.menuEditRedo          
+            setm ss tw CN.menuEditCut           
+            setm ss tw CN.menuEditCopy          
+            setm ss tw CN.menuEditPaste         
+            setm ss tw CN.menuEditSelectAll     
+            setm ss tw CN.menuEditFind          
+            setm ss tw CN.menuEditFindForward   
+            setm ss tw CN.menuEditFindBackward  
         else do
-            setm ss "EditUndo"          (return False) (return ())
-            setm ss "EditCut"           (return False) (return ())
-            setm ss "EditCopy"          (return False) (return ())
-            setm ss "EditPaste"         (return False) (return ())
-            setm ss "EditAll"           (return False) (return ())
-            setm ss "EditFind"          (return False) (return ())
-            setm ss "EditFindForward"   (return False) (return ())
-            setm ss "EditFindBackward"  (return False) (return ())
+            setm' ss CN.menuEditUndo          (return False) (return ())
+            setm' ss CN.menuEditCut           (return False) (return ())
+            setm' ss CN.menuEditCopy          (return False) (return ())
+            setm' ss CN.menuEditPaste         (return False) (return ())
+            setm' ss CN.menuEditSelectAll     (return False) (return ())
+            setm' ss CN.menuEditFind          (return False) (return ())
+            setm' ss CN.menuEditFindForward   (return False) (return ())
+            setm' ss CN.menuEditFindBackward  (return False) (return ())
 
-        where   setm :: Session -> String -> IO Bool -> IO() -> IO ()
-                setm ss m ioe ioc = do
-                    e <- ioe
-                    set (ssMenuListGet ss m) [on command := ioc, enabled := e]
+        where   setm :: Session -> TextWindow -> Int -> IO ()
+                setm ss tw mid = setm' ss mid (twGetMenuEnabled tw mid) (twGetMenuFunction tw mid)
+ 
+                setm' :: Session -> Int -> IO Bool -> IO () -> IO ()
+                setm' ss mid me mf = do 
+                    e <- me
+                    set (ssMenuListGet ss mid) [on command := mf, enabled := e]
+
 
 editFind :: Session -> IO ()
 editFind ss = do
@@ -107,7 +112,7 @@ editFind ss = do
     sf <- enbGetSelectedSourceFile ss
     let e = sfEditor sf
     sel <- scnGetSelText e
-    s <- textDialog (ssFrame ss) "Find:" "HeyHo" sel
+    s <- textDialog (ssFrame ss) "Find:" CN.programTitle sel
 
     if s /= "" then do
 
@@ -126,7 +131,7 @@ editFind ss = do
 
         else do
 
-            infoDialog (ssFrame ss) ssProgramTitle "Not found" 
+            infoDialog (ssFrame ss) CN.programTitle "Not found" 
             return ()
 
     else return ()
@@ -160,7 +165,7 @@ editFindForward ss = do
 
         else do
 
-            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
+            infoDialog (ssFrame ss) CN.programTitle "No more ocurrences found" 
             atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
             return ()
 
@@ -195,7 +200,7 @@ editFindBackward ss = do
 
         else do
 
-            infoDialog (ssFrame ss) ssProgramTitle "No more ocurrences found" 
+            infoDialog (ssFrame ss) CN.programTitle "No more ocurrences found" 
             atomically $ writeTVar (ssFindText ss) (ftFindText s (ftStartFile ft) (pos+1) (ftStartFile ft) (pos+1))
             return ()
 

@@ -25,6 +25,7 @@ import System.Process.Common
 
 -- project imports
 import Compile
+import qualified Constants as CN
 import qualified EditMenu as EM
 import EditorNotebook
 import qualified FileMenu as FM
@@ -46,7 +47,7 @@ mainGUI = do
   
     -- main window
     mf <- frame []    
-    set mf [ text := ssProgramTitle, size := (Size 1300 800)]  
+    set mf [ text := CN.programTitle, size := (Size 1300 800)]  
      
      -- create statusbar field
     sf <- statusField []
@@ -139,28 +140,28 @@ setUpMainWindow mf sf = do
     enbAddNewFile ss (scnCallback ss)
     
     -- setup menu handlers
-    set (ssMenuListGet ss "FileOpen")           [on command := onFileOpen           ss]
-    set (ssMenuListGet ss "FileNew")            [on command := onFileNew            ss]
-    set (ssMenuListGet ss "FileSave")           [on command := onFileSave           ss]
-    set (ssMenuListGet ss "FileSaveAs")         [on command := onFileSaveAs         ss]
-    set (ssMenuListGet ss "FileSaveAll")        [on command := onFileSaveAll        ss]
-    set (ssMenuListGet ss "FileClose")          [on command := onFileClose          ss]
-    set (ssMenuListGet ss "FileCloseAll")       [on command := onFileCloseAll       ss]
-    set (ssMenuListGet ss "EditUndo")           [on command := onEditUndo           ss]
-    set (ssMenuListGet ss "EditRedo")           [on command := onEditRedo           ss]
-    set (ssMenuListGet ss "EditCut")            [on command := onEditCut            ss]
-    set (ssMenuListGet ss "EditCopy")           [on command := onEditCopy           ss]
-    set (ssMenuListGet ss "EditPaste")          [on command := onEditPaste          ss]
-    set (ssMenuListGet ss "EditAll")            [on command := onEditSelectAll      ss]
-    set (ssMenuListGet ss "EditFind")           [on command := onEditFind           ss]
-    set (ssMenuListGet ss "EditFindForward")    [on command := onEditFindForward    ss]
-    set (ssMenuListGet ss "EditFindBackward")   [on command := onEditFindBackward   ss]
-    set (ssMenuListGet ss "BuildBuild")         [on command := onBuildBuild         ss]
-    set (ssMenuListGet ss "BuildCompile")       [on command := onBuildCompile       ss]
-    set (ssMenuListGet ss "BuildGhci")          [on command := onBuildGhci          ss]
-    set (ssMenuListGet ss "DebugRun")           [on command := onDebugRun           ss]
-    set (ssMenuListGet ss "DebugGhci")          [on command := onDebugGhci          ss]
-    set (ssMenuListGet ss "TestTest")           [on command := onTestTest           ss]
+    set (ssMenuListGet ss CN.menuFileOpen)           [on command := onFileOpen           ss]
+    set (ssMenuListGet ss CN.menuFileNew)            [on command := onFileNew            ss]
+    set (ssMenuListGet ss CN.menuFileSave)           [on command := onFileSave           ss]
+    set (ssMenuListGet ss CN.menuFileSaveAs)         [on command := onFileSaveAs         ss]
+    set (ssMenuListGet ss CN.menuFileSaveAll)        [on command := onFileSaveAll        ss]
+    set (ssMenuListGet ss CN.menuFileClose)          [on command := onFileClose          ss]
+    set (ssMenuListGet ss CN.menuFileCloseAll)       [on command := onFileCloseAll       ss]
+    set (ssMenuListGet ss CN.menuEditUndo)           [on command := onEditUndo           ss]
+    set (ssMenuListGet ss CN.menuEditRedo)           [on command := onEditRedo           ss]
+    set (ssMenuListGet ss CN.menuEditCut)            [on command := onEditCut            ss]
+    set (ssMenuListGet ss CN.menuEditCopy)           [on command := onEditCopy           ss]
+    set (ssMenuListGet ss CN.menuEditPaste)          [on command := onEditPaste          ss]
+    set (ssMenuListGet ss CN.menuEditSelectAll)      [on command := onEditSelectAll      ss]
+    set (ssMenuListGet ss CN.menuEditFind)           [on command := onEditFind           ss]
+    set (ssMenuListGet ss CN.menuEditFindForward)    [on command := onEditFindForward    ss]
+    set (ssMenuListGet ss CN.menuEditFindBackward)   [on command := onEditFindBackward   ss]
+    set (ssMenuListGet ss CN.menuBuildBuild)         [on command := onBuildBuild         ss]
+    set (ssMenuListGet ss CN.menuBuildCompile)       [on command := onBuildCompile       ss]
+    set (ssMenuListGet ss CN.menuBuildGhci)          [on command := onBuildGhci          ss]
+    set (ssMenuListGet ss CN.menuDebugRun)           [on command := onDebugRun           ss]
+    set (ssMenuListGet ss CN.menuDebugGhci)          [on command := onDebugGhci          ss]
+    set (ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
      
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
@@ -182,73 +183,73 @@ setupMenus mf  = do
 
     -- file menu  
     menuFile            <- menuPane             [text := "&File"]
-    menuFileOpen        <- menuItem menuFile    [text := "Open ...\tCtrl-O",        help := "Opens a file"]
-    menuFileNew         <- menuItem menuFile    [text := "New\tCtrl-N",             help := "Starts a new file"]
-    menuFileClose       <- menuItem menuFile    [text := "Close",                   help := "Closes the current file"]
-    menuFileCloseAll    <- menuItem menuFile    [text := "Close All",               help := "Closes all files"]                                             
-    menuFileSave        <- menuItem menuFile    [text := "Save\tCtrl-S",            help := "Saves a file", enabled := False]
-    menuFileSaveAs      <- menuItem menuFile    [text := "Save As ...",             help := "Saves a file"]
-    menuFileSaveAll     <- menuItem menuFile    [text := "Save All\tCtrl-Shift-S",  help := "Saves all files", enabled := False]
+    menuFileOpen        <- menuItem menuFile    [text := (CN.menuText' CN.menuFileOpen),        help := (CN.menuHelp' CN.menuFileOpen)]
+    menuFileNew         <- menuItem menuFile    [text := (CN.menuText' CN.menuFileNew),         help := (CN.menuHelp' CN.menuFileNew)]
+    menuFileClose       <- menuItem menuFile    [text := (CN.menuText' CN.menuFileClose),       help := (CN.menuHelp' CN.menuFileClose)]
+    menuFileCloseAll    <- menuItem menuFile    [text := (CN.menuText' CN.menuFileCloseAll),    help := (CN.menuHelp' CN.menuFileCloseAll)]                                             
+    menuFileSave        <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSave),        help := (CN.menuHelp' CN.menuFileSave),     enabled := False]
+    menuFileSaveAs      <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAs),      help := (CN.menuHelp' CN.menuFileSaveAs)]
+    menuFileSaveAll     <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAll),     help := (CN.menuHelp' CN.menuFileSaveAll),  enabled := False]
                                              
     menuAppendSeparator menuFile
                              
-    menuQuit  <- menuQuit menuFile [help := "Quit the demo", on command := close mf]
+    menuQuit  <- menuQuit menuFile [help := "Quit", on command := close mf]
 
     menuEdit                <- menuPane            [text := "&Edit"]
-    menuEditUndo            <- menuItem menuEdit   [text := "Undo\tCtrl-Z"]
-    menuEditRedo            <- menuItem menuEdit   [text := "Redo\tCtrl-Y"]
+    menuEditUndo            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditUndo),             help := (CN.menuHelp' CN.menuEditUndo)]
+    menuEditRedo            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditRedo),             help := (CN.menuHelp' CN.menuEditRedo)]
     menuAppendSeparator menuEdit
-    menuEditCut             <- menuItem menuEdit   [text := "Cut\tCtrl-X"]
-    menuEditCopy            <- menuItem menuEdit   [text := "Copy\tCtrl-C"]
-    menuEditPaste           <- menuItem menuEdit   [text := "Paste\tCtrl-V"]
-    menuEditAll             <- menuItem menuEdit   [text := "Select All\tCtrl-A"]
-    menuEditFind            <- menuItem menuEdit   [text := "Find\tCtrl-F"]
-    menuEditFindForward     <- menuItem menuEdit   [text := "Find Forward\tF3"]
-    menuEditFindBackward    <- menuItem menuEdit   [text := "Find Backward\tShift-F3"]
+    menuEditCut             <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditCut),              help := (CN.menuHelp' CN.menuEditCut)]
+    menuEditCopy            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditCopy),             help := (CN.menuHelp' CN.menuEditCopy)]
+    menuEditPaste           <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditPaste),            help := (CN.menuHelp' CN.menuEditPaste)]
+    menuEditAll             <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditSelectAll),        help := (CN.menuHelp' CN.menuEditSelectAll)]
+    menuEditFind            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFind),             help := (CN.menuHelp' CN.menuEditFind)]
+    menuEditFindForward     <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindForward),      help := (CN.menuHelp' CN.menuEditFindForward)]
+    menuEditFindBackward    <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindBackward),     help := (CN.menuHelp' CN.menuEditFindBackward)]
     
-    menuBuild        <- menuPane            [text := "Build"]
-    menuBuildCompile <- menuItem menuBuild  [text := "Compile\tCtrl-F7",        help := "Compiles current source file"]
-    menuBuildBuild   <- menuItem menuBuild  [text := "Build\tF7",               help := "Build the project"]
-    menuBuildReBuild <- menuItem menuBuild  [text := "Rebuild\tCtrl-Alt-F7",    help := "Rebuild the project"]
-    menuBuildClean   <- menuItem menuBuild  [text := "Clean",                   help := "Clean the project"]
-    menuBuildGhci    <- menuItem menuBuild  [text := "Open GHCI\tAlt-F11",      help := "Compile and load file into GHCI"]
+    menuBuild        <- menuPane            [text := "&Build"]
+    menuBuildCompile <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildCompile),    help := (CN.menuHelp' CN.menuBuildCompile)]
+    menuBuildBuild   <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildBuild),      help := (CN.menuHelp' CN.menuBuildBuild)]
+    menuBuildReBuild <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildRebuild),    help := (CN.menuHelp' CN.menuBuildRebuild)]
+    menuBuildClean   <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildClean),      help := (CN.menuHelp' CN.menuBuildClean)]
+    menuBuildGhci    <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildGhci),       help := (CN.menuHelp' CN.menuBuildGhci)]
           
     menuDebug        <- menuPane            [text := "Debug"]
-    menuDebugRun     <- menuItem menuDebug  [text := "Run\tF5",   help := "Compiles current source file"]
-    menuDebugGhci    <- menuItem menuDebug  [text := "GHCI\tF11", help := "Compiles current source file"]
+    menuDebugRun     <- menuItem menuDebug  [text := (CN.menuText' CN.menuDebugRun),    help := (CN.menuHelp' CN.menuDebugRun)]
+    menuDebugGhci    <- menuItem menuDebug  [text := (CN.menuText' CN.menuDebugGhci),   help := (CN.menuHelp' CN.menuDebugGhci)]
 
     menuTest         <- menuPane            [text := "Test"]
-    menuTestTest     <- menuItem menuTest   [text := "Test\tCtrl-T"]
+    menuTestTest     <- menuItem menuTest   [text := (CN.menuText' CN.menuTestTest),    help := (CN.menuHelp' CN.menuTestTest)]
 
     -- create Help menu
     menuHelp'        <- menuHelp []
-    menuHelpAbout    <- menuAbout menuHelp' [help := "About HeyHo", on command := infoDialog mf "About HeyHo" "mmmmm !"]
+    menuHelpAbout    <- menuAbout menuHelp' [help := (CN.menuHelp' CN.menuHelpAbout), on command := infoDialog mf "About HeyHo" "mmmmm !"]
       
     set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuTest, menuHelp']]
 
     -- create lookup list of menus for session data   
-    ml <- ssMenuListCreate [    ("FileOpen",            menuFileOpen), 
-                                ("FileSave",            menuFileSave), 
-                                ("FileNew",             menuFileNew), 
-                                ("FileClose",           menuFileClose), 
-                                ("FileCloseAll",        menuFileCloseAll), 
-                                ("FileSaveAs",          menuFileSaveAs), 
-                                ("FileSaveAll",         menuFileSaveAll),
-                                ("EditUndo",            menuEditUndo),
-                                ("EditRedo",            menuEditRedo),
-                                ("EditCut",             menuEditCut),
-                                ("EditCopy",            menuEditCopy),
-                                ("EditPaste",           menuEditPaste),
-                                ("EditAll",             menuEditAll),
-                                ("EditFind",            menuEditFind),
-                                ("EditFindForward",     menuEditFindForward),
-                                ("EditFindBackward",    menuEditFindBackward),
-                                ("BuildBuild",          menuBuildBuild),
-                                ("BuildCompile",        menuBuildCompile),
-                                ("BuildGhci",           menuBuildGhci),
-                                ("DebugRun",            menuDebugRun),
-                                ("DebugGhci",           menuDebugGhci),
-                                ("TestTest",            menuTestTest)]
+    ml <- ssMenuListCreate [    (CN.menuFileOpen,            menuFileOpen), 
+                                (CN.menuFileSave,            menuFileSave), 
+                                (CN.menuFileNew,             menuFileNew), 
+                                (CN.menuFileClose,           menuFileClose), 
+                                (CN.menuFileCloseAll,        menuFileCloseAll), 
+                                (CN.menuFileSaveAs,          menuFileSaveAs), 
+                                (CN.menuFileSaveAll,         menuFileSaveAll),
+                                (CN.menuEditUndo,            menuEditUndo),
+                                (CN.menuEditRedo,            menuEditRedo),
+                                (CN.menuEditCut,             menuEditCut),
+                                (CN.menuEditCopy,            menuEditCopy),
+                                (CN.menuEditPaste,           menuEditPaste),
+                                (CN.menuEditSelectAll,       menuEditAll),
+                                (CN.menuEditFind,            menuEditFind),
+                                (CN.menuEditFindForward,     menuEditFindForward),
+                                (CN.menuEditFindBackward,    menuEditFindBackward),
+                                (CN.menuBuildBuild,          menuBuildBuild),
+                                (CN.menuBuildCompile,        menuBuildCompile),
+                                (CN.menuBuildGhci,           menuBuildGhci),
+                                (CN.menuDebugRun,            menuDebugRun),
+                                (CN.menuDebugGhci,           menuDebugGhci),
+                                (CN.menuTestTest,            menuTestTest)]
 
     
     -- create Toolbar
@@ -271,8 +272,8 @@ onClosing ss = do
 
 onTabChanged :: Session -> EventAuiNotebook -> IO ()
 onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
-    set (ssMenuListGet ss "BuildCompile") [text := "Compile\tCtrl-F7"]        
-    set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI\tAlt-F11"] 
+    set (ssMenuListGet ss CN.menuBuildCompile) [text := (CN.menuText' CN.menuBuildCompile)]        
+    set (ssMenuListGet ss CN.menuBuildGhci)    [text := (CN.menuText' CN.menuBuildGhci)] 
     c <- enbGetTabCount ss
     if c > 0 then do
         sf <- enbGetSelectedSourceFile ss 
@@ -282,8 +283,8 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
         FM.updateStatus ss
         case (sfFilePath sf) of
             Just fp -> do
-                set (ssMenuListGet ss "BuildCompile") [text := "Compile " ++ (takeFileName fp) ++ "\tCtrl-F7"]        
-                set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI " ++ (takeFileName fp) ++ "\tAlt-F11"] 
+                set (ssMenuListGet ss CN.menuBuildCompile) [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
+                set (ssMenuListGet ss CN.menuBuildGhci)    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
             Nothing -> return ()
     else return ()
 
@@ -372,9 +373,9 @@ onFileOpen ss = do
         fp <- fileDialogGetPath fd 
         FM.fileOpen ss (scnCallback ss) fp
         FM.updateSaveMenus ss    
-        EM.updateEditMenus ss   
-        set (ssMenuListGet ss "BuildCompile") [text := "Compile " ++ (takeFileName fp) ++ "\tCtrl-F7"]        
-        set (ssMenuListGet ss "BuildGhci")    [text := "Open GHCI " ++ (takeFileName fp) ++ "\tAlt-F11"]      
+        EM.updateEditMenus ss 
+        set (ssMenuListGet ss CN.menuBuildCompile) [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
+        set (ssMenuListGet ss CN.menuBuildGhci)    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
         return ()
     else
         return ()
@@ -437,10 +438,10 @@ onTestTest ss = do
 onBuildBuild :: Session -> IO ()
 onBuildBuild ss = do
 
-    set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
-    set (ssMenuListGet ss "BuildCompile") [enabled := False]
-    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
-    set (ssMenuListGet ss "DebugRun")     [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+    set (ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -456,9 +457,9 @@ onBuildBuild ss = do
 onBuildCompile :: Session -> IO ()
 onBuildCompile ss = do
 
-    set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
-    set (ssMenuListGet ss "BuildCompile") [enabled := False]
-    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -473,19 +474,19 @@ onBuildCompile ss = do
                
 compileComplete :: Session -> IO ()
 compileComplete ss = do
-    set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
-    set (ssMenuListGet ss "BuildCompile") [enabled := True]
-    set (ssMenuListGet ss "BuildGhci")    [enabled := True]
-    set (ssMenuListGet ss "DebugRun")     [enabled := True]
+    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
+    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
+    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
+    set (ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
     otAddText ss $ BS.pack "Compile complete\n"
     return ()
 
 onBuildGhci :: Session -> IO ()
 onBuildGhci ss = do
 
-    set (ssMenuListGet ss "BuildBuild")   [enabled := False]        
-    set (ssMenuListGet ss "BuildCompile") [enabled := False]
-    set (ssMenuListGet ss "BuildGhci")    [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
 
     -- save file first
     sf <- enbGetSelectedSourceFile ss
@@ -500,16 +501,16 @@ onBuildGhci ss = do
 
 ghciComplete :: Session -> SourceFile -> IO ()
 ghciComplete ss sf = do
-    set (ssMenuListGet ss "BuildBuild")   [enabled := True]        
-    set (ssMenuListGet ss "BuildCompile") [enabled := True]
-    set (ssMenuListGet ss "BuildGhci")    [enabled := True]
+    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
+    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
+    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
     otAddText ss $ BS.pack "Compile complete\n"
 
     ces <- atomically $ readTVar $ ssCompilerReport ss
     case ces of
         [] -> GH.openWindowFile ss sf (ghciCallback ss)
         _  -> do
-            ans <- proceedDialog (ssFrame ss) ssProgramTitle "There were compilation errors, continue ?"
+            ans <- proceedDialog (ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
             case ans of
                 True -> GH.openWindowFile ss sf (ghciCallback ss)
                 False -> return ()
@@ -527,7 +528,7 @@ onDebugRun ss = do
     sf <- enbGetSelectedSourceFile ss
     case (sfFilePath sf) of
         Just fp -> cpDebugRun ss fp 
-        Nothing -> warningDialog (ssFrame ss) ssProgramTitle "Source file has not been given a name" 
+        Nothing -> warningDialog (ssFrame ss) CN.programTitle "Source file has not been given a name" 
     return ()
 
 onDebugGhci :: Session -> IO ()
