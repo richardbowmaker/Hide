@@ -560,8 +560,8 @@ onTimer ss = do
 -- Scintilla callback
 -----------------------------------------------------------------
 
-scnCallback :: Session -> SCNotification -> IO ()
-scnCallback ss sn = do 
+scnCallback :: Session -> TextWindow -> SCNotification -> IO ()
+scnCallback ss tw sn = do 
 
     let hw1 = scnNotifyGetHwnd sn -- event source HWND
     let hw2 = ptrToWord64 (scnGetHwnd (ssOutput ss)) -- output pane HWND

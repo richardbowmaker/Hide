@@ -87,8 +87,11 @@ module Session
     ghciHwnd,
     sfCreateGhciPanel,
 --
-    createGhciWindowType,
     createTextWindow,
+    createGhciWindowType,
+    createSourceWindowType,
+    createDebugWindowType,
+    createOutputWindowType,
     twCreate,
     twFindWindow,
     TextWindow,
@@ -182,7 +185,7 @@ data SourceFile
 
 data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 
-data TextWindowType = Scintilla ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
+data TextWindowType = SourceFile' ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
 
 -- | Text Window
@@ -422,6 +425,15 @@ twCreate tws = (TextWindows tws)
 
 createGhciWindowType :: TextWindowType
 createGhciWindowType = (Ghci)
+
+createSourceWindowType :: ScnEditor -> TextWindowType
+createSourceWindowType scn = (SourceFile' scn)
+
+createDebugWindowType :: ScnEditor -> TextWindowType
+createDebugWindowType scn = (Debug scn)
+
+createOutputWindowType :: ScnEditor -> TextWindowType
+createOutputWindowType scn = (Output scn)
 
 createTextWindow :: TextWindowType
                     -> Panel ()

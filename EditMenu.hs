@@ -105,12 +105,10 @@ updateEditMenu ss tw = do
                     e <- me
                     set (ssMenuListGet ss mid) [on command := mf, enabled := e]
 
-
-editFind :: Session -> IO ()
-editFind ss = do
+editFind :: Session -> ScnEditor -> IO ()
+editFind ss e = do
 
     sf <- enbGetSelectedSourceFile ss
-    let e = sfEditor sf
     sel <- scnGetSelText e
     s <- textDialog (ssFrame ss) "Find:" CN.programTitle sel
 
@@ -138,8 +136,8 @@ editFind ss = do
 
     where filepath sf =  maybe ("") id (sfFilePath sf)
 
-editFindForward :: Session -> IO ()
-editFindForward ss = do
+editFindForward :: Session -> ScnEditor -> IO ()
+editFindForward ss e = do
 
     ft <- atomically $ readTVar (ssFindText ss)
     let s = (ftText ft)
@@ -147,7 +145,6 @@ editFindForward ss = do
     if (s /= "") then do
 
         sf <- enbGetSelectedSourceFile ss
-        let e = sfEditor sf
 
         -- set search range from current pos to end of doc
         pos <- scnGetCurrentPos e
@@ -173,8 +170,8 @@ editFindForward ss = do
 
     where filepath sf =  maybe ("") id (sfFilePath sf)
 
-editFindBackward :: Session -> IO ()
-editFindBackward ss = do
+editFindBackward :: Session -> ScnEditor -> IO ()
+editFindBackward ss e = do
 
     ft <- atomically $ readTVar (ssFindText ss)
     let s = (ftText ft)
@@ -182,7 +179,6 @@ editFindBackward ss = do
     if (s /= "") then do
 
         sf <- enbGetSelectedSourceFile ss
-        let e = sfEditor sf
 
         -- set search range from current pos to end of doc
         pos <- scnGetCurrentPos e

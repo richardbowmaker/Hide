@@ -45,7 +45,7 @@ enbCreate mf = do
     auiNotebookSetArtProvider nb ta
     return nb
   
-enbAddNewFile :: Session -> (SCNotification -> IO ()) -> IO (SourceFile)  
+enbAddNewFile :: Session -> (TextWindow -> SCNotification -> IO ()) -> IO (SourceFile)  
 enbAddNewFile ss callback = do
     
     let nb = ssEditors ss
@@ -60,8 +60,12 @@ enbAddNewFile ss callback = do
 
     sf <- sfCreate p scn Nothing Nothing
 
+
+    let tw = newtw scn p hwnd (SC.scnGetHwnd scn) fp
+    SS.twUpdate ss (\tws -> SS.twCreate (tw : (SS.txWindows tws)))
+
     -- enable events
-    scn' <- scnSetEventHandler scn callback
+    scn' <- scnSetEventHandler scn callback tw
     scnEnableEvents scn'
 
     -- update mutable project
@@ -71,6 +75,25 @@ enbAddNewFile ss callback = do
     
     return (sf)
     
+    where   newtw scn panel hwndp hwnd fp = (SS.createTextWindow
+                                (SS.createSourceWindowType scn)
+                                panel
+                                hwndp
+                                hwnd
+                                [   
+                                    (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
+                                    (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
+                                    (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
+                                    (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
+                                    (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
+                                    (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
+                                    (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss scn)            (return True)),
+                                    (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss scn)     (return True)),
+                                    (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
+                                ]
+                                (SC.scnGetFocus scn)
+                                Nothing)
+
 ------------------------------------------------------------    
 -- Editor notebook helpers
 ------------------------------------------------------------    
