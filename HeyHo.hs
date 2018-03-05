@@ -10,6 +10,7 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.Thread as Thread
 import Control.Monad (liftM, when)
 import Control.Monad.Loops
+import Data.Bits ((.&.))
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
 import Data.List (find, findIndex)
@@ -137,7 +138,7 @@ setUpMainWindow mf sf = do
     ss <- ssCreate mf am enb (prCreate []) menus sf onb oe scn 
     
     -- add blank file to editor
-    enbAddNewFile ss (scnCallback ss)
+    FM.newFile ss (scnCallback ss)
     
     -- setup menu handlers
     set (ssMenuListGet ss CN.menuFileOpen)           [on command := onFileOpen           ss]
@@ -147,15 +148,6 @@ setUpMainWindow mf sf = do
     set (ssMenuListGet ss CN.menuFileSaveAll)        [on command := onFileSaveAll        ss]
     set (ssMenuListGet ss CN.menuFileClose)          [on command := onFileClose          ss]
     set (ssMenuListGet ss CN.menuFileCloseAll)       [on command := onFileCloseAll       ss]
-    set (ssMenuListGet ss CN.menuEditUndo)           [on command := onEditUndo           ss]
-    set (ssMenuListGet ss CN.menuEditRedo)           [on command := onEditRedo           ss]
-    set (ssMenuListGet ss CN.menuEditCut)            [on command := onEditCut            ss]
-    set (ssMenuListGet ss CN.menuEditCopy)           [on command := onEditCopy           ss]
-    set (ssMenuListGet ss CN.menuEditPaste)          [on command := onEditPaste          ss]
-    set (ssMenuListGet ss CN.menuEditSelectAll)      [on command := onEditSelectAll      ss]
-    set (ssMenuListGet ss CN.menuEditFind)           [on command := onEditFind           ss]
-    set (ssMenuListGet ss CN.menuEditFindForward)    [on command := onEditFindForward    ss]
-    set (ssMenuListGet ss CN.menuEditFindBackward)   [on command := onEditFindBackward   ss]
     set (ssMenuListGet ss CN.menuBuildBuild)         [on command := onBuildBuild         ss]
     set (ssMenuListGet ss CN.menuBuildCompile)       [on command := onBuildCompile       ss]
     set (ssMenuListGet ss CN.menuBuildGhci)          [on command := onBuildGhci          ss]
@@ -169,8 +161,8 @@ setUpMainWindow mf sf = do
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
 
    -- enable events for output pane, dbl click = goto error
-    scnSetEventHandler oe $ scnCallback ss
-    scnEnableEvents oe
+--    scnSetEventHandler oe $ scnCallback ss
+--    scnEnableEvents oe
    
     return (ss)
   
@@ -279,12 +271,13 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
         sf <- enbGetSelectedSourceFile ss 
         (scnGrabFocus . sfEditor) sf
         FM.updateSaveMenus ss
-        EM.updateEditMenus ss
         FM.updateStatus ss
         case (sfFilePath sf) of
             Just fp -> do
-                set (ssMenuListGet ss CN.menuBuildCompile) [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
-                set (ssMenuListGet ss CN.menuBuildGhci)    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
+                set (ssMenuListGet ss CN.menuBuildCompile) 
+                    [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
+                set (ssMenuListGet ss CN.menuBuildGhci)    
+                    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
             Nothing -> return ()
     else return ()
 
@@ -325,7 +318,6 @@ withCurrentEvent :: (Event () -> IO ()) -> IO ()
 -}
     enbGetSelectedSourceFile ss >>= FM.closeEditor ss    
     FM.updateSaveMenus ss      
-    EM.updateEditMenus ss
     return ()
 
 onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
@@ -335,7 +327,6 @@ onFileClose :: Session -> IO ()
 onFileClose ss = do
     enbGetSelectedSourceFile ss >>= FM.fileClose ss 
     FM.updateSaveMenus ss    
-    EM.updateEditMenus ss
     return ()
   
 onFileCloseAll :: Session -> IO ()
@@ -345,21 +336,18 @@ onFileSave :: Session -> IO ()
 onFileSave ss = do
     enbGetSelectedSourceFile ss >>= FM.fileSave ss 
     FM.updateSaveMenus ss    
-    EM.updateEditMenus ss
     return ()
 
 onFileSaveAs :: Session -> IO ()
 onFileSaveAs ss = do
     enbGetSelectedSourceFile ss >>= FM.fileSaveAs ss
     FM.updateSaveMenus ss    
-    EM.updateEditMenus ss
     return ()
     
 onFileSaveAll :: Session -> IO ()    
 onFileSaveAll ss = do   
     FM.fileSaveAll ss
     FM.updateSaveMenus ss    
-    EM.updateEditMenus ss
     return ()
    
 -- File Open
@@ -373,44 +361,23 @@ onFileOpen ss = do
         fp <- fileDialogGetPath fd 
         FM.fileOpen ss (scnCallback ss) fp
         FM.updateSaveMenus ss    
-        EM.updateEditMenus ss 
-        set (ssMenuListGet ss CN.menuBuildCompile) [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
-        set (ssMenuListGet ss CN.menuBuildGhci)    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
+        set (ssMenuListGet ss CN.menuBuildCompile) 
+                [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
+        set (ssMenuListGet ss CN.menuBuildGhci)    
+                [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
         return ()
     else
         return ()
 
 onFileNew :: Session -> IO ()
 onFileNew ss = do
-    enbAddNewFile ss (scnCallback ss) >>= enbSelectTab ss 
-    FM.updateSaveMenus ss    
-    EM.updateEditMenus ss    
+    FM.newFile ss (scnCallback ss) >>= enbSelectTab ss 
+    FM.updateSaveMenus ss      
     return ()
  
 ------------------------------------------------------------    
 -- Edit Menu handlers
 ------------------------------------------------------------    
-
-onEdit :: Session -> IO ()
-onEdit ss = infoDialog (ssFrame ss) "edit" "edit"
-
-onEditUndo :: Session -> IO ()
-onEditUndo ss = ifEditorHasFocus ss (scnUndo . sfEditor)
-
-onEditRedo :: Session -> IO ()
-onEditRedo ss = ifEditorHasFocus ss (scnRedo . sfEditor)
-
-onEditCut :: Session -> IO ()
-onEditCut ss = ifEditorHasFocus ss (scnCut . sfEditor) -- >> ifGhciHasFocus OP.ghciCut
-
-onEditCopy :: Session -> IO ()
-onEditCopy ss = ifEditorHasFocus ss (scnCopy . sfEditor) -- >> ifGhciHasFocus OP.ghciCopy
-    
-onEditPaste :: Session -> IO ()
-onEditPaste ss = ifEditorHasFocus ss (scnPaste . sfEditor) -- >> ifGhciHasFocus OP.ghciPaste
-
-onEditSelectAll :: Session -> IO ()
-onEditSelectAll ss = ifEditorHasFocus ss (scnSelectAll . sfEditor) -- >> ifGhciHasFocus OP.ghciSelectAll
  
 ifEditorHasFocus :: Session -> (SourceFile -> IO ()) -> IO ()
 ifEditorHasFocus ss action = do
@@ -418,15 +385,6 @@ ifEditorHasFocus ss action = do
     f <- (scnGetFocus . sfEditor ) sf
     if f then action sf else return ()
  
-onEditFind :: Session -> IO ()
-onEditFind = EM.editFind
-
-onEditFindForward :: Session -> IO ()
-onEditFindForward = EM.editFindForward
-
-onEditFindBackward :: Session -> IO ()
-onEditFindBackward = EM.editFindBackward
-
 onTestTest :: Session -> IO ()
 onTestTest ss = do 
     return ()
@@ -517,7 +475,7 @@ ghciComplete ss sf = do
 
 
 ghciCallback :: Session -> TextWindow -> Int -> IO ()
-ghciCallback ss tw n = EM.updateEditMenu ss tw
+ghciCallback ss tw n = EM.updateEditMenus ss tw
 
 ------------------------------------------------------------    
 -- Debug menu handlers
@@ -567,7 +525,6 @@ scnCallback ss tw sn = do
     let hw2 = ptrToWord64 (scnGetHwnd (ssOutput ss)) -- output pane HWND
 
     if hw1 == hw2 then do
-
         -- event from output pane
         case (scnNotifyGetCode sn) of
             
@@ -579,34 +536,30 @@ scnCallback ss tw sn = do
             otherwise -> do
                 -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
                 return ()
-
     else do
-
-        case (scnNotifyGetCode sn) of
-            
-        -- If the constants are used rather than the real values the compiler
-        -- gives some nonsense about overlapping cases !! compiler bug
-        
+        case (scnNotifyGetCode sn) of                   
             2002 -> do -- sCN_SAVEPOINTREACHED
                 FM.updateSaveMenus ss
-                EM.updateEditMenus ss
                 return ()
-
             2003 -> do -- sCN_SAVEPOINTLEFT
                 FM.updateSaveMenus ss
-                EM.updateEditMenus ss
-                return ()
-                
+                return ()                
             2007 -> do -- sCN_UPDATEUI
                 FM.updateStatus ss
-                EM.updateEditMenus ss
-                return ()
-            
+                if  ( (.&.) (fromIntegral (snUpdated sn) :: Int) 
+                            (fromIntegral sC_UPDATE_SELECTION :: Int)) > 0 then
+                    EM.updateEditMenus ss tw
+                else
+                    return ()
+            2028 -> do -- sCN_FOCUSIN
+                EM.updateEditMenus ss tw
+                return ()               
+            2029 -> do -- sCN_FOCUSOUT
+                EM.updateEditMenus ss tw
+                return ()           
             2013 -> return () -- sCN_PAINTED
               
             otherwise -> do
                 -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
                 return ()
          
-
-

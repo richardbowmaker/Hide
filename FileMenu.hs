@@ -13,7 +13,8 @@ module FileMenu
     fileCloseAll,
     fileOpen,
     closeTab,
-    closeEditor
+    closeEditor,
+    newFile
 ) where 
     
 import Control.Concurrent 
@@ -160,7 +161,6 @@ fileCloseAll :: SS.Session -> IO ()
 fileCloseAll ss = do 
     SS.ssReadSourceFiles ss >>= doWhileTrueIO (fileClose ss)
     updateSaveMenus ss    
-    EM.updateEditMenus ss
     return ()
 
 fileClose :: SS.Session -> SS.SourceFile -> IO Bool
@@ -295,7 +295,6 @@ setSourceFileFocus ss fp = do
             return ()
         Nothing -> return ()
 
-
 openSourceFileEditor :: SS.Session -> String -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.SourceFile)
 openSourceFileEditor ss fp callback = do
 
@@ -316,11 +315,11 @@ openSourceFileEditor ss fp callback = do
     let tw = newtw scn p hwnd (SC.scnGetHwnd scn) fp
     SS.twUpdate ss (\tws -> SS.twCreate (tw : (SS.txWindows tws)))
 
-    scn' <- SC.scnSetEventHandler scn $ callback tw
-    SC.scnEnableEvents scn'
+    SC.scnSetEventHandler scn $ callback tw
+    SC.scnEnableEvents scn
         
     -- add source file to project
-    sf <- SS.sfCreate p scn' (Just fp) Nothing
+    sf <- SS.sfCreate p scn (Just fp) Nothing
     SS.prUpdate ss (\pr -> SS.prSetFiles pr (sf:(SS.prFiles pr)))
 
     -- set focus to new page
@@ -347,3 +346,50 @@ openSourceFileEditor ss fp callback = do
                                 ]
                                 (SC.scnGetFocus scn)
                                 (Just fp))
+
+newFile :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.SourceFile)  
+newFile ss callback = do
+    
+    let nb = SS.ssEditors ss
+
+    -- create panel with scintilla editor inside
+    p <- panel nb []
+    hwnd <- windowGetHandle p
+    scn <- SC.scnCreateEditor hwnd
+    SC.scnConfigureHaskell scn
+
+    -- add panel to notebook
+    auiNotebookAddPage nb p "..." False 0
+
+    sf <- SS.sfCreate p scn Nothing Nothing
+    let tw = newtw scn p hwnd (SC.scnGetHwnd scn)
+    SS.twUpdate ss (\tws -> SS.twCreate (tw : (SS.txWindows tws)))
+
+    -- enable events
+    SC.scnSetEventHandler scn $ callback tw
+    SC.scnEnableEvents scn
+    SC.scnSetSavePoint scn
+
+    -- update mutable project
+    SS.prUpdate ss (\pr -> SS.prSetFiles pr (sf:(SS.prFiles pr)))
+       
+    return (sf)
+    
+    where   newtw scn panel hwndp hwnd = (SS.createTextWindow
+                                (SS.createSourceWindowType scn)
+                                panel
+                                hwndp
+                                hwnd
+                                [   
+                                    (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
+                                    (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
+                                    (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
+                                    (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
+                                    (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
+                                    (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
+                                    (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss scn)            (return True)),
+                                    (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss scn)     (return True)),
+                                    (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
+                                ]
+                                (SC.scnGetFocus scn)
+                                Nothing)

@@ -73,6 +73,7 @@ module Scintilla
     snLine,
     snLinesAdded,
     snModificationType,
+    snUpdated,
 --
     scnGotoLineCol,
     scnGotoPos,
@@ -236,7 +237,7 @@ data  SCNotification = SCNotification {
                 y               :: Int32,  -- SCN_DWELLSTART, SCN_DWELLEND 
                 token           :: Int32,  -- SCN_MODIFIED with SC_MOD_CONTAINER 
                 annotationLinesAdded :: Int64, -- SCN_MODIFIED with SC_MOD_CHANGEANNOTATION 
-                updated         :: Int32,  -- SCN_UPDATEUI 
+                snUpdated       :: Int32,  -- SCN_UPDATEUI 
                 listCompletionMethod :: Int32
                 -- SCN_AUTOCSELECTION, SCN_AUTOCCOMPLETED, SCN_USERLISTSELECTION,    
             }
@@ -293,7 +294,7 @@ instance Storable SCNotification where
                 y
                 token
                 annotationLinesAdded 
-                updated
+                snUpdated
                 listCompletionMethod) = do             
 -- 0 8 16 24 32 36 40 48 56 64 72 80 88 96 104 108 112 116 120 124 128 136 144 148            
             pokeByteOff ptr 0     ptrHwndFrom
@@ -318,26 +319,22 @@ instance Storable SCNotification where
             pokeByteOff ptr 124   y
             pokeByteOff ptr 128   token
             pokeByteOff ptr 136   annotationLinesAdded 
-            pokeByteOff ptr 144   updated
+            pokeByteOff ptr 144   snUpdated
             pokeByteOff ptr 148   listCompletionMethod                 
            
 data ScnEditor = ScnEditor 
     { 
         hParent     :: HWND,
-        hScnWnd     :: HWND, 
-        events      :: Maybe (SCNotification -> IO ())
+        hScnWnd     :: HWND 
     }  
  
 -----------------------------------------------------------
 -- helpers
 
 instance Show ScnEditor where
-    show (ScnEditor p e me) = 
+    show (ScnEditor p e) = 
         "{ScnEditor} Parent HWND: " ++ (ptrToString p) ++ 
-        ", Editor HWND: " ++ (ptrToString e) ++ 
-        ", Event Handler: " ++ (case me of 
-                                    Nothing -> "Not set" 
-                                    (Just _) -> "Set" )
+        ", Editor HWND: " ++ (ptrToString e)
 
 ioNull :: IO ()
 ioNull = return ()
@@ -355,24 +352,20 @@ ioInt i = return (fromIntegral i :: Int)
 scnCreateEditor :: HWND -> IO (ScnEditor)
 scnCreateEditor parent = do
     hwnd <- c_ScnNewEditor parent
-    return (ScnEditor parent hwnd Nothing)
+    return (ScnEditor parent hwnd)
     
 ---------------------------------------------    
 -- Callback from ScintillaProxy dll    
 ---------------------------------------------    
 
-scnSetEventHandler :: ScnEditor -> (SCNotification -> IO ()) -> IO (ScnEditor)
-scnSetEventHandler (ScnEditor p c _) eh = do
-    let s = (ScnEditor p c (Just eh))
-    cb <- createCallback $ scnCallback s
-    c_ScnSetEventHandler c cb    
-    return (s)
+scnSetEventHandler :: ScnEditor -> (SCNotification -> IO ()) -> IO ()
+scnSetEventHandler scn@(ScnEditor p c) eh = (createCallback $ scnCallback scn eh) >>= c_ScnSetEventHandler c
 
 scnEnableEvents :: ScnEditor -> IO ()
-scnEnableEvents (ScnEditor _ c _) = c_ScnEnableEvents c >> ioNull 
+scnEnableEvents (ScnEditor _ c) = c_ScnEnableEvents c >> ioNull 
 
 scnDisableEvents :: ScnEditor -> IO ()
-scnDisableEvents (ScnEditor _ c _) = c_ScnDisableEvents c >> ioNull 
+scnDisableEvents (ScnEditor _ c) = c_ScnDisableEvents c >> ioNull 
    
 {-
 Available event masks
@@ -394,32 +387,21 @@ sC_MODEVENTMASKALL.
 scnSetModEventMask :: ScnEditor -> Word32 -> IO ()
 scnSetModEventMask e m = c_ScnSendEditorII (scnGetHwnd e) sCI_SETMODEVENTMASK (fromIntegral m :: Word64) 0 >> ioNull 
 
-
 -- callback from scintilla
-scnCallback :: ScnEditor -> Ptr (SCNotification) -> IO ()
-scnCallback (ScnEditor _ _ Nothing) _ = return ()
-scnCallback e@(ScnEditor _ _ (Just f)) p = do
-
-    sn <- peek p
-    
-    case (scnNotifyGetCode sn) of
-                    
-        2007 -> do -- sCN_UPDATEUI
-            f sn            
-            scnUpdateBraces e
-            return ()
-        
-        otherwise -> do
---            debugOut ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-            f sn            
-            return ()    
+scnCallback :: ScnEditor -> (SCNotification -> IO ()) -> Ptr (SCNotification) -> IO ()
+scnCallback scn eh p = do
+    sn <- peek p 
+    eh sn -- call client event handler
+    case (scnNotifyGetCode sn) of                  
+        2007 -> scnUpdateBraces scn -- sCN_UPDATEUI                          
+        otherwise -> return ()    
 
 ------------------------------------------------------------    
 -- Accessors
 ------------------------------------------------------------    
     
 scnGetHwnd :: ScnEditor -> HWND
-scnGetHwnd (ScnEditor _ h _) = h
+scnGetHwnd (ScnEditor _ h) = h
 
 scnNotifyGetHwnd :: SCNotification -> Word64
 scnNotifyGetHwnd (SCNotification x _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = x           

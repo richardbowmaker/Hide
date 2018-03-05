@@ -14,7 +14,8 @@ module Misc
     findAndRemove,
     doWhileTrueIO,
     createGrid, 
-    createTree   
+    createTree,
+    findIO
 ) where
 
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
@@ -79,8 +80,13 @@ doWhileTrueIO _ [] = return (True)
 doWhileTrueIO p (x:xs) = do
         b <- p x
         if b then doWhileTrueIO p xs
-        else return (False)
-        
+        else return False
+ 
+findIO :: (a -> IO Bool) -> [a] -> IO (Maybe a)
+findIO _ [] = return Nothing
+findIO p (x:xs) = do
+    b <- p x
+    if b then return (Just x) else findIO p xs
   
 ------------------------------------------------------------    
 -- Tree Control

@@ -109,7 +109,8 @@ module Session
     createMenuFunction,
     MenuFunction,
     twGetMenuFunction,
-    twGetMenuEnabled
+    twGetMenuEnabled,
+    twGetFocusedWindow
 ) where
 
 
@@ -129,7 +130,7 @@ import Numeric (showHex)
 
 import qualified Constants as CN
 import Debug
-import Misc
+import qualified Misc as MI
 import Scintilla
 
                   
@@ -256,7 +257,7 @@ ssReadSourceFiles ss = do
 
 ssToString :: Session -> IO String
 ssToString ss = do
-    fs <- frameToString $ ssFrame ss
+    fs <- MI.frameToString $ ssFrame ss
     prs <- prToString $ ssProject ss
     return ("{Session} Main: " ++ fs ++ prs)
 
@@ -277,7 +278,7 @@ ssInvokeInGuiThread mtid chan f = do
 ----------------------------------------------------------------
                        
 sfEditorHwnd :: SourceFile -> Word64                        
-sfEditorHwnd (SourceFile _ _ e _ _) = ptrToWord64 $ scnGetHwnd e                        
+sfEditorHwnd (SourceFile _ _ e _ _) = MI.ptrToWord64 $ scnGetHwnd e                        
 
 sfFilePathString :: SourceFile -> String                        
 sfFilePathString sf = maybe "" id (sfFilePath sf)
@@ -286,7 +287,7 @@ sfSetFilePath :: SourceFile -> String -> SourceFile
 sfSetFilePath (SourceFile p hp e _ ghci) fp = (SourceFile p hp e (Just fp) ghci)
 
 sfMatchesHwnd :: SourceFile -> HWND -> Bool
-sfMatchesHwnd sf h = comparePtrs h (sfPanelHwnd sf)
+sfMatchesHwnd sf h = MI.comparePtrs h (sfPanelHwnd sf)
 
 sfCreate :: Panel() -> ScnEditor -> Maybe String -> Maybe GhciPanel -> IO SourceFile
 sfCreate p e mfp ghci = do
@@ -320,7 +321,7 @@ sfUpdate ss sf' = do
 
 sfToString :: SourceFile -> String
 sfToString (SourceFile _ hp e mfp _) = 
-        "{SourceFile} Panel: 0x" ++ (showHex (ptrToWord64 hp) "" ) ++
+        "{SourceFile} Panel: 0x" ++ (showHex (MI.ptrToWord64 hp) "" ) ++
         ", (" ++ show (e) ++ "), " ++ 
         ", File: " ++ show (mfp)
        
@@ -468,3 +469,8 @@ twGetMenuFunction tw id = maybe (return ()) (\(MenuFunction _ mf _) -> mf)  $ fi
 twGetMenuEnabled :: TextWindow -> Int -> IO Bool
 twGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
 
+twGetFocusedWindow :: Session -> IO (Maybe TextWindow)
+twGetFocusedWindow ss = do
+    tws <- atomically (readTVar $ ssTextWindows ss)
+    MI.findIO (\tw -> twHasFocus tw) $ txWindows tws
+  

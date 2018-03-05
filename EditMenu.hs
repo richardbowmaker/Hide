@@ -4,8 +4,7 @@ module EditMenu
     editFindBackward,
     editFindForward,
     editFind,
-    updateEditMenus,
-    updateEditMenu
+    updateEditMenus
 ) where 
     
 import Control.Concurrent 
@@ -30,50 +29,8 @@ import Scintilla
 import ScintillaConstants
 import Session
 
--- updates the enabled state of the Save, SaveAs and SaveAll menus                                
-updateEditMenus :: Session -> IO ()   
-updateEditMenus ss = do
- 
-    fs <- ssReadSourceFiles ss
-        
-    if (length fs > 0) then do
-    
-        sf <- enbGetSelectedSourceFile ss
-        b <- scnSelectionIsEmpty $ sfEditor sf    
-        -- ssDebugInfo ss $ "updateEditMenus: " ++ (show b) ++ " " ++ (sfToString sf)
-        
-        b <- scnCanUndo $ sfEditor sf
-        set (ssMenuListGet ss CN.menuEditUndo)           [enabled := b]
-        b <- scnCanRedo $ sfEditor sf
-        set (ssMenuListGet ss CN.menuEditRedo)           [enabled := b]
-        
-        b <- scnSelectionIsEmpty $ sfEditor sf        
-        set (ssMenuListGet ss CN.menuEditCut)            [enabled := not b]
-        set (ssMenuListGet ss CN.menuEditCopy)           [enabled := not b]        
-        b <- scnCanPaste $ sfEditor sf        
-        set (ssMenuListGet ss CN.menuEditPaste)          [enabled := b]
-        set (ssMenuListGet ss CN.menuEditSelectAll)      [enabled := True]
-        set (ssMenuListGet ss CN.menuEditFind)           [enabled := True]
-        set (ssMenuListGet ss CN.menuEditFindForward)    [enabled := True]
-        set (ssMenuListGet ss CN.menuEditFindBackward)   [enabled := True]
-        return ()
-        
-    else do
-    
-        ssDebugError ss "updateEditMenus: no file"
-        set (ssMenuListGet ss CN.menuEditUndo)           [enabled := False]
-        set (ssMenuListGet ss CN.menuEditRedo)           [enabled := False]
-        set (ssMenuListGet ss CN.menuEditCut)            [enabled := False]
-        set (ssMenuListGet ss CN.menuEditCopy)           [enabled := False]
-        set (ssMenuListGet ss CN.menuEditPaste)          [enabled := False]
-        set (ssMenuListGet ss CN.menuEditSelectAll)      [enabled := False]
-        set (ssMenuListGet ss CN.menuEditFind)           [enabled := False]
-        set (ssMenuListGet ss CN.menuEditFindForward)    [enabled := False]
-        set (ssMenuListGet ss CN.menuEditFindBackward)   [enabled := False]
-        return ()
-
-updateEditMenu :: Session -> TextWindow -> IO ()
-updateEditMenu ss tw = do
+updateEditMenus :: Session -> TextWindow -> IO ()
+updateEditMenus ss tw = do
 
         f <- twHasFocus tw 
 
