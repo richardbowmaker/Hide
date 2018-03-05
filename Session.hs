@@ -39,10 +39,6 @@ module Session
     compErrorToString,
     compErrorsToString,
 --
-    otClear,
-    otAddText,
-    otAddLine,
---
     FindText,
     ftFindText,
     ftText,
@@ -77,7 +73,17 @@ module Session
     twGetMenuEnabled,
     twGetFocusedWindow,
     twMatchesHwnd,
-    twGetWindows
+    twGetWindows,
+    twIsGhci,
+    twIsSourceFile,
+    twIsDebug,
+    twIsOutput,
+    twIsSameWindow,
+    twIsSameFile,
+    twRemoveWindow,
+    twFilePathToString,
+    twGetSourceFileWindow,
+    twGetEditor
 ) where
 
 
@@ -98,7 +104,7 @@ import Numeric (showHex)
 import qualified Constants as CN
 import Debug
 import qualified Misc as MI
-import Scintilla
+import qualified Scintilla as SC
                 
 ----------------------------------------------------------
 -- Session data and ToString functions
@@ -112,7 +118,7 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
                             ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
-                            ssOutput            :: ScnEditor,           -- The output pane
+                            ssOutput            :: SC.ScnEditor,           -- The output pane
                             ssDebugError        :: String -> IO (),
                             ssDebugWarn         :: String -> IO (),
                             ssDebugInfo         :: String -> IO (),
@@ -137,7 +143,7 @@ type FunctionChannel = TChan (IO ())
 type TvTextWindows = TVar TextWindows
 data TextWindows = TextWindows { txWindows :: [TextWindow] }
 
-data TextWindowType = SourceFile' ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
+data TextWindowType = SourceFile SC.ScnEditor | Ghci | Debug SC.ScnEditor | Output SC.ScnEditor
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
 
 -- | Text Window
@@ -166,7 +172,7 @@ data CompError = CompError {    ceFilePath  :: String,
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> ScnEditor -> ScnEditor -> IO (Session)
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> SC.ScnEditor -> IO (Session)
 ssCreate mf am nb ms sf ots ot db = do 
     mtid <- myThreadId
     tot  <- atomically $ newTChan
@@ -308,32 +314,6 @@ prUpdateSourceFiles :: Session -> (SourceFile -> SourceFile) -> IO Project
 prUpdateSourceFiles ss f = atomically (modifyTVar tpr (\pr -> prCreate $ map f (prFiles pr)) >> readTVar tpr)
     where tpr = ssProject ss
 -}
-----------------------------------------------------------------
--- Output helpers
-----------------------------------------------------------------
-
-otClear :: Session -> IO ()
-otClear ss = do
-    let e = ssOutput ss
-    scnSetReadOnly e False
-    scnClearAll e
-    scnSetReadOnly e True
-
-otAddText :: Session -> ByteString -> IO ()
-otAddText ss bs = do
-    let e = ssOutput ss
-    scnSetReadOnly e False
-    scnAppendText e bs
-    scnSetReadOnly e True
-    scnShowLastLine e
-    
-otAddLine :: Session -> ByteString -> IO ()
-otAddLine ss bs = do
-    let e = ssOutput ss
-    scnSetReadOnly e False
-    scnAppendLine e bs
-    scnSetReadOnly e True
-    scnShowLastLine e
 
 ----------------------------------------------------------------
 -- Comp error
@@ -369,13 +349,13 @@ twCreate tws = (TextWindows tws)
 createGhciWindowType :: TextWindowType
 createGhciWindowType = (Ghci)
 
-createSourceWindowType :: ScnEditor -> TextWindowType
-createSourceWindowType scn = (SourceFile' scn)
+createSourceWindowType :: SC.ScnEditor -> TextWindowType
+createSourceWindowType scn = (SourceFile scn)
 
-createDebugWindowType :: ScnEditor -> TextWindowType
+createDebugWindowType :: SC.ScnEditor -> TextWindowType
 createDebugWindowType scn = (Debug scn)
 
-createOutputWindowType :: ScnEditor -> TextWindowType
+createOutputWindowType :: SC.ScnEditor -> TextWindowType
 createOutputWindowType scn = (Output scn)
 
 createTextWindow :: TextWindowType
@@ -395,13 +375,9 @@ twFindWindow ss p = do
     tws <- atomically (readTVar $ ssTextWindows ss)
     return $ find p $ txWindows tws
 
-twUpdateTextWindows :: Session -> (TextWindow -> TextWindow) -> IO TextWindows
-twUpdateTextWindows ss f = atomically (modifyTVar tws (\ws -> twCreate $ map f (txWindows ws)) >> readTVar tws)
-    where tws = ssTextWindows ss
-
-twUpdate :: Session -> (TextWindows -> TextWindows) -> IO TextWindows
-twUpdate ss f = atomically (modifyTVar tws (\ws -> f ws) >> readTVar tws) 
-    where tws = ssTextWindows ss
+twUpdate :: Session -> ([TextWindow] -> [TextWindow]) -> IO TextWindows
+twUpdate ss f = atomically (modifyTVar ttws (\tws -> (twCreate $ f $ txWindows tws)) >> readTVar ttws) 
+    where ttws = ssTextWindows ss
 
 createMenuFunction :: Int -> IO () -> IO Bool -> MenuFunction
 createMenuFunction id mf me = (MenuFunction id mf me)
@@ -424,4 +400,52 @@ twGetWindows :: Session -> IO [TextWindow]
 twGetWindows ss = do
     tws <- atomically (readTVar $ ssTextWindows ss) 
     return $ txWindows tws
+
+twIsGhci :: TextWindow -> Bool
+twIsGhci tw = case (twType tw) of
+                Ghci      -> True
+                otherwise -> False
+
+twIsSourceFile :: TextWindow -> Bool
+twIsSourceFile tw = case (twType tw) of
+                SourceFile _ -> True
+                otherwise    -> False
+
+twIsDebug :: TextWindow -> Bool
+twIsDebug tw = case (twType tw) of
+                Debug _    -> True
+                otherwise -> False
+
+twIsOutput :: TextWindow -> Bool
+twIsOutput tw = case (twType tw) of
+                Output _  -> True
+                otherwise -> False
+
+twIsSameWindow :: TextWindow -> TextWindow -> Bool
+twIsSameWindow tw1 tw2 = (twPanelHwnd tw1) == (twPanelHwnd tw2)
+
+twIsSameFile :: TextWindow -> TextWindow -> Bool
+twIsSameFile tw1 tw2 = fmap (map toLower) (twFilePath tw1) == fmap (map toLower) (twFilePath tw2)
+
+twGetSourceFileWindow :: Session -> String -> IO (Maybe TextWindow)
+twGetSourceFileWindow ss fp = 
+    twFindWindow ss (\tw -> (twIsSourceFile tw) && (fmap (map toLower) (twFilePath tw) == Just ((map toLower) fp)))
+
+twRemoveWindow :: Session -> TextWindow -> IO TextWindows
+twRemoveWindow ss tw = twUpdate ss (\tws -> MI.findAndRemove (\tw' -> twIsSameWindow tw tw') tws)
+
+twUpdateTextWindows :: Session -> (TextWindow -> TextWindow) -> IO TextWindows
+twUpdateTextWindows ss f = atomically (modifyTVar tws (\ws -> twCreate $ map f (txWindows ws)) >> readTVar tws)
+    where tws = ssTextWindows ss
+
+twFilePathToString :: TextWindow -> String                        
+twFilePathToString tw = maybe "" id (twFilePath tw)
+
+twGetEditor :: TextWindow -> Maybe SC.ScnEditor
+twGetEditor tw = 
+    case twType tw of
+        (SourceFile scn) -> Just scn
+        (Debug scn)      -> Just scn
+        (Output scn)     -> Just scn
+        _                -> Nothing
 

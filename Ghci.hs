@@ -18,7 +18,6 @@ module Ghci
     eventSelectionSet,
     eventSelectionClear,
     eventHandler,
-    GhciPanel
 ) where 
     
 import Control.Concurrent 
@@ -38,10 +37,9 @@ import System.Win32.Types (nullHANDLE)
 
 -- project imports
 
-import Constants as CN
-import EditorNotebook
-import Misc
-import Session as SS
+import qualified Constants as CN
+import qualified Misc as MI
+import qualified Session as SS
 
 -----------------------
 -- Windows API calls --
@@ -67,26 +65,25 @@ foreign import ccall safe "wrapper" createCallback ::
 
 --------------------------------------------------------------------------
 
-openWindowFile :: SS.Session -> SourceFile -> (TextWindow -> Int -> IO ()) -> IO ()
-openWindowFile ss sf eh = do
-    mtw <- twFindWindow ss (\tw -> sfPathIs sf $ twFilePath tw) 
+openWindowFile :: SS.Session -> SS.TextWindow -> (SS.TextWindow -> Int -> IO ()) -> IO ()
+openWindowFile ss ftw eh = do
+    mtw <- SS.twFindWindow ss (\tw -> (SS.twIsGhci tw) && (SS.twIsSameFile ftw tw)) 
     case mtw of
         Just tw -> do
             -- GHCI already open so select it
-            let nb = ssOutputs ss
-            auiNotebookGetPageIndex nb (twPanel tw) >>= auiNotebookSetSelection nb
+            let nb = SS.ssOutputs ss
+            auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
             -- reload the source file
-            sendCommand (twPanelHwnd tw) $ ":load " ++ (maybe "" id (sfFilePath sf))
-            return ()
+            sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id (SS.twFilePath tw))
         Nothing -> do
             -- GHCI not open so open a new tab
-            case (sfFilePath sf) of
+            case (SS.twFilePath ftw) of
                 Just fp -> do
-                    m <- open ss fp                 
-                    case m of
+                    mw <- open ss fp                 
+                    case mw of
                         Just (panel, hwndp, hwnd) -> do
                                 let tw = newtw panel hwndp hwnd fp
-                                twUpdate ss (\tws -> twCreate (tw : txWindows tws))
+                                SS.twUpdate ss (\tws -> tw : tws)
                                 setEventHandler tw eh
                                 enableEvents hwnd
                                 return ()
@@ -106,17 +103,18 @@ openWindowFile ss sf eh = do
 
                                 ]
                                 (hasFocus hwnd)
+                                (return True)
                                 (Just fp))
 
 
 
-openWindow :: SS.Session -> (TextWindow -> Int -> IO ()) -> IO ()
+openWindow :: SS.Session -> (SS.TextWindow -> Int -> IO ()) -> IO ()
 openWindow ss eh = do
     m <- open ss "" 
     case m of
         Just (panel, hwndp, hwnd) -> do
             let tw = newtw panel hwndp hwnd
-            twUpdate ss (\tws -> twCreate (tw : txWindows tws))
+            SS.twUpdate ss (\tws -> tw : tws)
             setEventHandler tw eh
             enableEvents hwnd
             return ()
@@ -135,19 +133,20 @@ openWindow ss eh = do
 
                                 ]
                                 (hasFocus hwnd)
+                                (return True)
                                 Nothing)
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
 open ss fp = do
 
     -- create panel and embed GHCI window
-    let nb = ssOutputs ss
+    let nb = SS.ssOutputs ss
     p <- panel nb []
     hp <- windowGetHandle p
     hwnd <- withCString fp (\cfp -> 
         withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> c_GhciNew hp cop cfp))
 
-    case (ptrToWord64 hwnd) of
+    case (MI.ptrToWord64 hwnd) of
 
         0 -> return Nothing
         _ -> do
@@ -161,14 +160,12 @@ open ss fp = do
 
             return (Just (p, hp, hwnd))
                 
-closeWindow :: Session -> IO ()
-closeWindow ss = do
-    let nb = ssOutputs ss
+closeWindow :: SS.Session -> SS.TextWindow -> IO ()
+closeWindow ss tw = do
+    let nb = SS.ssOutputs ss
     p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
-    hwnd <- windowGetHandle p 
-    c_GhciClose hwnd
-    prUpdateSourceFiles ss (\sf -> maybe sf 
-        (\ghci -> if (sfMatchesHwnd sf hwnd) then sfSetGhciPanel sf Nothing else sf) $ sfGhci sf)
+    windowGetHandle p >>= c_GhciClose
+    SS.twRemoveWindow ss tw
     return ()
 
 sendCommand :: HWND -> String -> IO ()
@@ -199,7 +196,7 @@ hasFocus h = do
 setEventHandler :: SS.TextWindow -> (SS.TextWindow -> Int -> IO ()) -> IO ()
 setEventHandler tw eh = do
     cb <- createCallback (eventHandler $ eh tw)
-    c_GhciSetEventHandler (twPanelHwnd tw) cb    
+    c_GhciSetEventHandler (SS.twPanelHwnd tw) cb    
     return ()
 
 eventHandler :: (Int -> IO ()) -> HWND -> Int -> IO ()

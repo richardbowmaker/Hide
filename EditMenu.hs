@@ -61,78 +61,66 @@ updateEditMenus ss tw = do
                     e <- me
                     set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
-editFind :: SS.Session -> SC.ScnEditor -> IO ()
-editFind ss e = do
+editFind :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFind ss tw e = do
     sel <- SC.scnGetSelText e
     s <- textDialog (SS.ssFrame ss) "Find:" CN.programTitle sel
     if s /= "" then do
-        mtw <- EN.enbGetSelectedSourceFile ss
-        case mtw of
-            Just tw -> do
-                pos <- SC.scnGetCurrentPos e
-                len <- SC.scnGetTextLen e
-                p <- findTextInRange e s pos (pos, len) (0, (pos + (length s) -1))
-                if p >= 0 then do
-                    SS.ssDebugInfo ss $ "Found at: " ++ (show p)
-                    -- save find string for next and prev
-                    atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (filepath tw) pos)
-                    return ()
-                else do
-                    infoDialog (SS.ssFrame ss) CN.programTitle "Not found" 
-                    return ()
-            Nothing -> return ()
+        pos <- SC.scnGetCurrentPos e
+        len <- SC.scnGetTextLen e
+        p <- findTextInRange e s pos (pos, len) (0, (pos + (length s) -1))
+        if p >= 0 then do
+            SS.ssDebugInfo ss $ "Found at: " ++ (show p)
+            -- save find string for next and prev
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (filepath tw) pos)
+            return ()
+        else do
+            infoDialog (SS.ssFrame ss) CN.programTitle "Not found" 
+            return ()
     else return ()
 
     where filepath tw =  maybe ("") id (SS.twFilePath tw)
 
-editFindForward :: SS.Session -> SC.ScnEditor -> IO ()
-editFindForward ss e = do
+editFindForward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFindForward ss tw e = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
-        mtw <- EN.enbGetSelectedSourceFile ss
-        case mtw of
-            Just tw -> do
-                -- set search range from current pos to end of doc
-                pos <- SC.scnGetCurrentPos e
-                len <- SC.scnGetTextLen e
-                p <- findTextInRange e s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
-                if p >= 0 then do
-                    SS.ssDebugInfo ss $ "Found at: " ++ (show p)
-                    -- save find string for next and prev
-                    atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
-                    return ()
-                else do
-                    infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
-                    atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
-                    return ()
-            Nothing -> return ()
+        -- set search range from current pos to end of doc
+        pos <- SC.scnGetCurrentPos e
+        len <- SC.scnGetTextLen e
+        p <- findTextInRange e s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
+        if p >= 0 then do
+            SS.ssDebugInfo ss $ "Found at: " ++ (show p)
+            -- save find string for next and prev
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
+            return ()
+        else do
+            infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
+            return ()
     else return ()
 
     where filepath tw =  maybe ("") id (SS.twFilePath tw)
 
-editFindBackward :: SS.Session -> SC.ScnEditor -> IO ()
-editFindBackward ss e = do
+editFindBackward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFindBackward ss tw e = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
-        mtw <- EN.enbGetSelectedSourceFile ss
-        case mtw of
-            Just tw -> do
-                -- set search range from current pos to end of doc
-                pos <- SC.scnGetCurrentPos e
-                len <- SC.scnGetTextLen e
-                p <- findTextInRange e s pos (((SS.ftStartPos ft) + (length s) -1), 0) ((len, SS.ftStartPos ft))
-                if p >= 0 then do
-                    SS.ssDebugInfo ss $ "Found at: " ++ (show p)
-                    -- save find string for next and prev
-                    atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
-                    return ()
-                else do
-                    infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
-                    atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
-                    return ()
-            Nothing -> return ()
+        -- set search range from current pos to end of doc
+        pos <- SC.scnGetCurrentPos e
+        len <- SC.scnGetTextLen e
+        p <- findTextInRange e s pos (((SS.ftStartPos ft) + (length s) -1), 0) ((len, SS.ftStartPos ft))
+        if p >= 0 then do
+            SS.ssDebugInfo ss $ "Found at: " ++ (show p)
+            -- save find string for next and prev
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
+            return ()
+        else do
+            infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
+            return ()
     else return ()
             
     where filepath tw =  maybe ("") id (SS.twFilePath tw)

@@ -71,43 +71,34 @@ updateSaveMenus ss = do
     where allFilesClean tws = doWhileTrueIO (\tw -> SS.twIsClean tw) tws
    
 closeEditor :: SS.Session -> SS.TextWindow -> IO Bool
-closeEditor ss sf = do
-
-    let e = SS.sfEditor sf      
-    ic <- SC.scnIsClean e
-    
-    if ic then do
-                
-        closeTab ss sf         
-        return (True)
-
-    else do
-    
-        -- file is dirty so prompt the user if they want to save it
-        enbSelectTab ss sf
-        b <- confirmDialog (SS.ssFrame ss) 
-                "Heyho" 
-                ("Do you wish to save the file: ?\n" ++ (show $ SS.sfFilePathString sf))
-                True
-                
-        if b then do
-            
-           -- save file
-            b <- fileSave ss sf
-            
-            if b then do
-            
-                closeTab ss sf         
-                return (True)
-
-            -- veto close, don't know how to do this yet ??
-            else return (False) 
-    
-        else do
-            closeTab ss sf
-            return (True)
+closeEditor ss tw = do
+    case (SS.twType tw) of
+        SS.SourceFile scn -> do
+            ic <- SS.twIsClean tw           
+            if ic then do                       
+                closeTab ss tw         
+                return True
+            else do            
+                -- file is dirty so prompt the user if they want to save it
+                EN.enbSelectTab ss sf
+                b <- confirmDialog (SS.ssFrame ss) 
+                        CN.programTitle 
+                        ("Do you wish to save the file: ?\n" ++ (show $ SS.twFilePathToString sf))
+                        True                        
+                if b then do                   
+                   -- save file
+                    b <- fileSave ss tw                   
+                    if b then do                   
+                        closeTab ss tw         
+                        return True
+                    -- veto close, don't know how to do this yet ??
+                    else return False            
+                else do
+                    closeTab ss sf
+                    return True
+        _ -> return False
           
-closeTab :: SS.Session -> SS.SourceFile -> IO ()
+closeTab :: SS.Session -> SS.TextFile -> IO ()
 closeTab ss sf = do
     
     -- close down scintilla editor

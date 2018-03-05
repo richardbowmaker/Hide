@@ -3,11 +3,13 @@ module OutputPane
 ( 
     createOutputPane,
     gotoCompileError,
- 
+    clear,
+    addText,
+    addLine 
 ) where 
     
-
 import Control.Concurrent.STM (atomically, readTVar)
+import Data.ByteString.Internal (ByteString)
 import Data.List (find, findIndex)
 import Data.Word (Word64)
 import Graphics.UI.WX
@@ -15,72 +17,92 @@ import Graphics.UI.WXCore
 
 -- project imports
 
-import EditorNotebook
-import Scintilla
-import ScintillaConstants
-import Session
+import qualified EditorNotebook as EN
+import qualified Scintilla as SC
+import qualified ScintillaConstants as SC
+import qualified Session as SS
 
 ------------------------------------------------------------    
 -- Output pane
 ------------------------------------------------------------    
 
-createOutputPane :: Frame () -> IO (AuiNotebook (), ScnEditor)
+createOutputPane :: Frame () -> IO (AuiNotebook (), SC.ScnEditor)
 createOutputPane f = do
 
     nb <- auiNotebookCreate f idAny (Point 0 0) (Size 0 0) (wxCLIP_CHILDREN + wxAUI_NB_TOP + wxAUI_NB_CLOSE_ON_ACTIVE_TAB)
     set nb [] 
     p <- panel nb []
     hwnd <- windowGetHandle p
-    e <- scnCreateEditor hwnd
+    e <- SC.scnCreateEditor hwnd
     auiNotebookAddPage nb p "Output" False 0
     ta <- auiSimpleTabArtCreate
     auiNotebookSetArtProvider nb ta
     
     -- configure editor
-    scnSetLexer e (fromIntegral sCLEX_CONTAINER :: Int)
-    scnSetAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
-    scnStyleClearAll e
-    scnSetAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) scnBlack scnWhite 9 "Courier New"
-    scnSetReadOnly e True
+    SC.scnSetLexer e (fromIntegral SC.sCLEX_CONTAINER :: Int)
+    SC.scnSetAStyle e (fromIntegral SC.sTYLE_DEFAULT :: Word64) SC.scnBlack SC.scnWhite 9 "Courier New"
+    SC.scnStyleClearAll e
+    SC.scnSetAStyle e (fromIntegral SC.sCE_H_DEFAULT :: Word64) SC.scnBlack SC.scnWhite 9 "Courier New"
+    SC.scnSetReadOnly e True
 
-    scnSetSelectionMode e sC_SEL_LINES
+    SC.scnSetSelectionMode e SC.sC_SEL_LINES
  
     return (nb, e)
 
 -- jump to source file error location
-gotoCompileError :: Session -> Int -> (String -> IO ()) -> IO ()
+gotoCompileError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
 gotoCompileError ss line fileOpen = do
-
     -- get compiler errors and lookup the error
-    ces <- atomically $ readTVar $ ssCompilerReport ss
-    let mce = find (\ce -> (ceErrLine ce) <= line ) (reverse ces)
-
+    ces <- atomically $ readTVar $ SS.ssCompilerReport ss
+    let mce = find (\ce -> (SS.ceErrLine ce) <= line ) (reverse ces)
     case mce of
-        Nothing -> return ()
         Just ce -> do
-
             -- goto source file from list of open files
-            msf <- prGetSourceFile ss $ ceFilePath ce 
-            case msf of
-           
-                Just sf -> do
-                    b <- enbSelectTab ss sf
-                    if b then gotoPos (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
+            mtw <- SS.twGetSourceFileWindow ss $ SS.ceFilePath ce 
+            case mtw of          
+                Just tw -> do                     
+                    b <- EN.enbSelectTab ss tw
+                    if b then gotoPos tw ce
                     else return ()
-
                 Nothing -> do
                     -- source file not open
-                    fileOpen $ ceFilePath ce
-                    msf <- sfGetSourceFile ss $ ceFilePath ce
-                    case msf of
-                        Just sf -> gotoPos (sfEditor sf) ((ceSrcLine ce)-1) ((ceSrcCol ce)-1)
+                    fileOpen $ SS.ceFilePath ce
+                    mtw <- SS.twGetSourceFileWindow ss $ SS.ceFilePath ce 
+                    case mtw of
+                        Just tw -> gotoPos tw ce
                         Nothing -> return ()
+        Nothing -> return ()
      
-    where gotoPos e l c = do
-            scnGotoLineCol e l c
-            scnGrabFocus e
-            scnSelectWord e
-            
+    where   gotoPos tw ce = do
+                case SS.twGetEditor tw of
+                    Just scn -> do
+                        SC.scnGotoLineCol scn ((SS.ceSrcLine ce)-1) ((SS.ceSrcCol ce)-1)
+                        SC.scnGrabFocus scn
+                        SC.scnSelectWord scn
+                    Nothing -> return ()
+          
+clear :: SS.Session -> IO ()
+clear ss = do
+    let e = SS.ssOutput ss
+    SC.scnSetReadOnly e False
+    SC.scnClearAll e
+    SC.scnSetReadOnly e True
+
+addText :: SS.Session -> ByteString -> IO ()
+addText ss bs = do
+    let e = SS.ssOutput ss
+    SC.scnSetReadOnly e False
+    SC.scnAppendText e bs
+    SC.scnSetReadOnly e True
+    SC.scnShowLastLine e
+    
+addLine :: SS.Session -> ByteString -> IO ()
+addLine ss bs = do
+    let e = SS.ssOutput ss
+    SC.scnSetReadOnly e False
+    SC.scnAppendLine e bs
+    SC.scnSetReadOnly e True
+    SC.scnShowLastLine e
 
 
       
