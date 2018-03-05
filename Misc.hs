@@ -25,6 +25,7 @@ import Graphics.UI.WXCore
 import Data.Word (Word64)
 import Data.Int (Int64)
 
+
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
               

@@ -29,7 +29,7 @@ import System.IO
 import Misc
 import Scintilla
 import ScintillaConstants
-import Session
+import qualified Session as SS
 
 ------------------------------------------------------------    
 -- Create the source file editor notebook
@@ -49,36 +49,27 @@ enbCreate mf = do
 ------------------------------------------------------------    
     
 -- returns the HWND of the child panel of the currently selected notebook page
-enbGetSelectedTabHwnd :: Session -> IO HWND
+enbGetSelectedTabHwnd :: SS.Session -> IO HWND
 enbGetSelectedTabHwnd ss = do
-    let nb = ssEditors ss
+    let nb = SS.ssEditors ss
     hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
     return hp
  
 -- returns the source file for the currently selected tab
-enbGetSelectedSourceFile :: Session -> IO SourceFile
+enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.TextWindow)
 enbGetSelectedSourceFile ss = do  
-    fs <- ssReadSourceFiles ss
-    hp <- enbGetSelectedTabHwnd ss
-   
-    case (find (\sf -> sfMatchesHwnd sf hp) fs) of
-        Just sf -> 
-            return (sf)
-        Nothing -> do 
-            -- should not occur, like this to simplfy calling code
-            ssDebugError ss "enbGetSelectedSourceFile no source file for current tab"
-            return (head fs) 
-                  
+    tws <- SS.twGetWindows ss
+    hp <- enbGetSelectedTabHwnd ss   
+    return $ find (\tw -> SS.twMatchesHwnd tw hp) tws
+ 
 -- returns true if the source file of the currently selected tab is clean 
-enbSelectedSourceFileIsClean :: Session -> IO Bool
-enbSelectedSourceFileIsClean ss = do
-    sf <- enbGetSelectedSourceFile ss
-    ic <- scnIsClean $ sfEditor sf
-    return (ic)
-    
-enbSelectTab :: Session -> SourceFile -> IO (Bool)
+enbSelectedSourceFileIsClean :: SS.Session -> IO Bool
+enbSelectedSourceFileIsClean ss = 
+    enbGetSelectedSourceFile ss >>= maybe (return True) (\tw -> SS.twIsClean tw) 
+ 
+enbSelectTab :: SS.Session -> SS.TextWindow -> IO (Bool)
 enbSelectTab ss sf = do
-    let nb = ssEditors ss
+    let nb = SS.ssEditors ss
     mix <- enbGetTabIndex ss sf
     case mix of
         Just ix -> do
@@ -86,9 +77,9 @@ enbSelectTab ss sf = do
             return (True)            
         Nothing -> return (False)
 
-enbCloseTab :: Session -> SourceFile -> IO ()
+enbCloseTab :: SS.Session -> SS.TextWindow -> IO ()
 enbCloseTab ss sf = do
-    let nb = ssEditors ss
+    let nb = SS.ssEditors ss
     mix <- enbGetTabIndex ss sf
     case (mix) of
         Just ix -> do
@@ -96,39 +87,39 @@ enbCloseTab ss sf = do
             auiNotebookRemovePage nb ix
             return ()
         Nothing -> do
-            ssDebugError ss "enbCloseTab, source file not in tabs"
+            SS.ssDebugError ss "enbCloseTab, source file not in tabs"
             return ()
 
-enbGetTabIndex :: Session -> SourceFile -> IO (Maybe Int)
-enbGetTabIndex ss sf = do
+enbGetTabIndex :: SS.Session -> SS.TextWindow -> IO (Maybe Int)
+enbGetTabIndex ss tw = do
 
-    let nb = ssEditors ss
+    let nb = SS.ssEditors ss
     pc <- auiNotebookGetPageCount nb
 
     -- get list of window handles as ints
     hs <- mapM (getHwnd nb) [0..(pc-1)]
 
     -- find tab with hwnd that matches the source file
-    return (findIndex (\h -> sfMatchesHwnd sf h) hs)
+    return (findIndex (\h -> SS.twMatchesHwnd tw h) hs)
     
     where getHwnd nb i = auiNotebookGetPage nb i >>= windowGetHandle
  
-enbSetTabText :: Session -> SourceFile -> IO ()
-enbSetTabText ss sf = do
-    mix <- enbGetTabIndex ss sf
+enbSetTabText :: SS.Session -> SS.TextWindow -> IO ()
+enbSetTabText ss tw = do
+    mix <- enbGetTabIndex ss tw
     case mix of
         Just ix -> do
-            case (sfFilePath sf) of
+            case (SS.twFilePath tw) of
                 Just fp -> do
-                    auiNotebookSetPageText (ssEditors ss) ix $ takeFileName fp
+                    auiNotebookSetPageText (SS.ssEditors ss) ix $ takeFileName fp
                     return ()
                 Nothing -> return ()                   
         Nothing -> return ()
     return ()
  
-enbGetTabCount :: Session -> IO Int
+enbGetTabCount :: SS.Session -> IO Int
 enbGetTabCount ss = do
-    pc <- auiNotebookGetPageCount $ ssEditors ss
+    pc <- auiNotebookGetPageCount $ SS.ssEditors ss
     return (pc)
 
 

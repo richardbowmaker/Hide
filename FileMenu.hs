@@ -36,21 +36,21 @@ import Text.Printf (printf)
 
 import qualified Constants as CN
 import qualified EditMenu as EM
-import EditorNotebook
-import Misc
+import qualified EditorNotebook as EN
+import qualified Misc as MI
 import qualified Scintilla as SC
-import ScintillaConstants 
+import qualified ScintillaConstants as SC
 import qualified Session as SS
 
 -- updates the enabled state of the Save, SaveAs and SaveAll menus                                
 updateSaveMenus :: SS.Session -> IO ()   
 updateSaveMenus ss = do
  
-    fs <- SS.ssReadSourceFiles ss
+    tws <- SS.twGetWindows ss
     
-    if (length fs > 0) then do
+    if (length tws > 0) then do
     
-        ic <- enbSelectedSourceFileIsClean ss       
+        ic <- EN.enbSelectedSourceFileIsClean ss       
         set (SS.ssMenuListGet ss CN.menuFileSave)      [enabled := not ic]        
         set (SS.ssMenuListGet ss CN.menuFileSaveAs)    [enabled := True]       
         b <- allFilesClean fs
@@ -68,11 +68,9 @@ updateSaveMenus ss = do
         set (SS.ssMenuListGet ss CN.menuFileSaveAll)   [enabled := False]
         return ()
        
-    where allFilesClean fs = do
-            b <- doWhileTrueIO (\sf -> SC.scnIsClean $ SS.sfEditor sf) fs
-            return (b)
-    
-closeEditor :: SS.Session -> SS.SourceFile -> IO Bool
+    where allFilesClean tws = doWhileTrueIO (\tw -> SS.twIsClean tw) tws
+   
+closeEditor :: SS.Session -> SS.TextWindow -> IO Bool
 closeEditor ss sf = do
 
     let e = SS.sfEditor sf      

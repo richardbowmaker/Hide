@@ -1,8 +1,6 @@
 module Session 
 (
     Session,
-    Project,
-    SourceFile,
     TOutput,
     FunctionChannel,
     TErrors,
@@ -11,7 +9,6 @@ module Session
     ssFrame,
     ssAuiMgr,
     ssEditors,
-    ssProject,
     ssMenus,
     ssStatus,
     ssTOutput,
@@ -26,39 +23,11 @@ module Session
     ssMenuListCreate,
     ssMenuListAdd,
     ssMenuListGet,
-    ssReadSourceFiles,
-    ssIsOpeningState,
     ssCompilerReport,
     ssFindText,
     ssToString,
     SsMenuList,
     SsNameMenuPair,
---
-    sfCreate,
-    sfSetFilePath,
-    sfPanel,
-    sfPanelHwnd,
-    sfEditor,
-    sfFilePath,
-    sfGhci,
-    sfFilePathString,
-    sfIsInList,
-    sfPathIs,
-    sfUpdate,
-    sfIsSame,    
-    sfMatchesHwnd,
-    sfToString, 
-    sfGetSourceFile,
-    sfSetGhciPanel,
---
-    prFiles,
-    prSetFiles,
-    prCreate,
-    prToString,
-    prUpdate,
-    prUpdateSourceFiles,
-    prRead,
-    prGetSourceFile,
 --
     CompError,
     ceFilePath,
@@ -82,11 +51,6 @@ module Session
     ftStartFile,
     ftStartPos, 
 --
-    GhciPanel,
-    ghciPanel,
-    ghciHwnd,
-    sfCreateGhciPanel,
---
     createTextWindow,
     createGhciWindowType,
     createSourceWindowType,
@@ -103,6 +67,7 @@ module Session
     twMenuFunctions,
     twFilePath,
     twHasFocus,
+    twIsClean,
     twUpdateTextWindows,
     twUpdate,
     txWindows,
@@ -110,7 +75,9 @@ module Session
     MenuFunction,
     twGetMenuFunction,
     twGetMenuEnabled,
-    twGetFocusedWindow
+    twGetFocusedWindow,
+    twMatchesHwnd,
+    twGetWindows
 ) where
 
 
@@ -132,8 +99,7 @@ import qualified Constants as CN
 import Debug
 import qualified Misc as MI
 import Scintilla
-
-                  
+                
 ----------------------------------------------------------
 -- Session data and ToString functions
 ----------------------------------------------------------
@@ -141,7 +107,6 @@ import Scintilla
 data Session = Session {    ssFrame             :: Frame (),            -- Main window
                             ssAuiMgr            :: AuiManager (),       -- Application level AUI manager
                             ssEditors           :: AuiNotebook (),      -- Notebook of source file editors
-                            ssProject           :: TProject,            -- Project data (mutable)
                             ssMenus             :: SsMenuList,
                             ssStatus            :: StatusField,
                             ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
@@ -158,9 +123,6 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
    
 data FindText = FindText { ftText :: String, ftCurrFile :: String, ftCurrPos :: Int, ftStartFile :: String, ftStartPos :: Int }
 
- -- project data is mutable
-type TProject = TVar Project
-
 -- compiler output channel
 type TOutput = TChan ByteString
 
@@ -174,17 +136,6 @@ type FunctionChannel = TChan (IO ())
 
 type TvTextWindows = TVar TextWindows
 data TextWindows = TextWindows { txWindows :: [TextWindow] }
-data Project = Project { prFiles :: [SourceFile] }
-
--- | Source File Data
-data SourceFile 
-    = SourceFile {  sfPanel     :: Panel (),            -- ^ The panel added to the AuiNotebookManager
-                    sfPanelHwnd :: HWND,                -- ^ HWND of panel
-                    sfEditor    :: ScnEditor,           -- ^ The Scintilla editor, child window of panel
-                    sfFilePath  :: Maybe String,        -- ^ Source file path, Nothing = file name not set yet
-                    sfGhci      :: Maybe GhciPanel }    -- ^ Parent panel of GHCI window in the output pane
-
-data GhciPanel = GhciPanel { ghciPanel :: Panel (), ghciHwnd :: HWND } 
 
 data TextWindowType = SourceFile' ScnEditor | Ghci | Debug ScnEditor | Output ScnEditor
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
@@ -197,6 +148,7 @@ data TextWindow
                     twHwnd              :: HWND,
                     twMenuFunctions     :: [MenuFunction],
                     twHasFocus          :: IO Bool,
+                    twIsClean           :: IO Bool,
                     twFilePath          :: Maybe String }       -- ^ File name associated with window
 
 type SsNameMenuPair = (Int, MenuItem ())                               
@@ -214,10 +166,9 @@ data CompError = CompError {    ceFilePath  :: String,
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> Project -> SsMenuList -> StatusField -> AuiNotebook () -> ScnEditor -> ScnEditor -> IO (Session)
-ssCreate mf am nb pr ms sf ots ot db = do 
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> ScnEditor -> ScnEditor -> IO (Session)
+ssCreate mf am nb ms sf ots ot db = do 
     mtid <- myThreadId
-    tpr  <- atomically $ newTVar $ prCreate []
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
@@ -226,7 +177,7 @@ ssCreate mf am nb pr ms sf ots ot db = do
     let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
     tws  <- atomically $ newTVar $ twCreate [] 
-    return (Session mf am nb tpr ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd tws)
+    return (Session mf am nb ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd tws)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -250,22 +201,10 @@ ssMenuListGet ss n =
         Nothing -> snd $ last ml
     where ml = ssMenus ss
     
-ssReadSourceFiles :: Session -> IO [SourceFile]
-ssReadSourceFiles ss = do 
-    pr <- prRead ss 
-    return (prFiles pr)
-
 ssToString :: Session -> IO String
 ssToString ss = do
     fs <- MI.frameToString $ ssFrame ss
-    prs <- prToString $ ssProject ss
-    return ("{Session} Main: " ++ fs ++ prs)
-
-ssIsOpeningState :: [SourceFile] -> IO Bool
-ssIsOpeningState [sf@(SourceFile _ _ e Nothing _)] = do
-    b <- scnIsClean e
-    return (b)
-ssIsOpeningState _ = return (False)
+    return ("{Session} Main: " ++ fs)
 
 ssInvokeInGuiThread :: ThreadId -> FunctionChannel -> (IO ()) -> IO ()
 ssInvokeInGuiThread mtid chan f = do
@@ -276,7 +215,8 @@ ssInvokeInGuiThread mtid chan f = do
 ----------------------------------------------------------------
 -- Source file helpers
 ----------------------------------------------------------------
-                       
+  
+{-                     
 sfEditorHwnd :: SourceFile -> Word64                        
 sfEditorHwnd (SourceFile _ _ e _ _) = MI.ptrToWord64 $ scnGetHwnd e                        
 
@@ -333,11 +273,12 @@ sfGetSourceFile ss fp = do
 
 sfCreateGhciPanel :: Panel () -> HWND -> GhciPanel
 sfCreateGhciPanel p h = (GhciPanel p h)
+-}
 
 ----------------------------------------------------------------
 -- Project helpers
 ----------------------------------------------------------------
-
+{-
 prSetFiles :: Project -> [SourceFile] -> Project
 prSetFiles (Project _) x = (Project x)
 
@@ -366,6 +307,7 @@ prGetSourceFile ss fp = do
 prUpdateSourceFiles :: Session -> (SourceFile -> SourceFile) -> IO Project
 prUpdateSourceFiles ss f = atomically (modifyTVar tpr (\pr -> prCreate $ map f (prFiles pr)) >> readTVar tpr)
     where tpr = ssProject ss
+-}
 ----------------------------------------------------------------
 -- Output helpers
 ----------------------------------------------------------------
@@ -442,10 +384,11 @@ createTextWindow :: TextWindowType
                     -> HWND
                     -> [MenuFunction]
                     -> IO Bool      -- ^ Has focus
+                    -> IO Bool      -- ^ Is clean
                     -> Maybe String -- ^ Filname
                     -> TextWindow
-createTextWindow wtype panel hwndp hwnd mfs focus file =
-    (TextWindow wtype panel hwndp hwnd mfs focus file)
+createTextWindow wtype panel hwndp hwnd mfs focus clean file =
+    (TextWindow wtype panel hwndp hwnd mfs focus clean file)
 
 twFindWindow :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
 twFindWindow ss p = do
@@ -474,3 +417,11 @@ twGetFocusedWindow ss = do
     tws <- atomically (readTVar $ ssTextWindows ss)
     MI.findIO (\tw -> twHasFocus tw) $ txWindows tws
   
+twMatchesHwnd :: TextWindow -> HWND -> Bool
+twMatchesHwnd tw h = MI.comparePtrs h (twPanelHwnd tw)
+
+twGetWindows :: Session -> IO [TextWindow]
+twGetWindows ss = do
+    tws <- atomically (readTVar $ ssTextWindows ss) 
+    return $ txWindows tws
+
