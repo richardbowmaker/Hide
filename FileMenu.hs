@@ -53,7 +53,7 @@ updateSaveMenus ss = do
         ic <- EN.enbSelectedSourceFileIsClean ss       
         set (SS.ssMenuListGet ss CN.menuFileSave)      [enabled := not ic]        
         set (SS.ssMenuListGet ss CN.menuFileSaveAs)    [enabled := True]       
-        b <- allFilesClean fs
+        b <- allFilesClean tws
         set (SS.ssMenuListGet ss CN.menuFileSaveAll)   [enabled := not b]
         set (SS.ssMenuListGet ss CN.menuFileClose)     [enabled := True]
         set (SS.ssMenuListGet ss CN.menuFileCloseAll)  [enabled := True]    
@@ -68,223 +68,202 @@ updateSaveMenus ss = do
         set (SS.ssMenuListGet ss CN.menuFileSaveAll)   [enabled := False]
         return ()
        
-    where allFilesClean tws = doWhileTrueIO (\tw -> SS.twIsClean tw) tws
+    where allFilesClean tws = MI.doWhileTrueIO (\tw -> SS.twIsClean tw) tws
    
-closeEditor :: SS.Session -> SS.TextWindow -> IO Bool
-closeEditor ss tw = do
-    case (SS.twType tw) of
-        SS.SourceFile scn -> do
-            ic <- SS.twIsClean tw           
-            if ic then do                       
-                closeTab ss tw         
+closeEditor :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
+closeEditor ss tw scn = do
+    ic <- SS.twIsClean tw           
+    if ic then do                       
+        closeTab ss tw scn        
+        return True
+    else do            
+        -- file is dirty so prompt the user if they want to save it
+        EN.enbSelectTab ss tw
+        b <- confirmDialog (SS.ssFrame ss) 
+            CN.programTitle 
+            ("Do you wish to save the file: ?\n" ++ (show $ SS.twFilePathToString tw))
+            True                        
+        if b then do                   
+           -- save file
+            b <- fileSave ss tw                  
+            if b then do                   
+                closeTab ss tw scn        
                 return True
-            else do            
-                -- file is dirty so prompt the user if they want to save it
-                EN.enbSelectTab ss sf
-                b <- confirmDialog (SS.ssFrame ss) 
-                        CN.programTitle 
-                        ("Do you wish to save the file: ?\n" ++ (show $ SS.twFilePathToString sf))
-                        True                        
-                if b then do                   
-                   -- save file
-                    b <- fileSave ss tw                   
-                    if b then do                   
-                        closeTab ss tw         
-                        return True
-                    -- veto close, don't know how to do this yet ??
-                    else return False            
-                else do
-                    closeTab ss sf
-                    return True
-        _ -> return False
+            -- veto close, don't know how to do this yet ??
+            else return False            
+        else do
+            closeTab ss tw scn
+            return True
           
-closeTab :: SS.Session -> SS.TextFile -> IO ()
-closeTab ss sf = do
-    
+closeTab :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+closeTab ss tw scn = do   
     -- close down scintilla editor
-    let e = SS.sfEditor sf
-    SC.scnDisableEvents e
-    SC.scnClose e
-    
+    SC.scnDisableEvents scn
+    SC.scnClose scn    
     -- remove source file from project
-    SS.prUpdate ss (\pr -> SS.prCreate (findAndRemove (SS.sfIsSame sf) (SS.prFiles pr)))
-    
+    SS.twRemoveWindow ss tw    
     -- update status bar
-    updateStatus ss
-    
+    updateStatus ss    
     return ()
 
 fileOpen :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> String -> IO ()
 fileOpen ss callback fp = do
-
-    fs <- SS.ssReadSourceFiles ss
-    b <- SS.ssIsOpeningState fs
-   
-    if b then do
-
-        -- set 1st slot
-        let sf' = SS.sfSetFilePath (head fs) fp
-        let nb = SS.ssEditors ss
-        writeSourceFileEditor sf'
-        auiNotebookSetPageText nb 0 (takeFileName fp)
-        SS.prUpdate ss (\_ -> SS.prCreate [sf'])
-        return ()          
-    
-    else do
-    
-        if (SS.sfIsInList fp fs) then do
-           
-            -- if already in file list then just switch focus to editor
-            setSourceFileFocus ss fp
-            return ()
-            
-         else do
-
+    mtw <- SS.twGetSourceFileWindow ss fp
+    case mtw of
+        Just tw -> setSourceFileFocus ss fp -- just set focus to editor
+        Nothing -> do       
             -- existing file so add to list, create window and set focus
-            sf' <- openSourceFileEditor ss fp callback 
-            writeSourceFileEditor sf'
-            return ()          
-
+            (tw, scn) <- openSourceFileEditor ss fp callback 
+            writeSourceFileEditor ss tw scn         
 
 fileCloseAll :: SS.Session -> IO ()
 fileCloseAll ss = do 
-    SS.ssReadSourceFiles ss >>= doWhileTrueIO (fileClose ss)
+    SS.twGetWindows ss >>= MI.doWhileTrueIO (fileClose ss)
     updateSaveMenus ss    
     return ()
 
-fileClose :: SS.Session -> SS.SourceFile -> IO Bool
-fileClose ss sf = do
-
-    b <- closeEditor ss sf
-    
-    if b then do
-    
-        -- remove page from notebook
-        mix <- enbGetTabIndex ss sf 
-        case mix of
-            Just ix -> do
-                let nb = SS.ssEditors ss        
-                auiNotebookDeletePage nb ix  
-                return (True)
-            Nothing -> do
-                SS.ssDebugError ss "fileClose, no tab for source file"
-                return (True)
-        
-    else return (False)
+fileClose :: SS.Session -> SS.TextWindow -> IO Bool
+fileClose ss tw = do
+    case SS.twGetEditor tw of
+        Just scn -> do
+            b <- closeEditor ss tw scn   
+            if b then do   
+                -- remove page from notebook
+                mix <- EN.enbGetTabIndex ss tw 
+                case mix of
+                    Just ix -> do
+                        let nb = SS.ssEditors ss        
+                        auiNotebookDeletePage nb ix  
+                        return True
+                    Nothing -> do
+                        SS.ssDebugError ss "fileClose, no tab for source file"
+                        return True       
+            else return False
+        Nothing -> do
+            SS.ssDebugError ss "fileClose, text window does not have scintilla editor"
+            return False
     
 fileSaveAll :: SS.Session -> IO (Bool)
 fileSaveAll ss = do
-        b <- SS.ssReadSourceFiles ss >>= doWhileTrueIO (fileSave ss)
-        return (b)
+    b <- SS.twGetWindows ss >>= MI.doWhileTrueIO (fileSave ss)
+    return b
 
 -- if file is dirty then writes it to file
 -- if no filename has been set then file save as is called
 -- returns false if user cancelled        
-fileSave :: SS.Session -> SS.SourceFile -> IO Bool
-fileSave ss sf = do
-
-    let e = SS.sfEditor sf      
-    ic <- SC.scnIsClean e
-    
-    if (ic) then do
-        return (True)
-    else       
-        case (SS.sfFilePath sf) of
-            Just fp -> do
-                writeSourceFile sf
-                return (True)
-            
-            -- source file has no name, so prompt user for one
-            Nothing -> do
-                b <- fileSaveAs ss sf
-                return (b)
+fileSave :: SS.Session -> SS.TextWindow -> IO Bool
+fileSave ss tw = do    
+    case SS.twGetEditor tw of
+        Just scn -> do
+            ic <- SS.twIsClean tw   
+            if ic then return True
+            else       
+                case SS.twFilePath tw of
+                    Just fp -> do
+                        writeSourceFile ss tw
+                        return True            
+                    -- source file has no name, so prompt user for one
+                    Nothing -> do
+                        b <- fileSaveAs ss tw
+                        return b
+        Nothing -> do
+            SS.ssDebugError ss "fileSave, text window does not have scintilla editor"
+            return False
                    
 -- File Save As, returns False if user opted to cancel the save 
-fileSaveAs :: SS.Session -> SS.SourceFile -> IO Bool
-fileSaveAs ss sf = do
-   
+fileSaveAs :: SS.Session -> SS.TextWindow -> IO Bool
+fileSaveAs ss tw = do   
     -- ensure source file is displayed
-    enbSelectTab ss sf
-    
+    EN.enbSelectTab ss tw   
     -- prompt user for name to save to
     let mf = SS.ssFrame ss                   -- wxFD_SAVE wxFD_OVERWRITE_PROMPT
     fd <- fileDialogCreate mf "Save file as" "." "" "*.hs" (Point 100 100) 0x6
-    rs <- dialogShowModal fd 
-    
+    rs <- dialogShowModal fd    
     case rs of
 --        wxID_OK -> do
 -- ?? don't know how to fix pattern match against a function    
         5100 -> do    
-            fp <- fileDialogGetPath fd
-            
+            fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
-            let sf' = SS.sfSetFilePath sf fp
-            SS.sfUpdate ss sf'
-            writeSourceFile sf'
-            
-            -- update tab name
-            enbSetTabText ss sf'
-            return (True)
-            
+            case SS.twSetFilePath tw fp of
+                Just tw' -> do
+                    SS.twUpdateWindow ss tw'
+                    writeSourceFile ss tw'                   
+                    -- update tab name
+                    EN.enbSetTabText ss tw'
+                    return True 
+                Nothing -> do
+                    SS.ssDebugError ss "fileSaveAs:: twSetFilePath returned nothing"
+                    return True
         --wxID_CANCEL -> do
         5101 -> do
-            return (False)
-            
+            return False           
         otherwise  -> do
-            return (True)
+            return True
   
 -- writes file to disk and sets editor to clean
-writeSourceFile :: SS.SourceFile -> IO ()
-writeSourceFile sf = do
-    let e = SS.sfEditor sf
-    case (SS.sfFilePath sf) of
-        Just fp -> do
-            SC.scnGetAllText e >>= BS.writeFile fp
-            SC.scnSetSavePoint e
-            return ()
-        
+writeSourceFile :: SS.Session -> SS.TextWindow -> IO ()
+writeSourceFile ss tw = do
+    case SS.twGetEditor tw of
+        Just scn -> do
+            case SS.twFilePath tw of
+                Just fp -> do
+                    SC.scnGetAllText scn >>= BS.writeFile fp
+                    SC.scnSetSavePoint scn
+                    return ()       
+                Nothing -> do
+                    -- bug, shouldn't end up here
+                    SS.ssDebugError ss "writeSourceFile:: invalid text window, no source file name"
+                    return ()
         Nothing -> do
-            -- bug, shouldn't end up here
+            SS.ssDebugError ss "writeSourceFile, text window does not have scintilla editor"
             return ()
-            
+
 -- display line count, cursor position etc. 
 updateStatus :: SS.Session -> IO ()   
 updateStatus ss = do
     let st = SS.ssStatus ss
-    fs <- SS.ssReadSourceFiles ss
-    if (length fs > 0) then do
-        sf <- enbGetSelectedSourceFile ss   
-        (l, lp, dp, lc, cc) <- SC.scnGetPositionInfo $ SS.sfEditor sf
-        set st [text:= (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)]
-        return ()
+    tws <- SS.twGetWindows ss
+    if (length tws > 0) then do
+        mtw <- EN.enbGetSelectedSourceFile ss
+        case mtw of
+            Just tw -> do
+                case SS.twGetEditor tw of
+                    Just scn -> do
+                        (l, lp, dp, lc, cc) <- SC.scnGetPositionInfo scn
+                        set st [text:= (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)]
+                        return ()
+                    Nothing -> do
+                        SS.ssDebugError ss "updateStatus:: text window did not have a scintilla editor"
+            Nothing -> do
+                set st [text:= ""]
+                return ()           
     else do
         set st [text:= ""]
         return ()           
     
-writeSourceFileEditor :: SS.SourceFile -> IO ()
-writeSourceFileEditor sf = do
-    let mfp = SS.sfFilePath sf
-    case mfp of
+writeSourceFileEditor :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+writeSourceFileEditor ss tw scn = do
+    case SS.twFilePath tw of
         Just fp -> do
             text <- BS.readFile fp
-            let e = SS.sfEditor sf
-            SC.scnSetText e text
-            SC.scnSetSavePoint e
+            SC.scnSetText scn text
+            SC.scnSetSavePoint scn
             return ()
-        Nothing -> return () -- error
+        Nothing -> SS.ssDebugError ss "writeSourceFileEditor:: text window did not have a file name"
 
 setSourceFileFocus :: SS.Session -> String -> IO ()
 setSourceFileFocus ss fp = do
-    msf <- SS.sfGetSourceFile ss fp
-    case (msf) of
-        Just sf -> do
+    mtw <- SS.twGetSourceFileWindow ss fp
+    case mtw of
+        Just tw -> do
             let nb = SS.ssEditors ss
-            ix <- auiNotebookGetPageIndex nb $ SS.sfPanel sf
+            ix <- auiNotebookGetPageIndex nb $ SS.twPanel tw
             auiNotebookSetSelection nb ix 
             return ()
         Nothing -> return ()
 
-openSourceFileEditor :: SS.Session -> String -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.SourceFile)
+openSourceFileEditor :: SS.Session -> String -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.TextWindow, SC.ScnEditor)
 openSourceFileEditor ss fp callback = do
 
     let nb = SS.ssEditors ss
@@ -302,20 +281,17 @@ openSourceFileEditor ss fp callback = do
 
     -- add text window to project
     let tw = newtw scn p hwnd (SC.scnGetHwnd scn) fp
-    SS.twUpdate ss (\tws -> SS.twCreate (tw : (SS.txWindows tws)))
+    SS.twUpdate ss (\tws -> tw : tws)
 
+    -- enable events
     SC.scnSetEventHandler scn $ callback tw
     SC.scnEnableEvents scn
-        
-    -- add source file to project
-    sf <- SS.sfCreate p scn (Just fp) Nothing
-    SS.prUpdate ss (\pr -> SS.prSetFiles pr (sf:(SS.prFiles pr)))
-
+         
     -- set focus to new page
     ix <- auiNotebookGetPageIndex nb p
     auiNotebookSetSelection nb ix 
 
-    return (sf) 
+    return (tw, scn)
 
     where   newtw scn panel hwndp hwnd fp = (SS.createTextWindow
                                 (SS.createSourceWindowType scn)
@@ -334,9 +310,10 @@ openSourceFileEditor ss fp callback = do
                                     (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
                                 ]
                                 (SC.scnGetFocus scn)
+                                (SC.scnIsClean scn)
                                 (Just fp))
 
-newFile :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.SourceFile)  
+newFile :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO SS.TextWindow  
 newFile ss callback = do
     
     let nb = SS.ssEditors ss
@@ -350,19 +327,15 @@ newFile ss callback = do
     -- add panel to notebook
     auiNotebookAddPage nb p "..." False 0
 
-    sf <- SS.sfCreate p scn Nothing Nothing
     let tw = newtw scn p hwnd (SC.scnGetHwnd scn)
-    SS.twUpdate ss (\tws -> SS.twCreate (tw : (SS.txWindows tws)))
+    SS.twUpdate ss (\tws -> tw : tws)
 
     -- enable events
     SC.scnSetEventHandler scn $ callback tw
     SC.scnEnableEvents scn
     SC.scnSetSavePoint scn
-
-    -- update mutable project
-    SS.prUpdate ss (\pr -> SS.prSetFiles pr (sf:(SS.prFiles pr)))
-       
-    return (sf)
+      
+    return tw
     
     where   newtw scn panel hwndp hwnd = (SS.createTextWindow
                                 (SS.createSourceWindowType scn)
@@ -381,4 +354,5 @@ newFile ss callback = do
                                     (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
                                 ]
                                 (SC.scnGetFocus scn)
+                                (SC.scnIsClean scn)
                                 Nothing)

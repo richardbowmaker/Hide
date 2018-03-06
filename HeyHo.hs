@@ -135,8 +135,8 @@ setUpMainWindow mf sf = do
     menus <- setupMenus mf 
 
     -- create the session data
-    ss <- ssCreate mf am enb (prCreate []) menus sf onb oe scn 
-    
+    ss <- ssCreate mf am enb menus sf onb oe scn 
+  
     -- add blank file to editor
     FM.newFile ss (scnCallback ss)
     
@@ -321,7 +321,7 @@ withCurrentEvent :: (Event () -> IO ()) -> IO ()
     return ()
 
 onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
-onOutputTabClose ss _ = GH.closeWindow ss
+onOutputTabClose ss _ = GH.closeWindow ss 
   
 onFileClose :: Session -> IO ()
 onFileClose ss = do
@@ -376,14 +376,8 @@ onFileNew ss = do
     return ()
  
 ------------------------------------------------------------    
--- Edit Menu handlers
+-- Test Menu handlers
 ------------------------------------------------------------    
- 
-ifEditorHasFocus :: Session -> (SourceFile -> IO ()) -> IO ()
-ifEditorHasFocus ss action = do
-    sf <- enbGetSelectedSourceFile ss
-    f <- (scnGetFocus . sfEditor ) sf
-    if f then action sf else return ()
  
 onTestTest :: Session -> IO ()
 onTestTest ss = do 
@@ -457,8 +451,8 @@ onBuildGhci ss = do
             Nothing -> return () 
     else return ()
 
-ghciComplete :: Session -> SourceFile -> IO ()
-ghciComplete ss sf = do
+ghciComplete :: Session -> TextWindow -> IO ()
+ghciComplete ss tw = do
     set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
     set (ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
     set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
@@ -470,7 +464,7 @@ ghciComplete ss sf = do
         _  -> do
             ans <- proceedDialog (ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
             case ans of
-                True -> GH.openWindowFile ss sf (ghciCallback ss)
+                True -> GH.openWindowFile ss tw (ghciCallback ss)
                 False -> return ()
 
 

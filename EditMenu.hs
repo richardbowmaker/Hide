@@ -61,8 +61,8 @@ updateEditMenus ss tw = do
                     e <- me
                     set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
-editFind :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-editFind ss tw e = do
+editFind :: SS.Session -> SC.ScnEditor -> IO ()
+editFind ss e = do
     sel <- SC.scnGetSelText e
     s <- textDialog (SS.ssFrame ss) "Find:" CN.programTitle sel
     if s /= "" then do
@@ -72,17 +72,15 @@ editFind ss tw e = do
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev
-            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (filepath tw) pos)
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s p pos)
             return ()
         else do
             infoDialog (SS.ssFrame ss) CN.programTitle "Not found" 
             return ()
     else return ()
 
-    where filepath tw =  maybe ("") id (SS.twFilePath tw)
-
-editFindForward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-editFindForward ss tw e = do
+editFindForward :: SS.Session -> SC.ScnEditor -> IO ()
+editFindForward ss e = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
@@ -93,18 +91,16 @@ editFindForward ss tw e = do
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev
-            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s p (SS.ftStartPos ft))
             return ()
         else do
             infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
-            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (pos+1) (pos+1))
             return ()
     else return ()
 
-    where filepath tw =  maybe ("") id (SS.twFilePath tw)
-
-editFindBackward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-editFindBackward ss tw e = do
+editFindBackward :: SS.Session -> SC.ScnEditor -> IO ()
+editFindBackward ss e = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
@@ -115,42 +111,31 @@ editFindBackward ss tw e = do
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev
-            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (filepath tw) p (SS.ftStartFile ft) (SS.ftStartPos ft))
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s p (SS.ftStartPos ft))
             return ()
         else do
             infoDialog (SS.ssFrame ss) CN.programTitle "No more ocurrences found" 
-            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (SS.ftStartFile ft) (pos+1) (SS.ftStartFile ft) (pos+1))
+            atomically $ writeTVar (SS.ssFindText ss) (SS.ftFindText s (pos+1) (pos+1))
             return ()
-    else return ()
+    else return () 
             
-    where filepath tw =  maybe ("") id (SS.twFilePath tw)
-
 -- editor -> find text -> last found position -> Range 1 -> Range 2
 findTextInRange :: SC.ScnEditor -> String -> Int -> (Int, Int) -> (Int, Int) -> IO Int
 findTextInRange e s pos r1 r2 = do 
-
     if (inRange pos r1) then do
-
         SC.scnSetTargetRange e (pos+1) (snd r1)
         p <- SC.scnSearchInTarget e s
-
         if p >= 0 then gotoPos e p          
         else do
-
             SC.scnSetTargetRange e (fst r2) (snd r2)
             p <- SC.scnSearchInTarget e s
-
             if p >= 0 then gotoPos e p    
             else return (-1)
-
     else if (inRange pos r2) then do
-
         SC.scnSetTargetRange e (pos+1) (snd r2)
         p <- SC.scnSearchInTarget e s
-
         if p >= 0 then gotoPos e p          
         else return (-1)
-
     else return (-1)
     
     where 

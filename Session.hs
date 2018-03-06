@@ -42,9 +42,7 @@ module Session
     FindText,
     ftFindText,
     ftText,
-    ftCurrFile,
     ftCurrPos,
-    ftStartFile,
     ftStartPos, 
 --
     createTextWindow,
@@ -83,7 +81,9 @@ module Session
     twRemoveWindow,
     twFilePathToString,
     twGetSourceFileWindow,
-    twGetEditor
+    twGetEditor,
+    twSetFilePath,
+    twUpdateWindow
 ) where
 
 
@@ -118,16 +118,16 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
                             ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
-                            ssOutput            :: SC.ScnEditor,           -- The output pane
+                            ssOutput            :: SC.ScnEditor,        -- The output pane
                             ssDebugError        :: String -> IO (),
                             ssDebugWarn         :: String -> IO (),
                             ssDebugInfo         :: String -> IO (),
                             ssMainThreadId      :: ThreadId,
                             ssCompilerReport    :: TErrors,
                             ssFindText          :: TFindText,
-                            ssTextWindows       :: TvTextWindows}
+                            ssHideWindows       :: THideWindows}
    
-data FindText = FindText { ftText :: String, ftCurrFile :: String, ftCurrPos :: Int, ftStartFile :: String, ftStartPos :: Int }
+data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
 -- compiler output channel
 type TOutput = TChan ByteString
@@ -140,22 +140,27 @@ type TFindText = TVar FindText
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
-type TvTextWindows = TVar TextWindows
-data TextWindows = TextWindows { txWindows :: [TextWindow] }
-
 data TextWindowType = SourceFile SC.ScnEditor | Ghci | Debug SC.ScnEditor | Output SC.ScnEditor
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
 
 -- | Text Window
+-- things to add return string for updating status bar, line col pos etc.
+-- close, save, save as
 data TextWindow 
     = TextWindow {  twType              :: TextWindowType,
                     twPanel             :: Panel (),            -- ^ The parent panel of text window
                     twPanelHwnd         :: HWND,                -- ^ HWND of panel
                     twHwnd              :: HWND,
-                    twMenuFunctions     :: [MenuFunction],
-                    twHasFocus          :: IO Bool,
-                    twIsClean           :: IO Bool,
                     twFilePath          :: Maybe String }       -- ^ File name associated with window
+
+data TextMenus 
+    = TextMenus {   twMenuFunctions     :: [MenuFunction],
+                    twHasFocus          :: IO Bool,
+                    twIsClean           :: IO Bool}
+
+type HideWindow = (TextWindow, TextMenus)
+data HideWindows = HideWindows { hwWindows :: [HideWindow] }
+type THideWindows = TVar HideWindows
 
 type SsNameMenuPair = (Int, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
@@ -178,12 +183,12 @@ ssCreate mf am nb ms sf ots ot db = do
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
-    tfnd <- atomically $ newTVar (FindText "" "" 0 "" 0)
+    tfnd <- atomically $ newTVar (FindText "" 0 0)
     let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
-    tws  <- atomically $ newTVar $ twCreate [] 
-    return (Session mf am nb ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd tws)
+    hws  <- atomically $ newTVar $ createHideWindows [] 
+    return (Session mf am nb ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd hws)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -335,16 +340,12 @@ compErrorToString c =
 -- Find Text
 ----------------------------------------------------------------
 
--- search string -> current file -> start file -> start pos
-ftFindText :: String -> String -> Int -> String -> Int -> FindText
-ftFindText text currFile currPos startFile startPos = (FindText text currFile currPos startFile startPos)
+ftFindText :: String -> Int -> Int -> FindText
+ftFindText text currPos startPos = (FindText text currPos startPos)
 
 ----------------------------------------------------------------
 -- Text windows
 ----------------------------------------------------------------
-
-twCreate :: [TextWindow] -> TextWindows
-twCreate tws = (TextWindows tws)
 
 createGhciWindowType :: TextWindowType
 createGhciWindowType = (Ghci)
@@ -358,85 +359,99 @@ createDebugWindowType scn = (Debug scn)
 createOutputWindowType :: SC.ScnEditor -> TextWindowType
 createOutputWindowType scn = (Output scn)
 
-createTextWindow :: TextWindowType
-                    -> Panel ()
-                    -> HWND
-                    -> HWND
-                    -> [MenuFunction]
-                    -> IO Bool      -- ^ Has focus
-                    -> IO Bool      -- ^ Is clean
-                    -> Maybe String -- ^ Filname
-                    -> TextWindow
-createTextWindow wtype panel hwndp hwnd mfs focus clean file =
-    (TextWindow wtype panel hwndp hwnd mfs focus clean file)
+createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> TextWindow
+createTextWindow wtype panel hwndp hwnd file = (TextWindow wtype panel hwndp hwnd file)
 
-twFindWindow :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
-twFindWindow ss p = do
-    tws <- atomically (readTVar $ ssTextWindows ss)
-    return $ find p $ txWindows tws
+createTextMenus :: [MenuFunction] -> IO Bool -> IO Bool -> TextMenus
+createTextMenus mfs focus clean = (TextMenus mfs focus clean)
 
-twUpdate :: Session -> ([TextWindow] -> [TextWindow]) -> IO TextWindows
-twUpdate ss f = atomically (modifyTVar ttws (\tws -> (twCreate $ f $ txWindows tws)) >> readTVar ttws) 
-    where ttws = ssTextWindows ss
+createHideWindow :: TextWindow -> TextMenus -> HideWindow
+createHideWindow tw tms = (tw, tms) 
+
+createHideWindows :: [HideWindow] -> HideWindows
+createHideWindows hws = (HideWindows hws)
+
+hwFindWindow :: Session -> (HideWindow -> Bool) -> IO (Maybe HideWindow)
+hwFindWindow ss p = do
+    hws <- atomically (readTVar $ ssHideWindows ss)
+    return $ find p $ hwWindows hws
+
+twUpdate :: Session -> ([HideWindow] -> [HideWindow]) -> IO HideWindows
+twUpdate ss f = atomically (modifyTVar thws (\hws -> (createHideWindows $ f $ hwWindows hws)) >> readTVar thws) 
+    where thws = ssHideWindows ss
 
 createMenuFunction :: Int -> IO () -> IO Bool -> MenuFunction
 createMenuFunction id mf me = (MenuFunction id mf me)
 
-twGetMenuFunction :: TextWindow -> Int -> IO ()
+twGetMenuFunction :: TextMenus -> Int -> IO ()
 twGetMenuFunction tw id = maybe (return ()) (\(MenuFunction _ mf _) -> mf)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
 
-twGetMenuEnabled :: TextWindow -> Int -> IO Bool
+twGetMenuEnabled :: TextMenus -> Int -> IO Bool
 twGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
 
-twGetFocusedWindow :: Session -> IO (Maybe TextWindow)
+twGetFocusedWindow :: Session -> IO (Maybe HideWindow)
 twGetFocusedWindow ss = do
-    tws <- atomically (readTVar $ ssTextWindows ss)
-    MI.findIO (\tw -> twHasFocus tw) $ txWindows tws
+    hws <- atomically (readTVar $ ssHideWindows ss)
+    MI.findIO (\hw -> return True {-twHasFocus tw-}) $ hwWindows hws
+
+hwHasFocus :: HideWindow -> IO Bool
+hwHasFocus hw = twHasFocus $ hwGetTextMenus hw
+
+hwGetTextWindow :: HideWindow -> TextWindow
+hwGetTextWindow (tw, _) = tw
   
+hwGetTextMenus :: HideWindow -> TextMenus
+hwGetTextMenus (_ , tms) = tms
+
 twMatchesHwnd :: TextWindow -> HWND -> Bool
 twMatchesHwnd tw h = MI.comparePtrs h (twPanelHwnd tw)
 
-twGetWindows :: Session -> IO [TextWindow]
-twGetWindows ss = do
-    tws <- atomically (readTVar $ ssTextWindows ss) 
-    return $ txWindows tws
+hwGetWindows :: Session -> IO [HideWindow]
+hwGetWindows ss = do
+    hws <- atomically (readTVar $ ssHideWindows ss) 
+    return $ hwWindows hws
 
 twIsGhci :: TextWindow -> Bool
 twIsGhci tw = case (twType tw) of
                 Ghci      -> True
                 otherwise -> False
 
-twIsSourceFile :: TextWindow -> Bool
-twIsSourceFile tw = case (twType tw) of
+hwIsSourceFile :: HideWindow -> Bool
+hwIsSourceFile hw = case twType $ hwGetTextWindow hw of
                 SourceFile _ -> True
                 otherwise    -> False
 
-twIsDebug :: TextWindow -> Bool
-twIsDebug tw = case (twType tw) of
+hwIsDebug :: HideWindow -> Bool
+hwIsDebug hw = case twType $ hwGetTextWindow hw of
                 Debug _    -> True
                 otherwise -> False
 
-twIsOutput :: TextWindow -> Bool
-twIsOutput tw = case (twType tw) of
+hwIsOutput :: HideWindow -> Bool
+hwIsOutput hw = case twType $ hwGetTextWindow hw of
                 Output _  -> True
                 otherwise -> False
 
-twIsSameWindow :: TextWindow -> TextWindow -> Bool
-twIsSameWindow tw1 tw2 = (twPanelHwnd tw1) == (twPanelHwnd tw2)
+hwFilePath :: HideWindow -> Maybe String
+hwFilePath hw = twFilePath $ hwGetTextWindow hw
 
-twIsSameFile :: TextWindow -> TextWindow -> Bool
-twIsSameFile tw1 tw2 = fmap (map toLower) (twFilePath tw1) == fmap (map toLower) (twFilePath tw2)
+hwIsSameWindow :: HideWindow -> HideWindow -> Bool
+hwIsSameWindow hw1 hw2 = (twPanelHwnd $ hwGetTextWindow hw1) == (twPanelHwnd $ hwGetTextWindow hw2)
 
-twGetSourceFileWindow :: Session -> String -> IO (Maybe TextWindow)
-twGetSourceFileWindow ss fp = 
-    twFindWindow ss (\tw -> (twIsSourceFile tw) && (fmap (map toLower) (twFilePath tw) == Just ((map toLower) fp)))
+hwIsSameFile :: HideWindow -> HideWindow -> Bool
+hwIsSameFile hw1 hw2 = fmap (map toLower) (twFilePath $ hwGetTextWindow hw1) == fmap (map toLower) (hwFilePath hw2)
 
-twRemoveWindow :: Session -> TextWindow -> IO TextWindows
-twRemoveWindow ss tw = twUpdate ss (\tws -> MI.findAndRemove (\tw' -> twIsSameWindow tw tw') tws)
+hwGetSourceFileWindow :: Session -> String -> IO (Maybe HideWindow)
+hwGetSourceFileWindow ss fp = 
+    hwFindWindow ss (\hw -> (hwIsSourceFile hw) && (fmap (map toLower) (hwFilePath hw) == Just ((map toLower) fp)))
 
-twUpdateTextWindows :: Session -> (TextWindow -> TextWindow) -> IO TextWindows
-twUpdateTextWindows ss f = atomically (modifyTVar tws (\ws -> twCreate $ map f (txWindows ws)) >> readTVar tws)
-    where tws = ssTextWindows ss
+hwRemoveWindow :: Session -> HideWindow -> IO HideWindows
+hwRemoveWindow ss hw = twUpdate ss (\hws -> MI.findAndRemove (\hw' -> hwIsSameWindow hw hw') hws)
+
+hwUpdateTextWindows :: Session -> ([HideWindow] -> [HideWindow]) -> IO HideWindows
+hwUpdateTextWindows ss f = atomically (modifyTVar thws (\hws -> f $ hwWindows hws) >> readTVar thws)
+    where   thws = ssHideWindows ss
+            fn :: [HideWindow] -> [HideWindow]
+            
 
 twFilePathToString :: TextWindow -> String                        
 twFilePathToString tw = maybe "" id (twFilePath tw)
@@ -445,7 +460,17 @@ twGetEditor :: TextWindow -> Maybe SC.ScnEditor
 twGetEditor tw = 
     case twType tw of
         (SourceFile scn) -> Just scn
-        (Debug scn)      -> Just scn
-        (Output scn)     -> Just scn
         _                -> Nothing
 
+twSetFilePath :: TextWindow -> String -> Maybe TextWindow
+twSetFilePath (TextWindow type'@(SourceFile scn) p phwnd hwnd menus focus clean _) fp = 
+    Just $ createTextWindow type' p phwnd hwnd menus focus clean (Just fp)
+twSetFilePath _ _ = Nothing
+
+{-
+-- updates the mutable project data to include the modified text window                       
+twUpdateWindow :: Session -> TextWindow -> IO TextWindows                        
+twUpdateWindow ss tw' = do
+    tws' <- twUpdate ss (\hws -> MI.findAndUpdate1 (\(tw, tms) -> twIsSameWindow tw tw') tws (tw')
+    return tws'
+-}
