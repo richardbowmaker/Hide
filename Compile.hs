@@ -35,11 +35,108 @@ import System.Process.Common
 
 -- project imports
 import qualified Constants as CN
-import Misc
-import Session
+import qualified FileMenu as FM
+import qualified Ghci as GH
+import qualified Misc as MI
+import qualified OutputPane as OT
+import qualified Scintilla as SC
+import qualified Session as SS
+
+------------------------------------------------------------    
+-- Build Menu handlers
+------------------------------------------------------------    
+    
+onBuildBuild :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onBuildBuild ss tw scn = do
+
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
+
+    -- save file first
+    ans <- FM.fileSave ss tw scn
+    if ans then do
+        -- get again in case filename changed
+        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
+        case mhw of
+            Just hw -> do
+                case SS.hwFilePath hw of
+                    Just fp -> cpBuildProject ss fp (Just $ compileComplete ss)
+                    Nothing -> return ()
+            Nothing -> do
+                    SS.ssDebugError ss "onBuildBuild:: no file name set"
+    else return ()
+    
+onBuildCompile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onBuildCompile ss tw scn = do
+
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+
+    -- save file first
+    ans <- FM.fileSave ss tw scn 
+    if ans then do
+        -- get again in case filename changed
+        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
+        case mhw of
+            Just hw -> do
+                case SS.hwFilePath hw of
+                    Just fp -> cpCompileFile ss fp (Just $ compileComplete ss)
+                    Nothing -> return ()
+            Nothing -> do
+                    SS.ssDebugError ss "onBuildCompile:: no file name set"
+    else return ()
+               
+compileComplete :: SS.Session -> IO ()
+compileComplete ss = do
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
+    set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
+    OT.addText ss $ BS.pack "Compile complete\n"
+    return ()
+
+onBuildGhci :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onBuildGhci ss tw scn= do
+
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+
+   -- save file first
+    ans <- FM.fileSave ss tw scn 
+    if ans then do
+        -- get again in case filename changed
+        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
+        case mhw of
+            Just hw -> do
+                case SS.hwFilePath hw of
+                    Just fp -> cpCompileFile ss fp (Just $ ghciComplete ss hw)
+                    Nothing -> return ()
+            Nothing -> do
+                    SS.ssDebugError ss "onBuildGhci:: no file name set"
+    else return ()
+
+ghciComplete :: SS.Session -> SS.HideWindow -> IO ()
+ghciComplete ss hw = do
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
+    OT.addText ss $ BS.pack "Compile complete\n"
+
+    ces <- atomically $ readTVar $ SS.ssCompilerReport ss
+    case ces of
+        [] -> GH.openWindowFile ss $ SS.hwWindow hw 
+        _  -> do
+            ans <- proceedDialog (SS.ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
+            case ans of
+                True -> GH.openWindowFile ss $ SS.hwWindow hw 
+                False -> return ()
 
 -- | Build the project
-cpBuildProject ::   Session             -- ^ The HIDE session
+cpBuildProject ::   SS.Session             -- ^ The HIDE session
                     -> String           -- ^ Filename of project to build
                     -> Maybe (IO ())    -- ^ Optional function called on completion in GUI thread
                     -> IO ()            
@@ -47,10 +144,10 @@ cpBuildProject ss fp mfinally = do
    
 -- ghc -fasm -L. -lScintillaProxy -threaded -o %1 %1.hs
 
-    ssDebugInfo ss $ "Start build: " ++ fp
+    SS.ssDebugInfo ss $ "Start build: " ++ fp
 
-    otClear ss
-    otAddLine ss $ BS.pack "Build started ..."
+    OT.clear ss
+    OT.addLine ss $ BS.pack "Build started ..."
 
     --  delete old object file
     result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
@@ -59,20 +156,20 @@ cpBuildProject ss fp mfinally = do
         ss
         ["-fasm", "-L.", "-lScintillaProxy", "-threaded", "-o", Win.dropExtension fp, fp] 
         "D:\\_Rick's\\haskell\\Hide"
-        (ssTOutput ss) -- stdout goes to TOutput
+        (SS.ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()
   
 -- | compile the specified file
 -- optional final function called in GUI thread on completion  
-cpCompileFile :: Session -> String -> Maybe (IO ()) -> IO ()
+cpCompileFile :: SS.Session -> String -> Maybe (IO ()) -> IO ()
 cpCompileFile ss fp mfinally = do
 
-    ssDebugInfo ss $ "Start compile: " ++ fp
+    SS.ssDebugInfo ss $ "Start compile: " ++ fp
 
-    otClear ss
-    otAddLine ss $ BS.pack "Compile started ..."
+    OT.clear ss
+    OT.addLine ss $ BS.pack "Compile started ..."
 
     --  delete old object file
     result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
@@ -81,12 +178,12 @@ cpCompileFile ss fp mfinally = do
         ss
         ["-c", fp] 
         "D:\\_Rick's\\haskell\\Hide"
-        (ssTOutput ss) -- stdout goes to TOutput
+        (SS.ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()
  
-cpCompileFileDone :: Session -> Maybe (IO ()) -> [CompError] -> IO ()
+cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> [SS.CompError] -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
     if length ces == 0 then
@@ -95,20 +192,20 @@ cpCompileFileDone ss mfinally ces = do
         outStr $ "\n" ++ (show $ length ces) ++ " errors\n"
 
     -- save compilation results to session
-    atomically $ writeTVar (ssCompilerReport ss) ces
+    atomically $ writeTVar (SS.ssCompilerReport ss) ces
 
     -- schedule GUI finally function
-    maybe (return ()) (\f-> atomically $ writeTChan (ssCFunc ss) f) mfinally
+    maybe (return ()) (\f-> atomically $ writeTChan (SS.ssCFunc ss) f) mfinally
 
     return ()
 
-    where outStr s = atomically $ writeTChan (ssTOutput ss) $ BS.pack s
+    where outStr s = atomically $ writeTChan (SS.ssTOutput ss) $ BS.pack s
 
 
-cpDebugRun :: Session -> String -> IO ()
+cpDebugRun :: SS.Session -> String -> IO ()
 cpDebugRun ss fp = do
 
-    ssDebugInfo ss $ "Start run: " ++ fp
+    SS.ssDebugInfo ss $ "Start run: " ++ fp
 
     --  check .exe file exists
     let exe = (Win.dropExtension fp) ++ ".exe"
@@ -118,17 +215,17 @@ cpDebugRun ss fp = do
     if b then do
         catchIOError
             (createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)} >> return ())
-            (\err -> ssDebugError ss $ show err)
+            (\err -> SS.ssDebugError ss $ show err)
         return ()
-    else infoDialog (ssFrame ss) CN.programTitle $ "File: " ++ exe ++ " does not exist"
+    else infoDialog (SS.ssFrame ss) CN.programTitle $ "File: " ++ exe ++ " does not exist"
 
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function
-runGHC :: Session -> [String] -> String -> TOutput -> Maybe ([CompError] -> IO ()) -> IO ()
+runGHC :: SS.Session -> [String] -> String -> SS.TOutput -> Maybe ([SS.CompError] -> IO ()) -> IO ()
 runGHC ss args dir cerr mfinally = do
     
-    ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
+    SS.ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
     (hr, hw) <- createPipe
 
@@ -136,19 +233,19 @@ runGHC ss args dir cerr mfinally = do
         {cwd = Just dir, std_out = UseHandle hw, std_err = UseHandle hw}
 
     -- stream compiler output to output pane
-    s <- captureOutput ss hr (ssTOutput ss) ""
+    s <- captureOutput ss hr (SS.ssTOutput ss) ""
 
     waitForProcess ph
 
     case (P.parse errorFile "" s) of
-        Left _   -> ssDebugError ss "Parse of compilation errors failed"
+        Left _   -> SS.ssDebugError ss "Parse of compilation errors failed"
         Right es -> do
-            ssDebugInfo ss $ "parsed ok"           
+            SS.ssDebugInfo ss $ "parsed ok"           
             maybe (return ()) (\f -> f es) mfinally
 
 -- captures output from handle, wrtes to the output pane and returns
 -- the captured data
-captureOutput :: Session -> Handle -> TChan BS.ByteString -> String -> IO String
+captureOutput :: SS.Session -> Handle -> TChan BS.ByteString -> String -> IO String
 captureOutput ss h tot str = do
     eof <- hIsEOF h
     if eof then do
@@ -163,20 +260,20 @@ captureOutput ss h tot str = do
 -- compiler output parser
 ------------------------------------------
 
-errorFile :: P.GenParser Char () [CompError]
+errorFile :: P.GenParser Char () [SS.CompError]
 errorFile = do
     errs <- P.many (P.try fileError)
     P.optional linkLine
     return errs
 
-fileError :: P.GenParser Char () CompError
+fileError :: P.GenParser Char () SS.CompError
 fileError = do
     P.optional fileTitle
     P.string eol
     pos <- P.getPosition
     (fn, el, ec) <- fileName
     els <- errorDesc
-    return $ ceCompError fn el ec (P.sourceLine pos) els
+    return $ SS.ceCompError fn el ec (P.sourceLine pos) els
 
 fileDrive :: P.GenParser Char () String
 fileDrive = do

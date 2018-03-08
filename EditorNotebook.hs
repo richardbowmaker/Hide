@@ -56,32 +56,32 @@ enbGetSelectedTabHwnd ss = do
     return hp
  
 -- returns the source file for the currently selected tab
-enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.TextWindow)
+enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.HideWindow)
 enbGetSelectedSourceFile ss = do  
-    tws <- SS.twGetWindows ss
+    hws <- SS.hwGetWindows ss
     hp <- enbGetSelectedTabHwnd ss   
-    return $ find (\tw -> SS.twMatchesHwnd tw hp) tws
+    return $ find (\hw -> SS.hwMatchesHwnd hw hp) hws
  
 -- returns true if the source file of the currently selected tab is clean 
 enbSelectedSourceFileIsClean :: SS.Session -> IO Bool
 enbSelectedSourceFileIsClean ss = 
-    enbGetSelectedSourceFile ss >>= maybe (return True) (\tw -> SS.twIsClean tw) 
+    enbGetSelectedSourceFile ss >>= maybe (return True) (\tw -> SS.hwIsClean tw) 
  
 enbSelectTab :: SS.Session -> SS.TextWindow -> IO (Bool)
-enbSelectTab ss sf = do
+enbSelectTab ss tw = do
     let nb = SS.ssEditors ss
-    mix <- enbGetTabIndex ss sf
+    mix <- enbGetTabIndex ss tw
     case mix of
         Just ix -> do
             auiNotebookSetSelection nb ix
-            return (True)            
-        Nothing -> return (False)
+            return True            
+        Nothing -> return False
 
 enbCloseTab :: SS.Session -> SS.TextWindow -> IO ()
-enbCloseTab ss sf = do
+enbCloseTab ss tw = do
     let nb = SS.ssEditors ss
-    mix <- enbGetTabIndex ss sf
-    case (mix) of
+    mix <- enbGetTabIndex ss tw
+    case mix of
         Just ix -> do
             auiNotebookSetSelection nb ix
             auiNotebookRemovePage nb ix
@@ -109,7 +109,7 @@ enbSetTabText ss tw = do
     mix <- enbGetTabIndex ss tw
     case mix of
         Just ix -> do
-            case (SS.twFilePath tw) of
+            case SS.twFilePath tw of
                 Just fp -> do
                     auiNotebookSetPageText (SS.ssEditors ss) ix $ takeFileName fp
                     return ()

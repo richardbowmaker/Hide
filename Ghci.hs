@@ -16,8 +16,7 @@ module Ghci
     eventGotFocus,
     eventLostFocus,
     eventSelectionSet,
-    eventSelectionClear,
-    eventHandler,
+    eventSelectionClear
 ) where 
     
 import Control.Concurrent 
@@ -65,8 +64,8 @@ foreign import ccall safe "wrapper" createCallback ::
 
 --------------------------------------------------------------------------
 
-openWindowFile :: SS.Session -> SS.TextWindow -> (SS.TextWindow -> Int -> IO ()) -> IO ()
-openWindowFile ss ftw eh = do
+openWindowFile :: SS.Session -> SS.TextWindow -> IO ()
+openWindowFile ss ftw = do
     mtw <- SS.twFindWindow ss (\tw -> (SS.twIsGhci tw) && (SS.twIsSameFile ftw tw)) 
     case mtw of
         Just tw -> do
@@ -82,59 +81,25 @@ openWindowFile ss ftw eh = do
                     mw <- open ss fp                 
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
-                                let tw = newtw panel hwndp hwnd fp
-                                SS.twUpdate ss (\tws -> tw : tws)
-                                setEventHandler tw eh
+                                let hw = createHideWindow panel hwndp hwnd (Just fp)
+                                SS.hwUpdate ss (\hws -> hw : hws)
+                                setEventHandler ss hw
                                 enableEvents hwnd
                                 return ()
                         Nothing -> return ()
                 Nothing -> return ()
 
-    where   newtw panel hwndp hwnd fp = (SS.createTextWindow
-                                SS.createGhciWindowType
-                                panel
-                                hwndp
-                                hwnd
-                                [   
-                                    (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
-                                    (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
-                                    (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
-                                    (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
-
-                                ]
-                                (hasFocus hwnd)
-                                (return True)
-                                (Just fp))
-
-
-
-openWindow :: SS.Session -> (SS.TextWindow -> Int -> IO ()) -> IO ()
-openWindow ss eh = do
+openWindow :: SS.Session -> IO ()
+openWindow ss = do
     m <- open ss "" 
     case m of
         Just (panel, hwndp, hwnd) -> do
-            let tw = newtw panel hwndp hwnd
-            SS.twUpdate ss (\tws -> tw : tws)
-            setEventHandler tw eh
+            let hw = createHideWindow panel hwndp hwnd Nothing
+            SS.hwUpdate ss (\hws -> hw : hws)
+            setEventHandler ss hw
             enableEvents hwnd
             return ()
         Nothing -> return ()
-
-   where   newtw panel hwndp hwnd = (SS.createTextWindow
-                                SS.createGhciWindowType
-                                panel
-                                hwndp
-                                hwnd
-                                [   
-                                    (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
-                                    (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
-                                    (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
-                                    (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
-
-                                ]
-                                (hasFocus hwnd)
-                                (return True)
-                                Nothing)
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
 open ss fp = do
@@ -168,6 +133,21 @@ closeWindow ss tw = do
     SS.twRemoveWindow ss tw
     return ()
 
+createHideWindow :: Panel() -> HWND -> HWND -> Maybe String -> SS.HideWindow
+createHideWindow panel phwnd hwnd mfp = SS.createHideWindow tw tms
+
+    where   tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
+            tms = SS.createTextMenus 
+                    [ 
+                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
+                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
+                    ]
+                    (hasFocus hwnd)
+                    (return True)
+                    (return "")
+
 sendCommand :: HWND -> String -> IO ()
 sendCommand hwnd cmd = withCString cmd (\cs -> c_GhciSendCommand hwnd cs) >> return ()
 
@@ -193,14 +173,11 @@ hasFocus h = do
         b <- c_GhciHasFocus h
         return (b /= 0)
 
-setEventHandler :: SS.TextWindow -> (SS.TextWindow -> Int -> IO ()) -> IO ()
-setEventHandler tw eh = do
-    cb <- createCallback (eventHandler $ eh tw)
-    c_GhciSetEventHandler (SS.twPanelHwnd tw) cb    
+setEventHandler :: SS.Session -> SS.HideWindow -> IO ()
+setEventHandler ss hw = do
+    cb <- createCallback (callback ss hw)
+    c_GhciSetEventHandler (SS.hwGetPanelHwnd hw) cb    
     return ()
-
-eventHandler :: (Int -> IO ()) -> HWND -> Int -> IO ()
-eventHandler f h n = f n
 
 enableEvents :: HWND -> IO ()
 enableEvents = c_GhciEnableEvents
@@ -208,6 +185,47 @@ enableEvents = c_GhciEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = c_GhciDisableEvents
 
+callback :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
+callback ss hw hwnd n 
+    | n == eventGotFocus = do
+            setm ss tms CN.menuFileClose        
+            setm ss tms CN.menuFileCloseAll        
+            setm ss tms CN.menuFileSave        
+            setm ss tms CN.menuFileSaveAs        
+            setm ss tms CN.menuFileSaveAll        
+            setm ss tms CN.menuEditUndo          
+            setm ss tms CN.menuEditRedo          
+            setm ss tms CN.menuEditCut           
+            setm ss tms CN.menuEditCopy          
+            setm ss tms CN.menuEditPaste         
+            setm ss tms CN.menuEditSelectAll     
+            setm ss tms CN.menuEditFind          
+            setm ss tms CN.menuEditFindForward   
+            setm ss tms CN.menuEditFindBackward  
+    | otherwise = do
+            setm' ss CN.menuFileClose         (return False) (return ())
+            setm' ss CN.menuFileCloseAll      (return False) (return ())
+            setm' ss CN.menuFileSave          (return False) (return ())
+            setm' ss CN.menuFileSaveAs        (return False) (return ())
+            setm' ss CN.menuFileSaveAll       (return False) (return ())
+            setm' ss CN.menuEditUndo          (return False) (return ())
+            setm' ss CN.menuEditCut           (return False) (return ())
+            setm' ss CN.menuEditCopy          (return False) (return ())
+            setm' ss CN.menuEditPaste         (return False) (return ())
+            setm' ss CN.menuEditSelectAll     (return False) (return ())
+            setm' ss CN.menuEditFind          (return False) (return ())
+            setm' ss CN.menuEditFindForward   (return False) (return ())
+            setm' ss CN.menuEditFindBackward  (return False) (return ())
+
+        where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
+                setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)
+ 
+                setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
+                setm' ss mid me mf = do 
+                    e <- me
+                    set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
+
+                tms = SS.hwMenus hw
 
 eventGotFocus :: Int
 eventGotFocus = 1
@@ -220,4 +238,7 @@ eventSelectionSet = 3
 
 eventSelectionClear :: Int
 eventSelectionClear = 4
+
+eventClosed :: Int
+eventClosed = 5
 

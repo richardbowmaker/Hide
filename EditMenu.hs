@@ -28,7 +28,7 @@ import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
 
-updateEditMenus :: SS.Session -> SS.TextWindow -> IO ()
+updateEditMenus :: SS.Session -> SS.TextMenus -> IO ()
 updateEditMenus ss tw = do
 
         f <- SS.twHasFocus tw 
@@ -53,22 +53,22 @@ updateEditMenus ss tw = do
             setm' ss CN.menuEditFindForward   (return False) (return ())
             setm' ss CN.menuEditFindBackward  (return False) (return ())
 
-        where   setm :: SS.Session -> SS.TextWindow -> Int -> IO ()
-                setm ss tw mid = setm' ss mid (SS.twGetMenuEnabled tw mid) (SS.twGetMenuFunction tw mid)
+        where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
+                setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)
  
                 setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
                 setm' ss mid me mf = do 
                     e <- me
                     set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
-editFind :: SS.Session -> SC.ScnEditor -> IO ()
-editFind ss e = do
-    sel <- SC.scnGetSelText e
+editFind :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFind ss tw scn = do
+    sel <- SC.scnGetSelText scn
     s <- textDialog (SS.ssFrame ss) "Find:" CN.programTitle sel
     if s /= "" then do
-        pos <- SC.scnGetCurrentPos e
-        len <- SC.scnGetTextLen e
-        p <- findTextInRange e s pos (pos, len) (0, (pos + (length s) -1))
+        pos <- SC.scnGetCurrentPos scn
+        len <- SC.scnGetTextLen scn
+        p <- findTextInRange scn s pos (pos, len) (0, (pos + (length s) -1))
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev
@@ -79,15 +79,15 @@ editFind ss e = do
             return ()
     else return ()
 
-editFindForward :: SS.Session -> SC.ScnEditor -> IO ()
-editFindForward ss e = do
+editFindForward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFindForward ss tw scn = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
         -- set search range from current pos to end of doc
-        pos <- SC.scnGetCurrentPos e
-        len <- SC.scnGetTextLen e
-        p <- findTextInRange e s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
+        pos <- SC.scnGetCurrentPos scn
+        len <- SC.scnGetTextLen scn
+        p <- findTextInRange scn s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev
@@ -99,15 +99,15 @@ editFindForward ss e = do
             return ()
     else return ()
 
-editFindBackward :: SS.Session -> SC.ScnEditor -> IO ()
-editFindBackward ss e = do
+editFindBackward :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+editFindBackward ss tw scn = do
     ft <- atomically $ readTVar (SS.ssFindText ss)
     let s = (SS.ftText ft)
     if (s /= "") then do
         -- set search range from current pos to end of doc
-        pos <- SC.scnGetCurrentPos e
-        len <- SC.scnGetTextLen e
-        p <- findTextInRange e s pos (((SS.ftStartPos ft) + (length s) -1), 0) ((len, SS.ftStartPos ft))
+        pos <- SC.scnGetCurrentPos scn
+        len <- SC.scnGetTextLen scn
+        p <- findTextInRange scn s pos (((SS.ftStartPos ft) + (length s) -1), 0) ((len, SS.ftStartPos ft))
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev

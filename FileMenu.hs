@@ -1,25 +1,17 @@
 module FileMenu
 (
-    updateSaveMenus,
-    openSourceFileEditor,
-    setSourceFileFocus,
-    writeSourceFileEditor,
-    updateStatus,
-    writeSourceFile,
-    fileSaveAs,         
-    fileSave,
-    fileSaveAll,
-    fileClose,
-    fileCloseAll,
-    fileOpen,
     closeTab,
     closeEditor,
-    newFile
+    onFileOpen,
+    onFileNew,
+    fileCloseAll,
+    fileSave
 ) where 
     
 import Control.Concurrent 
 import Control.Concurrent.STM
-import Control.Monad (liftM) 
+import Control.Monad (liftM)
+import Data.Bits ((.&.)) 
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
 import Data.List (find, findIndex)
@@ -38,41 +30,133 @@ import qualified Constants as CN
 import qualified EditMenu as EM
 import qualified EditorNotebook as EN
 import qualified Misc as MI
+import qualified OutputPane as OP
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
 
--- updates the enabled state of the Save, SaveAs and SaveAll menus                                
-updateSaveMenus :: SS.Session -> IO ()   
-updateSaveMenus ss = do
- 
-    tws <- SS.twGetWindows ss
-    
-    if (length tws > 0) then do
-    
-        ic <- EN.enbSelectedSourceFileIsClean ss       
-        set (SS.ssMenuListGet ss CN.menuFileSave)      [enabled := not ic]        
-        set (SS.ssMenuListGet ss CN.menuFileSaveAs)    [enabled := True]       
-        b <- allFilesClean tws
-        set (SS.ssMenuListGet ss CN.menuFileSaveAll)   [enabled := not b]
-        set (SS.ssMenuListGet ss CN.menuFileClose)     [enabled := True]
-        set (SS.ssMenuListGet ss CN.menuFileCloseAll)  [enabled := True]    
+
+openSourceFileEditor :: SS.Session -> String -> IO (SS.HideWindow, SC.ScnEditor)
+openSourceFileEditor ss fp = do
+
+    let nb = SS.ssEditors ss
+
+    -- create panel with scintilla editor inside
+    p <- panel nb []
+    hwnd <- windowGetHandle p
+    scn <- SC.scnCreateEditor hwnd
+    SC.scnConfigureHaskell scn
+
+    -- add panel to notebook
+    auiNotebookAddPage nb p (takeFileName fp) False 0
+    ta <- auiSimpleTabArtCreate
+    auiNotebookSetArtProvider nb ta
+
+    -- add text window to project
+    let hw = createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) (Just fp)
+    SS.hwUpdate ss (\hws -> hw : hws)
+
+    -- enable events
+    SC.scnSetEventHandler scn $ scnCallback ss hw scn
+    SC.scnEnableEvents scn
+         
+    -- set focus to new page
+    ix <- auiNotebookGetPageIndex nb p
+    auiNotebookSetSelection nb ix 
+
+    return (hw, scn)
+
+createHideWindow :: SS.Session -> SC.ScnEditor -> Panel() -> HWND -> HWND -> Maybe String -> SS.HideWindow
+createHideWindow ss scn panel phwnd hwnd mfp = SS.createHideWindow tw tms
+
+    where   tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
+            tms = SS.createTextMenus
+                    [
+                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)         (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)             (return True)),
+                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)          (liftM not $ SC.scnIsClean scn)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)        (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)              (liftM not $ allFilesClean ss)),
+                        (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
+                        (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
+                        (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
+                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
+                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
+                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True))
+                    ]
+                    (SC.scnGetFocus scn)
+                    (SC.scnIsClean scn)
+                    (getStatusInfo scn)
+
+
+-- File Open
+onFileOpen :: SS.Session -> IO ()
+onFileOpen ss = do
+    let mf = SS.ssFrame ss                     -- wxFD_OPEN wxFD_FILE_MUST_EXIST
+    fd <- fileDialogCreate mf "Open file" "." "" "*.hs" (Point 100 100) 0x11
+    ans <- dialogShowModal fd
+    if ans == wxID_OK
+    then do
+        fp <- fileDialogGetPath fd 
+        fileOpen ss fp   
         return ()
-        
-    else do
-    
-        set (SS.ssMenuListGet ss CN.menuFileSave)      [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuFileSaveAs)    [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuFileClose)     [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuFileCloseAll)  [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuFileSaveAll)   [enabled := False]
+    else
         return ()
-       
-    where allFilesClean tws = MI.doWhileTrueIO (\tw -> SS.twIsClean tw) tws
+
+onFileNew :: SS.Session -> IO ()
+onFileNew ss = do
+    hw <- newFile ss 
+    EN.enbSelectTab ss $ SS.hwWindow hw      
+    return ()
+
+onFileClose :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onFileClose ss tw scn = fileClose ss tw scn >> return ()
+
+onFileCloseAll :: SS.Session -> IO ()
+onFileCloseAll ss = fileCloseAll ss >> return ()
+
+onFileSave :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onFileSave ss tw scn = fileSave ss tw scn >> return ()
+
+onFileSaveAll :: SS.Session -> IO ()
+onFileSaveAll ss = fileSaveAll ss >> return ()
+
+onFileSaveAs :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+onFileSaveAs ss tw scn = fileSaveAs ss tw scn >> return ()
+
+newFile :: SS.Session -> IO SS.HideWindow  
+newFile ss = do
+    
+    let nb = SS.ssEditors ss
+
+    -- create panel with scintilla editor inside
+    p <- panel nb []
+    hwnd <- windowGetHandle p
+    scn <- SC.scnCreateEditor hwnd
+    SC.scnConfigureHaskell scn
+
+    -- add panel to notebook
+    auiNotebookAddPage nb p "..." False 0
+
+    let hw = createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) Nothing
+    SS.hwUpdate ss (\hws -> hw : hws)
+
+    -- enable events
+    SC.scnSetEventHandler scn $ scnCallback ss hw scn
+    SC.scnEnableEvents scn
+    SC.scnSetSavePoint scn
+      
+    return hw
    
+allFilesClean :: SS.Session -> IO Bool
+allFilesClean ss = SS.hwFindWindows ss SS.hwIsSourceFile >>= MI.doWhileTrueIO SS.hwIsClean 
+
 closeEditor :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
 closeEditor ss tw scn = do
-    ic <- SS.twIsClean tw           
+    ic <- SC.scnIsClean scn          
     if ic then do                       
         closeTab ss tw scn        
         return True
@@ -85,7 +169,7 @@ closeEditor ss tw scn = do
             True                        
         if b then do                   
            -- save file
-            b <- fileSave ss tw                  
+            b <- fileSave ss tw scn                 
             if b then do                   
                 closeTab ss tw scn        
                 return True
@@ -102,77 +186,72 @@ closeTab ss tw scn = do
     SC.scnClose scn    
     -- remove source file from project
     SS.twRemoveWindow ss tw    
-    -- update status bar
-    updateStatus ss    
+    -- clear status bar
+    updateStatus ss ""    
     return ()
 
-fileOpen :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> String -> IO ()
-fileOpen ss callback fp = do
-    mtw <- SS.twGetSourceFileWindow ss fp
-    case mtw of
-        Just tw -> setSourceFileFocus ss fp -- just set focus to editor
+fileOpen :: SS.Session -> String -> IO ()
+fileOpen ss fp = do
+    mhw <- SS.hwFindSourceFileWindow ss fp
+    case mhw of
+        Just hw -> setSourceFileFocus ss fp -- just set focus to editor
         Nothing -> do       
             -- existing file so add to list, create window and set focus
-            (tw, scn) <- openSourceFileEditor ss fp callback 
-            writeSourceFileEditor ss tw scn         
+            (hw, scn) <- openSourceFileEditor ss fp
+            writeSourceFileEditor ss hw scn         
 
-fileCloseAll :: SS.Session -> IO ()
-fileCloseAll ss = do 
-    SS.twGetWindows ss >>= MI.doWhileTrueIO (fileClose ss)
-    updateSaveMenus ss    
-    return ()
+fileCloseAll :: SS.Session -> IO Bool
+fileCloseAll ss = SS.hwFindWindows ss SS.hwIsSourceFile >>= MI.doWhileTrueIO (\hw -> do
+                        case SS.hwGetEditor hw of 
+                            Just scn -> fileClose ss (SS.hwWindow hw) scn
+                            Nothing  -> do
+                                SS.ssDebugError ss "fileSaveAll:: no scintilla editor for source file"
+                                return True)
 
-fileClose :: SS.Session -> SS.TextWindow -> IO Bool
-fileClose ss tw = do
-    case SS.twGetEditor tw of
-        Just scn -> do
-            b <- closeEditor ss tw scn   
-            if b then do   
-                -- remove page from notebook
-                mix <- EN.enbGetTabIndex ss tw 
-                case mix of
-                    Just ix -> do
-                        let nb = SS.ssEditors ss        
-                        auiNotebookDeletePage nb ix  
-                        return True
-                    Nothing -> do
-                        SS.ssDebugError ss "fileClose, no tab for source file"
-                        return True       
-            else return False
-        Nothing -> do
-            SS.ssDebugError ss "fileClose, text window does not have scintilla editor"
-            return False
-    
-fileSaveAll :: SS.Session -> IO (Bool)
-fileSaveAll ss = do
-    b <- SS.twGetWindows ss >>= MI.doWhileTrueIO (fileSave ss)
-    return b
+fileClose :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
+fileClose ss tw scn = do
+    b <- closeEditor ss tw scn   
+    if b then do   
+        -- remove page from notebook
+        mix <- EN.enbGetTabIndex ss tw 
+        case mix of
+            Just ix -> do
+                let nb = SS.ssEditors ss        
+                auiNotebookDeletePage nb ix  
+                return True
+            Nothing -> do
+                SS.ssDebugError ss "fileClose, no tab for source file"
+                return True       
+    else return False
 
+fileSaveAll :: SS.Session -> IO Bool
+fileSaveAll ss = SS.hwFindWindows ss SS.hwIsSourceFile >>= MI.doWhileTrueIO (\hw -> do
+                        case SS.hwGetEditor hw of 
+                            Just scn -> fileSave ss (SS.hwWindow hw) scn
+                            Nothing  -> do
+                                SS.ssDebugError ss "fileSaveAll:: no scintilla editor for source file"
+                                return True)
+  
 -- if file is dirty then writes it to file
 -- if no filename has been set then file save as is called
 -- returns false if user cancelled        
-fileSave :: SS.Session -> SS.TextWindow -> IO Bool
-fileSave ss tw = do    
-    case SS.twGetEditor tw of
-        Just scn -> do
-            ic <- SS.twIsClean tw   
-            if ic then return True
-            else       
-                case SS.twFilePath tw of
-                    Just fp -> do
-                        writeSourceFile ss tw
-                        return True            
-                    -- source file has no name, so prompt user for one
-                    Nothing -> do
-                        b <- fileSaveAs ss tw
-                        return b
-        Nothing -> do
-            SS.ssDebugError ss "fileSave, text window does not have scintilla editor"
-            return False
-                   
+fileSave :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
+fileSave ss tw scn = do    
+    ic <- SC.scnIsClean scn  
+    if ic then return True
+    else       
+        case SS.twFilePath tw of
+            Just fp -> do
+                writeSourceFile ss tw scn
+                return True            
+            -- source file has no name, so prompt user for one
+            Nothing -> do
+                b <- fileSaveAs ss tw scn
+                return b
+ 
 -- File Save As, returns False if user opted to cancel the save 
-fileSaveAs :: SS.Session -> SS.TextWindow -> IO Bool
-fileSaveAs ss tw = do   
+fileSaveAs :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
+fileSaveAs ss tw scn = do   
     -- ensure source file is displayed
     EN.enbSelectTab ss tw   
     -- prompt user for name to save to
@@ -185,16 +264,16 @@ fileSaveAs ss tw = do
         5100 -> do    
             fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
-            case SS.twSetFilePath tw fp of
-                Just tw' -> do
-                    SS.twUpdateWindow ss tw'
-                    writeSourceFile ss tw'                   
-                    -- update tab name
-                    EN.enbSetTabText ss tw'
-                    return True 
-                Nothing -> do
-                    SS.ssDebugError ss "fileSaveAs:: twSetFilePath returned nothing"
-                    return True
+            let tw' = SS.twSetFilePath tw fp 
+            SS.hwUpdateWindow ss 
+                (\hw -> if SS.twIsSameWindow tw' (SS.hwWindow hw) 
+                        then Just $ SS.createHideWindow tw' (SS.hwMenus hw) 
+                        else Nothing)
+            writeSourceFile ss tw' scn                  
+            -- update tab name
+            EN.enbSetTabText ss tw'
+            return True 
+ 
         --wxID_CANCEL -> do
         5101 -> do
             return False           
@@ -202,49 +281,31 @@ fileSaveAs ss tw = do
             return True
   
 -- writes file to disk and sets editor to clean
-writeSourceFile :: SS.Session -> SS.TextWindow -> IO ()
-writeSourceFile ss tw = do
-    case SS.twGetEditor tw of
-        Just scn -> do
-            case SS.twFilePath tw of
-                Just fp -> do
-                    SC.scnGetAllText scn >>= BS.writeFile fp
-                    SC.scnSetSavePoint scn
-                    return ()       
-                Nothing -> do
-                    -- bug, shouldn't end up here
-                    SS.ssDebugError ss "writeSourceFile:: invalid text window, no source file name"
-                    return ()
+writeSourceFile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+writeSourceFile ss tw scn= do
+    case SS.twFilePath tw of
+        Just fp -> do
+            SC.scnGetAllText scn >>= BS.writeFile fp
+            SC.scnSetSavePoint scn
+            return ()       
         Nothing -> do
-            SS.ssDebugError ss "writeSourceFile, text window does not have scintilla editor"
+            -- bug, shouldn't end up here
+            SS.ssDebugError ss "writeSourceFile:: invalid text window, no source file name"
             return ()
 
--- display line count, cursor position etc. 
-updateStatus :: SS.Session -> IO ()   
-updateStatus ss = do
-    let st = SS.ssStatus ss
-    tws <- SS.twGetWindows ss
-    if (length tws > 0) then do
-        mtw <- EN.enbGetSelectedSourceFile ss
-        case mtw of
-            Just tw -> do
-                case SS.twGetEditor tw of
-                    Just scn -> do
-                        (l, lp, dp, lc, cc) <- SC.scnGetPositionInfo scn
-                        set st [text:= (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)]
-                        return ()
-                    Nothing -> do
-                        SS.ssDebugError ss "updateStatus:: text window did not have a scintilla editor"
-            Nothing -> do
-                set st [text:= ""]
-                return ()           
-    else do
-        set st [text:= ""]
-        return ()           
+getStatusInfo :: SC.ScnEditor -> IO String   
+getStatusInfo scn = do
+    (l, lp, dp, lc, cc) <- SC.scnGetPositionInfo scn
+    return (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)  
     
-writeSourceFileEditor :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-writeSourceFileEditor ss tw scn = do
-    case SS.twFilePath tw of
+updateStatus :: SS.Session -> String -> IO ()
+updateStatus ss s = do
+    let st = SS.ssStatus ss
+    set st [text:= s]
+    
+writeSourceFileEditor :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
+writeSourceFileEditor ss hw scn = do
+    case SS.hwFilePath hw of
         Just fp -> do
             text <- BS.readFile fp
             SC.scnSetText scn text
@@ -254,105 +315,102 @@ writeSourceFileEditor ss tw scn = do
 
 setSourceFileFocus :: SS.Session -> String -> IO ()
 setSourceFileFocus ss fp = do
-    mtw <- SS.twGetSourceFileWindow ss fp
-    case mtw of
-        Just tw -> do
-            let nb = SS.ssEditors ss
+    mhw <- SS.hwFindSourceFileWindow ss fp
+    case mhw of
+        Just hw -> do
+            let tw = SS.hwWindow hw
             ix <- auiNotebookGetPageIndex nb $ SS.twPanel tw
             auiNotebookSetSelection nb ix 
             return ()
         Nothing -> return ()
 
-openSourceFileEditor :: SS.Session -> String -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO (SS.TextWindow, SC.ScnEditor)
-openSourceFileEditor ss fp callback = do
+    where   nb = SS.ssEditors ss
+            
 
-    let nb = SS.ssEditors ss
+-----------------------------------------------------------------
+-- Scintilla callback
+-----------------------------------------------------------------
 
-    -- create panel with scintilla editor inside
-    p <- panel nb []
-    hwnd <- windowGetHandle p
-    scn <- SC.scnCreateEditor hwnd
-    SC.scnConfigureHaskell scn
+scnCallback :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> SC.SCNotification -> IO ()
+scnCallback ss hw scn sn = do 
 
-    -- add panel to notebook
-    auiNotebookAddPage nb p (takeFileName fp) False 0
-    ta <- auiSimpleTabArtCreate
-    auiNotebookSetArtProvider nb ta
+    let hw1 = SC.scnNotifyGetHwnd sn -- event source HWND
+    let hw2 = MI.ptrToWord64 (SC.scnGetHwnd (SS.ssOutput ss)) -- output pane HWND
 
-    -- add text window to project
-    let tw = newtw scn p hwnd (SC.scnGetHwnd scn) fp
-    SS.twUpdate ss (\tws -> tw : tws)
+    if hw1 == hw2 then do
+        -- event from output pane
+        case (SC.scnNotifyGetCode sn) of
+            
+            2006 -> do -- sCN_DOUBLECLICK
+                OP.gotoCompileError ss (fromIntegral (SC.snLine sn) :: Int) (fileOpen ss)
+                return ()
 
-    -- enable events
-    SC.scnSetEventHandler scn $ callback tw
-    SC.scnEnableEvents scn
-         
-    -- set focus to new page
-    ix <- auiNotebookGetPageIndex nb p
-    auiNotebookSetSelection nb ix 
+            otherwise -> do
+                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+                return ()
+    else do
+        case (SC.scnNotifyGetCode sn) of                   
+            2002 -> do -- sCN_SAVEPOINTREACHED
+                updateMenus ss hw scn
+            2003 -> do -- sCN_SAVEPOINTLEFT
+                updateMenus ss hw scn              
+            2007 -> do -- sCN_UPDATEUI
+                SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
+                if  ( (.&.) (fromIntegral (SC.snUpdated sn) :: Int) 
+                            (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
+                    updateMenus ss hw scn
+                else
+                    return ()
+            2028 -> do -- sCN_FOCUSIN
+                updateMenus ss hw scn           
+            2029 -> do -- sCN_FOCUSOUT
+                updateMenus ss hw scn 
+            2013 -> return () -- sCN_PAINTED
+              
+            otherwise -> do
+                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+                return ()
 
-    return (tw, scn)
 
-    where   newtw scn panel hwndp hwnd fp = (SS.createTextWindow
-                                (SS.createSourceWindowType scn)
-                                panel
-                                hwndp
-                                hwnd
-                                [   
-                                    (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
-                                    (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
-                                    (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
-                                    (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
-                                    (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
-                                    (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
-                                    (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss scn)            (return True)),
-                                    (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss scn)     (return True)),
-                                    (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
-                                ]
-                                (SC.scnGetFocus scn)
-                                (SC.scnIsClean scn)
-                                (Just fp))
+updateMenus :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
+updateMenus ss hw scn = do
+    f <- SC.scnGetFocus scn 
+    if f then do 
+        setm ss tms CN.menuFileClose        
+        setm ss tms CN.menuFileCloseAll        
+        setm ss tms CN.menuFileSave        
+        setm ss tms CN.menuFileSaveAs        
+        setm ss tms CN.menuFileSaveAll        
+        setm ss tms CN.menuEditUndo          
+        setm ss tms CN.menuEditRedo          
+        setm ss tms CN.menuEditCut           
+        setm ss tms CN.menuEditCopy          
+        setm ss tms CN.menuEditPaste         
+        setm ss tms CN.menuEditSelectAll     
+        setm ss tms CN.menuEditFind          
+        setm ss tms CN.menuEditFindForward   
+        setm ss tms CN.menuEditFindBackward  
+    else do
+        setm' ss CN.menuFileClose         (return False) (return ())
+        setm' ss CN.menuFileCloseAll      (return False) (return ())
+        setm' ss CN.menuFileSave          (return False) (return ())
+        setm' ss CN.menuFileSaveAs        (return False) (return ())
+        setm' ss CN.menuFileSaveAll       (return False) (return ())
+        setm' ss CN.menuEditUndo          (return False) (return ())
+        setm' ss CN.menuEditCut           (return False) (return ())
+        setm' ss CN.menuEditCopy          (return False) (return ())
+        setm' ss CN.menuEditPaste         (return False) (return ())
+        setm' ss CN.menuEditSelectAll     (return False) (return ())
+        setm' ss CN.menuEditFind          (return False) (return ())
+        setm' ss CN.menuEditFindForward   (return False) (return ())
+        setm' ss CN.menuEditFindBackward  (return False) (return ())
 
-newFile :: SS.Session -> (SS.TextWindow -> SC.SCNotification -> IO ()) -> IO SS.TextWindow  
-newFile ss callback = do
-    
-    let nb = SS.ssEditors ss
+        where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
+                setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)
+ 
+                setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
+                setm' ss mid me mf = do 
+                    e <- me
+                    set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
-    -- create panel with scintilla editor inside
-    p <- panel nb []
-    hwnd <- windowGetHandle p
-    scn <- SC.scnCreateEditor hwnd
-    SC.scnConfigureHaskell scn
-
-    -- add panel to notebook
-    auiNotebookAddPage nb p "..." False 0
-
-    let tw = newtw scn p hwnd (SC.scnGetHwnd scn)
-    SS.twUpdate ss (\tws -> tw : tws)
-
-    -- enable events
-    SC.scnSetEventHandler scn $ callback tw
-    SC.scnEnableEvents scn
-    SC.scnSetSavePoint scn
-      
-    return tw
-    
-    where   newtw scn panel hwndp hwnd = (SS.createTextWindow
-                                (SS.createSourceWindowType scn)
-                                panel
-                                hwndp
-                                hwnd
-                                [   
-                                    (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
-                                    (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
-                                    (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
-                                    (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
-                                    (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
-                                    (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
-                                    (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss scn)            (return True)),
-                                    (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss scn)     (return True)),
-                                    (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss scn)    (return True))
-                                ]
-                                (SC.scnGetFocus scn)
-                                (SC.scnIsClean scn)
-                                Nothing)
+                tms = SS.hwMenus hw

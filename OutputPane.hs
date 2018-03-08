@@ -58,23 +58,23 @@ gotoCompileError ss line fileOpen = do
     case mce of
         Just ce -> do
             -- goto source file from list of open files
-            mtw <- SS.twGetSourceFileWindow ss $ SS.ceFilePath ce 
-            case mtw of          
-                Just tw -> do                     
-                    b <- EN.enbSelectTab ss tw
-                    if b then gotoPos tw ce
+            mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
+            case mhw of          
+                Just hw -> do
+                    b <- EN.enbSelectTab ss $ SS.hwWindow hw
+                    if b then gotoPos hw ce
                     else return ()
                 Nothing -> do
                     -- source file not open
                     fileOpen $ SS.ceFilePath ce
-                    mtw <- SS.twGetSourceFileWindow ss $ SS.ceFilePath ce 
-                    case mtw of
-                        Just tw -> gotoPos tw ce
+                    mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
+                    case mhw of
+                        Just hw -> gotoPos hw ce
                         Nothing -> return ()
         Nothing -> return ()
      
-    where   gotoPos tw ce = do
-                case SS.twGetEditor tw of
+    where   gotoPos hw ce = do
+                case SS.hwGetEditor hw of
                     Just scn -> do
                         SC.scnGotoLineCol scn ((SS.ceSrcLine ce)-1) ((SS.ceSrcCol ce)-1)
                         SC.scnGrabFocus scn

@@ -10,7 +10,6 @@ import Control.Concurrent.STM
 import qualified Control.Concurrent.Thread as Thread
 import Control.Monad (liftM, when)
 import Control.Monad.Loops
-import Data.Bits ((.&.))
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
 import Data.List (find, findIndex)
@@ -32,7 +31,7 @@ import EditorNotebook
 import qualified FileMenu as FM
 import qualified Ghci as GH
 import Misc
-import qualified OutputPane as OP
+import qualified OutputPane as OT
 import Scintilla
 import ScintillaConstants
 import Session
@@ -105,7 +104,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am enb api
    
     -- add output pane
-    (onb, oe) <- OP.createOutputPane mf
+    (onb, oe) <- OT.createOutputPane mf
     
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Output"
@@ -136,30 +135,16 @@ setUpMainWindow mf sf = do
 
     -- create the session data
     ss <- ssCreate mf am enb menus sf onb oe scn 
-  
-    -- add blank file to editor
-    FM.newFile ss (scnCallback ss)
     
     -- setup menu handlers
-    set (ssMenuListGet ss CN.menuFileOpen)           [on command := onFileOpen           ss]
-    set (ssMenuListGet ss CN.menuFileNew)            [on command := onFileNew            ss]
-    set (ssMenuListGet ss CN.menuFileSave)           [on command := onFileSave           ss]
-    set (ssMenuListGet ss CN.menuFileSaveAs)         [on command := onFileSaveAs         ss]
-    set (ssMenuListGet ss CN.menuFileSaveAll)        [on command := onFileSaveAll        ss]
-    set (ssMenuListGet ss CN.menuFileClose)          [on command := onFileClose          ss]
-    set (ssMenuListGet ss CN.menuFileCloseAll)       [on command := onFileCloseAll       ss]
-    set (ssMenuListGet ss CN.menuBuildBuild)         [on command := onBuildBuild         ss]
-    set (ssMenuListGet ss CN.menuBuildCompile)       [on command := onBuildCompile       ss]
-    set (ssMenuListGet ss CN.menuBuildGhci)          [on command := onBuildGhci          ss]
-    set (ssMenuListGet ss CN.menuDebugRun)           [on command := onDebugRun           ss]
-    set (ssMenuListGet ss CN.menuDebugGhci)          [on command := onDebugGhci          ss]
-    set (ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
-     
+    set (ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen ss]
+    set (ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew  ss]
+
+{-     
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
-
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
-
+-}
    -- enable events for output pane, dbl click = goto error
 --    scnSetEventHandler oe $ scnCallback ss
 --    scnEnableEvents oe
@@ -261,17 +246,15 @@ onClosing ss = do
     (auiManagerUnInit . ssAuiMgr) ss
     (windowDestroy . ssFrame) ss
     return ()
-
+{-
 onTabChanged :: Session -> EventAuiNotebook -> IO ()
 onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
     set (ssMenuListGet ss CN.menuBuildCompile) [text := (CN.menuText' CN.menuBuildCompile)]        
     set (ssMenuListGet ss CN.menuBuildGhci)    [text := (CN.menuText' CN.menuBuildGhci)] 
     c <- enbGetTabCount ss
     if c > 0 then do
-        sf <- enbGetSelectedSourceFile ss 
+        hw <- enbGetSelectedSourceFile ss 
         (scnGrabFocus . sfEditor) sf
-        FM.updateSaveMenus ss
-        FM.updateStatus ss
         case (sfFilePath sf) of
             Just fp -> do
                 set (ssMenuListGet ss CN.menuBuildCompile) 
@@ -316,65 +299,13 @@ withCurrentEvent :: (Event () -> IO ()) -> IO ()
                             x <- (eventGetEventObject (objectCast ev))                          
                             auiManagerEventVeto x  True)
 -}
-    enbGetSelectedSourceFile ss >>= FM.closeEditor ss    
-    FM.updateSaveMenus ss      
+    enbGetSelectedSourceFile ss >>= FM.closeEditor ss         
     return ()
 
 onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
 onOutputTabClose ss _ = GH.closeWindow ss 
   
-onFileClose :: Session -> IO ()
-onFileClose ss = do
-    enbGetSelectedSourceFile ss >>= FM.fileClose ss 
-    FM.updateSaveMenus ss    
-    return ()
-  
-onFileCloseAll :: Session -> IO ()
-onFileCloseAll = FM.fileCloseAll
-
-onFileSave :: Session -> IO ()
-onFileSave ss = do
-    enbGetSelectedSourceFile ss >>= FM.fileSave ss 
-    FM.updateSaveMenus ss    
-    return ()
-
-onFileSaveAs :: Session -> IO ()
-onFileSaveAs ss = do
-    enbGetSelectedSourceFile ss >>= FM.fileSaveAs ss
-    FM.updateSaveMenus ss    
-    return ()
-    
-onFileSaveAll :: Session -> IO ()    
-onFileSaveAll ss = do   
-    FM.fileSaveAll ss
-    FM.updateSaveMenus ss    
-    return ()
-   
--- File Open
-onFileOpen :: Session -> IO ()
-onFileOpen ss = do
-    let mf = ssFrame ss                     -- wxFD_OPEN wxFD_FILE_MUST_EXIST
-    fd <- fileDialogCreate mf "Open file" "." "" "*.hs" (Point 100 100) 0x11
-    ans <- dialogShowModal fd
-    if ans == wxID_OK
-    then do
-        fp <- fileDialogGetPath fd 
-        FM.fileOpen ss (scnCallback ss) fp
-        FM.updateSaveMenus ss    
-        set (ssMenuListGet ss CN.menuBuildCompile) 
-                [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
-        set (ssMenuListGet ss CN.menuBuildGhci)    
-                [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
-        return ()
-    else
-        return ()
-
-onFileNew :: Session -> IO ()
-onFileNew ss = do
-    FM.newFile ss (scnCallback ss) >>= enbSelectTab ss 
-    FM.updateSaveMenus ss      
-    return ()
- 
+-}
 ------------------------------------------------------------    
 -- Test Menu handlers
 ------------------------------------------------------------    
@@ -384,97 +315,10 @@ onTestTest ss = do
     return ()
 
 ------------------------------------------------------------    
--- Build Menu handlers
-------------------------------------------------------------    
-    
-onBuildBuild :: Session -> IO ()
-onBuildBuild ss = do
-
-    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
-    set (ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
-
-    -- save file first
-    sf <- enbGetSelectedSourceFile ss
-    ans <- FM.fileSave ss sf 
-    if ans then do
-        -- get again in case filename changed
-        sf <- enbGetSelectedSourceFile ss
-        case (sfFilePath sf) of
-            Just fp -> cpBuildProject ss fp (Just $ compileComplete ss)
-            Nothing -> return () 
-    else return ()
-    
-onBuildCompile :: Session -> IO ()
-onBuildCompile ss = do
-
-    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
-
-    -- save file first
-    sf <- enbGetSelectedSourceFile ss
-    ans <- FM.fileSave ss sf 
-    if ans then do
-        -- get again in case filename changed
-        sf <- enbGetSelectedSourceFile ss
-        case (sfFilePath sf) of
-            Just fp -> cpCompileFile ss fp (Just $ compileComplete ss)
-            Nothing -> return () 
-    else return ()
-               
-compileComplete :: Session -> IO ()
-compileComplete ss = do
-    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
-    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
-    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
-    set (ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
-    otAddText ss $ BS.pack "Compile complete\n"
-    return ()
-
-onBuildGhci :: Session -> IO ()
-onBuildGhci ss = do
-
-    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
-
-    -- save file first
-    sf <- enbGetSelectedSourceFile ss
-    ans <- FM.fileSave ss sf 
-    if ans then do
-        -- get again in case filename changed
-        sf <- enbGetSelectedSourceFile ss
-        case (sfFilePath sf) of
-            Just fp -> cpCompileFile ss fp (Just $ ghciComplete ss sf)
-            Nothing -> return () 
-    else return ()
-
-ghciComplete :: Session -> TextWindow -> IO ()
-ghciComplete ss tw = do
-    set (ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
-    set (ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
-    set (ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
-    otAddText ss $ BS.pack "Compile complete\n"
-
-    ces <- atomically $ readTVar $ ssCompilerReport ss
-    case ces of
-        [] -> GH.openWindowFile ss sf (ghciCallback ss)
-        _  -> do
-            ans <- proceedDialog (ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
-            case ans of
-                True -> GH.openWindowFile ss tw (ghciCallback ss)
-                False -> return ()
-
-
-ghciCallback :: Session -> TextWindow -> Int -> IO ()
-ghciCallback ss tw n = EM.updateEditMenus ss tw
-
-------------------------------------------------------------    
 -- Debug menu handlers
 ------------------------------------------------------------    
-    
+ 
+{-   
 onDebugRun :: Session -> IO ()
 onDebugRun ss = do
     sf <- enbGetSelectedSourceFile ss
@@ -485,6 +329,7 @@ onDebugRun ss = do
 
 onDebugGhci :: Session -> IO ()
 onDebugGhci ss = GH.openWindow ss (ghciCallback ss)
+-}
 
 ------------------------------------------------------------    
 -- Timer handler
@@ -494,7 +339,7 @@ onTimer :: Session -> IO ()
 onTimer ss = do
 
     -- update output pane
-    withTChan (ssTOutput ss) (otAddText ss) 
+    withTChan (ssTOutput ss) (OT.addText ss) 
     
     -- run any scheduled functions
     withTChan (ssCFunc ss) (\f -> f)
@@ -508,52 +353,3 @@ onTimer ss = do
                 (atomically (tryReadTChan chan) >>= maybe (return ()) (\a -> f a))             
             
 
------------------------------------------------------------------
--- Scintilla callback
------------------------------------------------------------------
-
-scnCallback :: Session -> TextWindow -> SCNotification -> IO ()
-scnCallback ss tw sn = do 
-
-    let hw1 = scnNotifyGetHwnd sn -- event source HWND
-    let hw2 = ptrToWord64 (scnGetHwnd (ssOutput ss)) -- output pane HWND
-
-    if hw1 == hw2 then do
-        -- event from output pane
-        case (scnNotifyGetCode sn) of
-            
-            2006 -> do -- sCN_DOUBLECLICK
-                OP.gotoCompileError ss (fromIntegral (snLine sn) :: Int) (FM.fileOpen ss $ scnCallback ss)
-                ssDebugInfo ss "Output pane double click"
-                return ()
-
-            otherwise -> do
-                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-                return ()
-    else do
-        case (scnNotifyGetCode sn) of                   
-            2002 -> do -- sCN_SAVEPOINTREACHED
-                FM.updateSaveMenus ss
-                return ()
-            2003 -> do -- sCN_SAVEPOINTLEFT
-                FM.updateSaveMenus ss
-                return ()                
-            2007 -> do -- sCN_UPDATEUI
-                FM.updateStatus ss
-                if  ( (.&.) (fromIntegral (snUpdated sn) :: Int) 
-                            (fromIntegral sC_UPDATE_SELECTION :: Int)) > 0 then
-                    EM.updateEditMenus ss tw
-                else
-                    return ()
-            2028 -> do -- sCN_FOCUSIN
-                EM.updateEditMenus ss tw
-                return ()               
-            2029 -> do -- sCN_FOCUSOUT
-                EM.updateEditMenus ss tw
-                return ()           
-            2013 -> return () -- sCN_PAINTED
-              
-            otherwise -> do
-                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-                return ()
-         
