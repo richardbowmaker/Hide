@@ -24,17 +24,17 @@ import System.Process
 import System.Process.Common
 
 -- project imports
-import Compile
+import qualified Compile as CP
 import qualified Constants as CN
 import qualified EditMenu as EM
-import EditorNotebook
+import qualified EditorNotebook as EN
 import qualified FileMenu as FM
 import qualified Ghci as GH
-import Misc
+import qualified Misc as MI
 import qualified OutputPane as OT
-import Scintilla
-import ScintillaConstants
-import Session
+import qualified Scintilla as SC
+import qualified ScintillaConstants as SC
+import qualified Session as SS
    
 --------------------------------------
 -- Main
@@ -69,13 +69,13 @@ mainGUI = do
 -- Setup main window, AUI manager its child windows and the menus
 ------------------------------------------------------------    
    
-setUpMainWindow :: Frame () -> StatusField -> IO (Session)    
+setUpMainWindow :: Frame () -> StatusField -> IO SS.Session
 setUpMainWindow mf sf = do 
 
     am <- auiManagerCreate mf wxAUI_MGR_DEFAULT
       
     -- add dockable tree
-    tree <- createTree mf
+    tree <- MI.createTree mf
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Tree Control"
     auiPaneInfoLeft api
@@ -83,17 +83,18 @@ setUpMainWindow mf sf = do
     
     auiManagerAddPaneByPaneInfo am tree api
     
+{-
     -- add dockable grid
     grid <- createGrid mf
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Grid Control"
     auiPaneInfoBottom api
     auiPaneInfoCloseButton api True
-    
+   
     auiManagerAddPaneByPaneInfo am grid api
-    
+-}    
     -- add editor notebook
-    enb <- enbCreate mf
+    enb <- EN.enbCreate mf
    
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Editor"
@@ -116,13 +117,13 @@ setUpMainWindow mf sf = do
     -- add floating debug window
     dp <- panel mf [size := (Size 400 400)]
     hwnd <- windowGetHandle dp
-    scn <- scnCreateEditor hwnd
-    scnConfigureHaskell scn
-    scnSetReadOnly scn True
+    scn <- SC.scnCreateEditor hwnd
+    SC.scnConfigureHaskell scn
+    SC.scnSetReadOnly scn True
   
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Debug"
-    auiPaneInfoFloat api
+    auiPaneInfoBottom api
     auiPaneInfoCloseButton api True
 
     auiManagerAddPaneByPaneInfo am dp api   
@@ -134,17 +135,18 @@ setUpMainWindow mf sf = do
     menus <- setupMenus mf 
 
     -- create the session data
-    ss <- ssCreate mf am enb menus sf onb oe scn 
+    ss <- SS.ssCreate mf am enb menus sf onb oe scn 
     
-    -- setup menu handlers
-    set (ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen ss]
-    set (ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew  ss]
+    -- setup static menu handlers
+    set (SS.ssMenuListGet ss CN.menuFileOpen)  [on command := FM.onFileOpen ss]
+    set (SS.ssMenuListGet ss CN.menuFileNew)   [on command := FM.onFileNew  ss]
+    set (SS.ssMenuListGet ss CN.menuDebugGhci) [on command := GH.openWindow ss]
+    
+    set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
+    set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
+    set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
+    set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
 
-{-     
-    set enb [on auiNotebookOnPageCloseEvent   := onTabClose   ss]
-    set enb [on auiNotebookOnPageChangedEvent := onTabChanged ss]
-    set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose ss]
--}
    -- enable events for output pane, dbl click = goto error
 --    scnSetEventHandler oe $ scnCallback ss
 --    scnEnableEvents oe
@@ -155,7 +157,7 @@ setUpMainWindow mf sf = do
 -- Setup menus
 ------------------------------------------------------------    
 
-setupMenus :: Frame () -> IO (SsMenuList)
+setupMenus :: Frame () -> IO SS.SsMenuList
 setupMenus mf  = do
 
     -- file menu  
@@ -205,28 +207,28 @@ setupMenus mf  = do
     set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuTest, menuHelp']]
 
     -- create lookup list of menus for session data   
-    ml <- ssMenuListCreate [    (CN.menuFileOpen,            menuFileOpen), 
-                                (CN.menuFileSave,            menuFileSave), 
-                                (CN.menuFileNew,             menuFileNew), 
-                                (CN.menuFileClose,           menuFileClose), 
-                                (CN.menuFileCloseAll,        menuFileCloseAll), 
-                                (CN.menuFileSaveAs,          menuFileSaveAs), 
-                                (CN.menuFileSaveAll,         menuFileSaveAll),
-                                (CN.menuEditUndo,            menuEditUndo),
-                                (CN.menuEditRedo,            menuEditRedo),
-                                (CN.menuEditCut,             menuEditCut),
-                                (CN.menuEditCopy,            menuEditCopy),
-                                (CN.menuEditPaste,           menuEditPaste),
-                                (CN.menuEditSelectAll,       menuEditAll),
-                                (CN.menuEditFind,            menuEditFind),
-                                (CN.menuEditFindForward,     menuEditFindForward),
-                                (CN.menuEditFindBackward,    menuEditFindBackward),
-                                (CN.menuBuildBuild,          menuBuildBuild),
-                                (CN.menuBuildCompile,        menuBuildCompile),
-                                (CN.menuBuildGhci,           menuBuildGhci),
-                                (CN.menuDebugRun,            menuDebugRun),
-                                (CN.menuDebugGhci,           menuDebugGhci),
-                                (CN.menuTestTest,            menuTestTest)]
+    ml <- SS.ssMenuListCreate [     (CN.menuFileOpen,            menuFileOpen), 
+                                    (CN.menuFileSave,            menuFileSave), 
+                                    (CN.menuFileNew,             menuFileNew), 
+                                    (CN.menuFileClose,           menuFileClose), 
+                                    (CN.menuFileCloseAll,        menuFileCloseAll), 
+                                    (CN.menuFileSaveAs,          menuFileSaveAs), 
+                                    (CN.menuFileSaveAll,         menuFileSaveAll),
+                                    (CN.menuEditUndo,            menuEditUndo),
+                                    (CN.menuEditRedo,            menuEditRedo),
+                                    (CN.menuEditCut,             menuEditCut),
+                                    (CN.menuEditCopy,            menuEditCopy),
+                                    (CN.menuEditPaste,           menuEditPaste),
+                                    (CN.menuEditSelectAll,       menuEditAll),
+                                    (CN.menuEditFind,            menuEditFind),
+                                    (CN.menuEditFindForward,     menuEditFindForward),
+                                    (CN.menuEditFindBackward,    menuEditFindBackward),
+                                    (CN.menuBuildBuild,          menuBuildBuild),
+                                    (CN.menuBuildCompile,        menuBuildCompile),
+                                    (CN.menuBuildGhci,           menuBuildGhci),
+                                    (CN.menuDebugRun,            menuDebugRun),
+                                    (CN.menuDebugGhci,           menuDebugGhci),
+                                    (CN.menuTestTest,            menuTestTest)]
 
     
     -- create Toolbar
@@ -240,32 +242,37 @@ setupMenus mf  = do
 -- File Menu handlers
 ------------------------------------------------------------    
 
-onClosing :: Session -> IO ()
+onClosing :: SS.Session -> IO ()
 onClosing ss = do
+    GH.closeAll ss
     FM.fileCloseAll ss
-    (auiManagerUnInit . ssAuiMgr) ss
-    (windowDestroy . ssFrame) ss
+    (auiManagerUnInit . SS.ssAuiMgr) ss
+    (windowDestroy . SS.ssFrame) ss
     return ()
-{-
-onTabChanged :: Session -> EventAuiNotebook -> IO ()
-onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
-    set (ssMenuListGet ss CN.menuBuildCompile) [text := (CN.menuText' CN.menuBuildCompile)]        
-    set (ssMenuListGet ss CN.menuBuildGhci)    [text := (CN.menuText' CN.menuBuildGhci)] 
-    c <- enbGetTabCount ss
-    if c > 0 then do
-        hw <- enbGetSelectedSourceFile ss 
-        (scnGrabFocus . sfEditor) sf
-        case (sfFilePath sf) of
-            Just fp -> do
-                set (ssMenuListGet ss CN.menuBuildCompile) 
-                    [text := ((CN.menuTitle' CN.menuBuildCompile) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildCompile))]        
-                set (ssMenuListGet ss CN.menuBuildGhci)    
-                    [text := ((CN.menuTitle' CN.menuBuildGhci) ++ (takeFileName fp) ++ (CN.menuKey' CN.menuBuildGhci) )] 
-            Nothing -> return ()
-    else return ()
 
-onTabClose :: Session -> EventAuiNotebook -> IO ()
+onTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
+onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
+    mhw <- EN.enbGetSelectedSourceFile ss 
+    case mhw of
+        Just hw -> do 
+            case SS.hwGetEditor hw of
+                Just scn -> SC.scnGrabFocus scn
+                Nothing  -> return ()
+        Nothing -> return ()
+
+onTabClose :: SS.Session -> EventAuiNotebook -> IO ()
 onTabClose ss enb = do
+    mhw <- EN.enbGetSelectedSourceFile ss 
+    case mhw of
+        Just hw -> do 
+            case SS.hwGetEditor hw of
+                Just scn -> do
+                    FM.closeEditor ss (SS.hwWindow hw) scn
+                    return ()
+                Nothing  -> return ()
+        Nothing -> return ()
+    return ()
+
 {-
 got EventAuiNotebook
 expected Object (CWxObject (CEvtHandler (CAuiManagerEvent a0)))
@@ -299,18 +306,27 @@ withCurrentEvent :: (Event () -> IO ()) -> IO ()
                             x <- (eventGetEventObject (objectCast ev))                          
                             auiManagerEventVeto x  True)
 -}
-    enbGetSelectedSourceFile ss >>= FM.closeEditor ss         
-    return ()
 
-onOutputTabClose :: Session -> EventAuiNotebook -> IO ()
-onOutputTabClose ss _ = GH.closeWindow ss 
-  
--}
+
+onOutputTabClose :: SS.Session -> EventAuiNotebook -> IO ()
+onOutputTabClose ss _ = do
+    mhw <- OT.getSelectedGhci ss 
+    case mhw of
+        Just hw -> GH.closeWindow ss $ SS.hwWindow hw
+        Nothing -> return ()
+
+onOutputTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
+onOutputTabChanged ss _ = do
+    mhw <- OT.getSelectedGhci ss 
+    case mhw of
+        Just hw -> GH.setFocus $ SS.hwPanelHwnd hw
+        Nothing -> return ()
+
 ------------------------------------------------------------    
 -- Test Menu handlers
 ------------------------------------------------------------    
  
-onTestTest :: Session -> IO ()
+onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
     return ()
 
@@ -335,14 +351,14 @@ onDebugGhci ss = GH.openWindow ss (ghciCallback ss)
 -- Timer handler
 ------------------------------------------------------------    
     
-onTimer :: Session -> IO ()
+onTimer :: SS.Session -> IO ()
 onTimer ss = do
 
     -- update output pane
-    withTChan (ssTOutput ss) (OT.addText ss) 
+    withTChan (SS.ssTOutput ss) (OT.addText ss) 
     
     -- run any scheduled functions
-    withTChan (ssCFunc ss) (\f -> f)
+    withTChan (SS.ssCFunc ss) (\f -> f)
    
     where
 

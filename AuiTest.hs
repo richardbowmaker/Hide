@@ -6,6 +6,11 @@ import Graphics.UI.WX.Events
 
 
 
+
+
+
+
+
 main = start mainGUI
 
 mainGUI :: IO ()

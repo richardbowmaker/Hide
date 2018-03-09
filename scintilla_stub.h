@@ -2,7 +2,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern void Scintilla_df2K(StgStablePtr the_stableptr, HsPtr a1);
+extern void Scintilla_dFCv(StgStablePtr the_stableptr, HsPtr a1);
 #ifdef __cplusplus
 }
 #endif

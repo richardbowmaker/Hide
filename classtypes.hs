@@ -4,6 +4,7 @@ import Graphics.UI.WX
 import Graphics.UI.WXCore
 
 
+
 main = start mainGUI
 
 mainGUI :: IO ()

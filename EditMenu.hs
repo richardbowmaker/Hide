@@ -3,8 +3,7 @@ module EditMenu
     findTextInRange,
     editFindBackward,
     editFindForward,
-    editFind,
-    updateEditMenus
+    editFind
 ) where 
     
 import Control.Concurrent 
@@ -27,39 +26,6 @@ import qualified EditorNotebook as EN
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
-
-updateEditMenus :: SS.Session -> SS.TextMenus -> IO ()
-updateEditMenus ss tw = do
-
-        f <- SS.twHasFocus tw 
-
-        if (f) then do
-            setm ss tw CN.menuEditUndo          
-            setm ss tw CN.menuEditRedo          
-            setm ss tw CN.menuEditCut           
-            setm ss tw CN.menuEditCopy          
-            setm ss tw CN.menuEditPaste         
-            setm ss tw CN.menuEditSelectAll     
-            setm ss tw CN.menuEditFind          
-            setm ss tw CN.menuEditFindForward   
-            setm ss tw CN.menuEditFindBackward  
-        else do
-            setm' ss CN.menuEditUndo          (return False) (return ())
-            setm' ss CN.menuEditCut           (return False) (return ())
-            setm' ss CN.menuEditCopy          (return False) (return ())
-            setm' ss CN.menuEditPaste         (return False) (return ())
-            setm' ss CN.menuEditSelectAll     (return False) (return ())
-            setm' ss CN.menuEditFind          (return False) (return ())
-            setm' ss CN.menuEditFindForward   (return False) (return ())
-            setm' ss CN.menuEditFindBackward  (return False) (return ())
-
-        where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
-                setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)
- 
-                setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
-                setm' ss mid me mf = do 
-                    e <- me
-                    set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
 editFind :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
 editFind ss tw scn = do

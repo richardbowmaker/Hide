@@ -26,15 +26,16 @@ import Text.Printf (printf)
 
 -- project imports
 
+import qualified Compile as CP
 import qualified Constants as CN
 import qualified EditMenu as EM
 import qualified EditorNotebook as EN
+import qualified Ghci as GH
 import qualified Misc as MI
 import qualified OutputPane as OP
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
-
 
 openSourceFileEditor :: SS.Session -> String -> IO (SS.HideWindow, SC.ScnEditor)
 openSourceFileEditor ss fp = do
@@ -69,23 +70,29 @@ openSourceFileEditor ss fp = do
 createHideWindow :: SS.Session -> SC.ScnEditor -> Panel() -> HWND -> HWND -> Maybe String -> SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd mfp = SS.createHideWindow tw tms
 
-    where   tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
+    where   tw = SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
             tms = SS.createTextMenus
                     [
-                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)         (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)             (return True)),
-                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)          (liftM not $ SC.scnIsClean scn)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)        (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)              (liftM not $ allFilesClean ss)),
-                        (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                (SC.scnCanUndo scn)),
-                        (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                (SC.scnCanRedo scn)),
-                        (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                 (liftM not $ SC.scnSelectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)               (SC.scnCanPaste scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
-                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
-                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
-                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True))
+                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                 (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                     (return True)),
+                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)                                  (liftM not $ SC.scnIsClean scn)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)                                (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)                                      (liftM not $ allFilesClean ss)),
+                        (SS.createMenuFunction CN.menuEditUndo          (SC.scnUndo scn)                                        (SC.scnCanUndo scn)),
+                        (SS.createMenuFunction CN.menuEditRedo          (SC.scnRedo scn)                                        (SC.scnCanRedo scn)),
+                        (SS.createMenuFunction CN.menuEditCut           (SC.scnCut scn)                                         (liftM not $ SC.scnSelectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                                        (liftM not $ SC.scnSelectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditPaste         (SC.scnPaste scn)                                       (SC.scnCanPaste scn)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)                                   (return True)),
+                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                 (return True)),
+                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                          (return True)),
+                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                         (return True)),
+                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn))      (return True)),
+                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn))        (return True)),
+                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                             (return True)),
+                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                             (return True)),
+                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn))         (return True)),
+                        (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                   (return True))
                     ]
                     (SC.scnGetFocus scn)
                     (SC.scnIsClean scn)
@@ -198,18 +205,20 @@ fileOpen ss fp = do
         Nothing -> do       
             -- existing file so add to list, create window and set focus
             (hw, scn) <- openSourceFileEditor ss fp
-            writeSourceFileEditor ss hw scn         
+            writeSourceFileEditor ss hw scn 
+            SC.scnGrabFocus scn
 
 fileCloseAll :: SS.Session -> IO Bool
 fileCloseAll ss = SS.hwFindWindows ss SS.hwIsSourceFile >>= MI.doWhileTrueIO (\hw -> do
                         case SS.hwGetEditor hw of 
                             Just scn -> fileClose ss (SS.hwWindow hw) scn
                             Nothing  -> do
-                                SS.ssDebugError ss "fileSaveAll:: no scintilla editor for source file"
+                                SS.ssDebugError ss "fileCloseAll:: no scintilla editor for source file"
                                 return True)
 
 fileClose :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
 fileClose ss tw scn = do
+    SS.ssDebugInfo ss $ "fileClose:: file " ++ (show $ maybe "" id $ SS.twFilePath tw)
     b <- closeEditor ss tw scn   
     if b then do   
         -- remove page from notebook
@@ -390,6 +399,12 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuEditFind          
         setm ss tms CN.menuEditFindForward   
         setm ss tms CN.menuEditFindBackward  
+        setm ss tms CN.menuBuildCompile
+        setm ss tms CN.menuBuildBuild
+        setm ss tms CN.menuBuildRebuild
+        setm ss tms CN.menuBuildClean
+        setm ss tms CN.menuBuildGhci
+        setm ss tms CN.menuDebugRun
     else do
         setm' ss CN.menuFileClose         (return False) (return ())
         setm' ss CN.menuFileCloseAll      (return False) (return ())
@@ -404,6 +419,12 @@ updateMenus ss hw scn = do
         setm' ss CN.menuEditFind          (return False) (return ())
         setm' ss CN.menuEditFindForward   (return False) (return ())
         setm' ss CN.menuEditFindBackward  (return False) (return ())
+        setm' ss CN.menuBuildCompile      (return False) (return ())
+        setm' ss CN.menuBuildBuild        (return False) (return ())
+        setm' ss CN.menuBuildRebuild      (return False) (return ())
+        setm' ss CN.menuBuildClean        (return False) (return ())
+        setm' ss CN.menuBuildGhci         (return False) (return ())
+        setm' ss CN.menuDebugRun          (return False) (return ())
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
                 setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)

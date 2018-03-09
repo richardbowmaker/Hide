@@ -5,7 +5,8 @@ module OutputPane
     gotoCompileError,
     clear,
     addText,
-    addLine 
+    addLine,
+    getSelectedGhci
 ) where 
     
 import Control.Concurrent.STM (atomically, readTVar)
@@ -14,6 +15,7 @@ import Data.List (find, findIndex)
 import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
+import Graphics.Win32.GDI.Types (HWND)
 
 -- project imports
 
@@ -105,4 +107,29 @@ addLine ss bs = do
     SC.scnShowLastLine e
 
 
-      
+-- returns the HWND of the child panel of the currently selected notebook page
+getSelectedTabHwnd :: SS.Session -> IO (Maybe HWND)
+getSelectedTabHwnd ss = do
+    n <- getTabCount ss
+    if n > 0 then do
+        hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
+        return (Just hp)
+    else return Nothing
+    where nb = SS.ssOutputs ss
+ 
+-- returns the source file for the currently selected tab
+getSelectedGhci :: SS.Session -> IO (Maybe SS.HideWindow)
+getSelectedGhci ss = do  
+    hws <- SS.hwGetWindows ss
+    mhwnd <- getSelectedTabHwnd ss
+    case mhwnd of 
+        Just hwnd -> return $ find (\hw -> (SS.hwIsGhci hw) && (SS.hwMatchesHwnd hw hwnd)) hws
+        Nothing   -> return Nothing
+
+getTabCount :: SS.Session -> IO Int
+getTabCount ss = do
+    pc <- auiNotebookGetPageCount $ SS.ssOutputs ss
+    return pc
+
+ 
+     

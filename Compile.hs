@@ -7,7 +7,10 @@ module Compile
 (
     cpBuildProject,
     cpCompileFile,
-    cpDebugRun
+    cpDebugRun,
+    onBuildCompile,
+    onBuildBuild,
+    onBuildGhci
 ) where
 
 -- library imports
@@ -35,7 +38,6 @@ import System.Process.Common
 
 -- project imports
 import qualified Constants as CN
-import qualified FileMenu as FM
 import qualified Ghci as GH
 import qualified Misc as MI
 import qualified OutputPane as OT
@@ -46,8 +48,8 @@ import qualified Session as SS
 -- Build Menu handlers
 ------------------------------------------------------------    
     
-onBuildBuild :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-onBuildBuild ss tw scn = do
+onBuildBuild :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildBuild ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
@@ -55,7 +57,7 @@ onBuildBuild ss tw scn = do
     set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
 
     -- save file first
-    ans <- FM.fileSave ss tw scn
+    ans <- fileSave
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -68,15 +70,15 @@ onBuildBuild ss tw scn = do
                     SS.ssDebugError ss "onBuildBuild:: no file name set"
     else return ()
     
-onBuildCompile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-onBuildCompile ss tw scn = do
+onBuildCompile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildCompile ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
 
     -- save file first
-    ans <- FM.fileSave ss tw scn 
+    ans <- fileSave
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -98,15 +100,15 @@ compileComplete ss = do
     OT.addText ss $ BS.pack "Compile complete\n"
     return ()
 
-onBuildGhci :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-onBuildGhci ss tw scn= do
+onBuildGhci :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildGhci ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
 
    -- save file first
-    ans <- FM.fileSave ss tw scn 
+    ans <- fileSave
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -202,23 +204,21 @@ cpCompileFileDone ss mfinally ces = do
     where outStr s = atomically $ writeTChan (SS.ssTOutput ss) $ BS.pack s
 
 
-cpDebugRun :: SS.Session -> String -> IO ()
-cpDebugRun ss fp = do
-
-    SS.ssDebugInfo ss $ "Start run: " ++ fp
-
-    --  check .exe file exists
-    let exe = (Win.dropExtension fp) ++ ".exe"
-
-    b <- doesFileExist exe
-
-    if b then do
-        catchIOError
-            (createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)} >> return ())
-            (\err -> SS.ssDebugError ss $ show err)
-        return ()
-    else infoDialog (SS.ssFrame ss) CN.programTitle $ "File: " ++ exe ++ " does not exist"
-
+cpDebugRun :: SS.Session -> SS.TextWindow -> IO ()
+cpDebugRun ss tw = do
+    case SS.twFilePath tw of
+        Just fp -> do
+            SS.ssDebugInfo ss $ "Start run: " ++ fp
+            --  check .exe file exists
+            let exe = (Win.dropExtension fp) ++ ".exe"
+            b <- doesFileExist exe
+            if b then do
+                catchIOError
+                    (createProcess_ "errors" (proc exe []) {cwd = (Just $ Win.takeDirectory fp)} >> return ())
+                    (\err -> SS.ssDebugError ss $ show err)
+                return ()
+            else infoDialog (SS.ssFrame ss) CN.programTitle $ "File: " ++ exe ++ " does not exist"
+        Nothing -> return ()
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function

@@ -49,19 +49,25 @@ enbCreate mf = do
 ------------------------------------------------------------    
     
 -- returns the HWND of the child panel of the currently selected notebook page
-enbGetSelectedTabHwnd :: SS.Session -> IO HWND
+enbGetSelectedTabHwnd :: SS.Session -> IO (Maybe HWND)
 enbGetSelectedTabHwnd ss = do
-    let nb = SS.ssEditors ss
-    hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
-    return hp
+    n <- enbGetTabCount ss
+    if n > 0 then do
+        hp <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb >>= windowGetHandle
+        return (Just hp)
+    else return Nothing
+
+    where   nb = SS.ssEditors ss
  
 -- returns the source file for the currently selected tab
 enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.HideWindow)
 enbGetSelectedSourceFile ss = do  
     hws <- SS.hwGetWindows ss
-    hp <- enbGetSelectedTabHwnd ss   
-    return $ find (\hw -> SS.hwMatchesHwnd hw hp) hws
- 
+    mhwnd <- enbGetSelectedTabHwnd ss
+    case mhwnd of 
+        Just hwnd -> return $ find (\hw -> (SS.hwIsSourceFile hw) && (SS.hwMatchesHwnd hw hwnd)) hws
+        Nothing   -> return Nothing
+
 -- returns true if the source file of the currently selected tab is clean 
 enbSelectedSourceFileIsClean :: SS.Session -> IO Bool
 enbSelectedSourceFileIsClean ss = 
