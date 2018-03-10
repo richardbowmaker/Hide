@@ -5,13 +5,14 @@ module FileMenu
     onFileOpen,
     onFileNew,
     fileCloseAll,
-    fileSave
+    fileSave,
+    fileOpen
 ) where 
     
 import Control.Concurrent 
 import Control.Concurrent.STM
 import Control.Monad (liftM)
-import Data.Bits ((.&.)) 
+import Data.Bits ((.&.), (.|.)) 
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
 import Data.List (find, findIndex)
@@ -20,7 +21,7 @@ import Foreign.C.String (CString, withCString)
 import Graphics.Win32.GDI.Types (HWND)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
-import System.FilePath.Windows (takeFileName)
+import System.FilePath.Windows (takeFileName, takeDirectory)
 import System.IO
 import Text.Printf (printf)
 
@@ -32,7 +33,6 @@ import qualified EditMenu as EM
 import qualified EditorNotebook as EN
 import qualified Ghci as GH
 import qualified Misc as MI
-import qualified OutputPane as OP
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -102,9 +102,14 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
 
 -- File Open
 onFileOpen :: SS.Session -> IO ()
-onFileOpen ss = do
-    let mf = SS.ssFrame ss                     -- wxFD_OPEN wxFD_FILE_MUST_EXIST
-    fd <- fileDialogCreate mf "Open file" "." "" "*.hs" (Point 100 100) 0x11
+onFileOpen ss = do                    
+    fd <- fileDialogCreate 
+        (SS.ssFrame ss) 
+        "Open file" 
+        "." "" 
+        "*.hs" 
+        (Point 100 100) 
+        (wxOPEN .|. wxFILE_MUST_EXIST)
     ans <- dialogShowModal fd
     if ans == wxID_OK
     then do
@@ -263,11 +268,16 @@ fileSave ss tw scn = do
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
 fileSaveAs ss tw scn = do   
-    -- ensure source file is displayed
-    EN.enbSelectTab ss tw   
     -- prompt user for name to save to
-    let mf = SS.ssFrame ss                   -- wxFD_SAVE wxFD_OVERWRITE_PROMPT
-    fd <- fileDialogCreate mf "Save file as" "." "" "*.hs" (Point 100 100) 0x6
+    mfp <-SS.twFilePath tw
+    fd <- fileDialogCreate 
+        (SS.ssFrame ss) 
+        "Save file as" 
+        (maybe "." takeDirectory mfp) 
+        (maybe "" id mfp )
+        "*.hs" 
+        (Point 100 100) 
+        (wxSAVE .|. wxOVERWRITE_PROMPT)
     rs <- dialogShowModal fd    
     case rs of
 --        wxID_OK -> do
@@ -342,44 +352,27 @@ setSourceFileFocus ss fp = do
 
 scnCallback :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> SC.SCNotification -> IO ()
 scnCallback ss hw scn sn = do 
-
-    let hw1 = SC.scnNotifyGetHwnd sn -- event source HWND
-    let hw2 = MI.ptrToWord64 (SC.scnGetHwnd (SS.ssOutput ss)) -- output pane HWND
-
-    if hw1 == hw2 then do
-        -- event from output pane
-        case (SC.scnNotifyGetCode sn) of
-            
-            2006 -> do -- sCN_DOUBLECLICK
-                OP.gotoCompileError ss (fromIntegral (SC.snLine sn) :: Int) (fileOpen ss)
-                return ()
-
-            otherwise -> do
-                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-                return ()
-    else do
-        case (SC.scnNotifyGetCode sn) of                   
-            2002 -> do -- sCN_SAVEPOINTREACHED
+    case (SC.scnNotifyGetCode sn) of                   
+        2002 -> do -- sCN_SAVEPOINTREACHED
+            updateMenus ss hw scn
+        2003 -> do -- sCN_SAVEPOINTLEFT
+            updateMenus ss hw scn              
+        2007 -> do -- sCN_UPDATEUI
+            SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
+            if  ( (.&.) (fromIntegral (SC.snUpdated sn) :: Int) 
+                        (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
                 updateMenus ss hw scn
-            2003 -> do -- sCN_SAVEPOINTLEFT
-                updateMenus ss hw scn              
-            2007 -> do -- sCN_UPDATEUI
-                SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
-                if  ( (.&.) (fromIntegral (SC.snUpdated sn) :: Int) 
-                            (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
-                    updateMenus ss hw scn
-                else
-                    return ()
-            2028 -> do -- sCN_FOCUSIN
-                updateMenus ss hw scn           
-            2029 -> do -- sCN_FOCUSOUT
-                updateMenus ss hw scn 
-            2013 -> return () -- sCN_PAINTED
-              
-            otherwise -> do
-                -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+            else
                 return ()
-
+        2028 -> do -- sCN_FOCUSIN
+            updateMenus ss hw scn           
+        2029 -> do -- sCN_FOCUSOUT
+            updateMenus ss hw scn 
+        2013 -> return () -- sCN_PAINTED
+          
+        otherwise -> do
+            -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
+            return ()
 
 updateMenus :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
 updateMenus ss hw scn = do

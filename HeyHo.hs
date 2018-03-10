@@ -105,7 +105,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am enb api
    
     -- add output pane
-    (onb, oe) <- OT.createOutputPane mf
+    onb <- OT.createOutputWindow mf
     
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Output"
@@ -135,7 +135,7 @@ setUpMainWindow mf sf = do
     menus <- setupMenus mf 
 
     -- create the session data
-    ss <- SS.ssCreate mf am enb menus sf onb oe scn 
+    ss <- SS.ssCreate mf am enb menus sf onb scn 
     
     -- setup static menu handlers
     set (SS.ssMenuListGet ss CN.menuFileOpen)  [on command := FM.onFileOpen ss]
@@ -146,10 +146,6 @@ setUpMainWindow mf sf = do
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
     set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
-
-   -- enable events for output pane, dbl click = goto error
---    scnSetEventHandler oe $ scnCallback ss
---    scnEnableEvents oe
    
     return (ss)
   

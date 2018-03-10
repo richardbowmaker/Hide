@@ -15,6 +15,7 @@ module Session
     ssCFunc,
     ssOutputs,
     ssOutput,
+    ssSetOutput,
     ssDebugError,
     ssDebugWarn,
     ssDebugInfo,
@@ -144,7 +145,7 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
                             ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
-                            ssOutput            :: SC.ScnEditor,        -- The output pane
+                            ssTMOutput          :: TMHideWindow,        -- The output pane, maybe
                             ssDebugError        :: String -> IO (),
                             ssDebugWarn         :: String -> IO (),
                             ssDebugInfo         :: String -> IO (),
@@ -166,7 +167,6 @@ type TFindText = TVar FindText
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
-data TextWindowType = SourceFile SC.ScnEditor | Ghci | Debug SC.ScnEditor | Output SC.ScnEditor
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
 
 type SsNameMenuPair = (Int, MenuItem ())                               
@@ -177,18 +177,19 @@ type SsMenuList = [SsNameMenuPair]
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> SC.ScnEditor -> IO Session
-ssCreate mf am nb ms sf ots ot db = do 
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> IO Session
+ssCreate mf am nb ms sf ots db = do 
     mtid <- myThreadId
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar []
     tfnd <- atomically $ newTVar (FindText "" 0 0)
+    tout <- atomically $ newTVar Nothing
     let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
     let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
-    return (Session mf am nb ms sf tot cfn ots ot dbe dbw dbi mtid terr tfnd hws)
+    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -222,7 +223,13 @@ ssInvokeInGuiThread mtid chan f = do
     tid <- myThreadId
     if mtid == tid then f
     else atomically $ writeTChan chan f
-             
+   
+ssOutput :: Session -> IO (Maybe HideWindow)
+ssOutput ss = atomically $ readTVar $ ssTMOutput ss
+ 
+ssSetOutput :: Session -> Maybe HideWindow -> IO ()
+ssSetOutput ss mhw = atomically $ writeTVar (ssTMOutput ss) mhw
+         
 ----------------------------------------------------------------
 -- Comp error
 ----------------------------------------------------------------
@@ -256,6 +263,8 @@ ftFindText text currPos startPos = (FindText text currPos startPos)
 -- Text windows
 ----------------------------------------------------------------
 
+data TextWindowType = SourceFile SC.ScnEditor | Ghci | Debug SC.ScnEditor | Output SC.ScnEditor
+
 -- | Text Window
 -- things to add return string for updating status bar, line col pos etc.
 -- close, save, save as
@@ -275,6 +284,7 @@ data TextMenus
 data HideWindow = HideWindow { hwWindow :: TextWindow, hwMenus :: TextMenus }
 data HideWindows = HideWindows { hwWindows :: [HideWindow] }
 type THideWindows = TVar HideWindows
+type TMHideWindow = TVar (Maybe HideWindow)
 type TFilePath = TVar (Maybe String)
 
 ---------------------------------------------------------------

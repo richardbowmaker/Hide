@@ -162,7 +162,7 @@ createHideWindow ss panel phwnd hwnd mfp = do
                     [ 
                         (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw) (return True)),
                         (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)       (return True)),
-                        (SS.createMenuFunction CN.menuFileSave       (fileSaveAs ss tw)  (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)  (return True)),
                         (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
                         (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
                         (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
@@ -221,7 +221,7 @@ fileSaveAs ss tw = do
     fd <- fileDialogCreate 
         (SS.ssFrame ss)
         "Save GHCI as" 
-        (maybe "." takeDirectory (mfp))
+        (maybe "." takeDirectory mfp)
         (maybe "" id mfp) 
         "*.txt" 
         (Point 100 100) 
