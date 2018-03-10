@@ -27,10 +27,11 @@ module Ghci
 import Control.Concurrent 
 import Control.Concurrent.STM
 import Control.Monad (mapM_) 
-import qualified Data.ByteString as BS (init, replicate, writeFile)
+import qualified Data.ByteString as BS (init, replicate)
 import qualified Data.ByteString.Internal as BS (ByteString)
 import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
-import qualified Data.ByteString.Char8 as BS (unpack)
+import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
+import Data.Bits ((.|.))
 import Data.List (find, findIndex)
 import Data.Word (Word64)
 import Data.Int (Int32)
@@ -39,7 +40,7 @@ import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Graphics.Win32.GDI.Types (HWND)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
-import System.FilePath.Windows (takeFileName)
+import System.FilePath.Windows (takeFileName, takeDirectory)
 import System.IO
 import System.Win32.Types (nullHANDLE)
 
@@ -199,15 +200,45 @@ setFocus = c_GhciSetFocus
 getTextLength :: HWND -> IO Int
 getTextLength hwnd = do 
     n <- c_GhciGetTextLength hwnd
-    return (fromIntegral n :: Int) 
+    return (fromIntegral n :: Int)
 
 getAllText :: HWND -> IO BS.ByteString
 getAllText hwnd = do            
     len <- getTextLength hwnd
-    let bs = (BS.replicate (len+1) 0)   -- allocate buffer
-    BS.unsafeUseAsCString bs (\cs -> do c_GhciGetText hwnd cs (fromIntegral (len+1) :: Int32))   
-    return (BS.init bs) -- drop the zero byte at the end
-    
+    let bs = (BS.replicate len 0)   -- allocate buffer
+    len' <- BS.unsafeUseAsCString bs (\cs -> do c_GhciGetText hwnd cs (fromIntegral len :: Int32))
+    if len == (fromIntegral len' :: Int) then return bs
+    else return $ BS.take (fromIntegral len' :: Int) bs
+
+-- File Save As, returns False if user opted to cancel the save 
+fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
+fileSaveAs ss tw = do 
+    SS.ssDebugInfo ss $ "fileSaveAs :: filename " ++ (maybe "" id (SS.twFilePath tw)) 
+    -- prompt user for name to save to                   
+    fd <- fileDialogCreate 
+        (SS.ssFrame ss)
+        "Save GHCI as" 
+        (maybe "." takeDirectory (SS.twFilePath tw))
+        (maybe "" id (SS.twFilePath tw)) 
+        "*.txt" 
+        (Point 100 100) 
+        (wxSAVE .|. wxOVERWRITE_PROMPT)
+    rs <- dialogShowModal fd  
+    case rs of
+--        wxID_OK -> do
+        5100 -> do    
+            fp <- fileDialogGetPath fd
+            getAllText (SS.twPanelHwnd tw) >>= BS.writeFile fp
+            -- save filename used
+            let tw' = SS.twSetFilePath tw fp 
+            SS.hwUpdateWindow ss 
+                (\hw -> if SS.twIsSameWindow tw' (SS.hwWindow hw) 
+                        then Just $ SS.createHideWindow tw' (SS.hwMenus hw) 
+                        else Nothing)
+            return ()  
+        otherwise -> return ()
+    return ()
+   
 setEventHandler :: SS.Session -> SS.HideWindow -> IO ()
 setEventHandler ss hw = do
     cb <- createCallback (callback ss hw)
@@ -282,25 +313,4 @@ eventSelectionClear = 4
 eventClosed :: Int
 eventClosed = 5
 
--- File Save As, returns False if user opted to cancel the save 
-fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
-fileSaveAs ss tw = do   
-    -- prompt user for name to save to
-    let mf = SS.ssFrame ss                   -- wxFD_SAVE wxFD_OVERWRITE_PROMPT
-    fd <- fileDialogCreate mf "Save file as" "." (maybe "" id (SS.twFilePath tw)) "*.txt" (Point 100 100) 0x6
-    rs <- dialogShowModal fd    
-    case rs of
---        wxID_OK -> do
-        5100 -> do    
-            fp <- fileDialogGetPath fd
-            getAllText (SS.twPanelHwnd tw) >>= BS.writeFile fp
-            -- save filename used
-            let tw' = SS.twSetFilePath tw fp 
-            SS.hwUpdateWindow ss 
-                (\hw -> if SS.twIsSameWindow tw' (SS.hwWindow hw) 
-                        then Just $ SS.createHideWindow tw' (SS.hwMenus hw) 
-                        else Nothing)
-            return ()  
-        otherwise -> return ()
-    return ()
   

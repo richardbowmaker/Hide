@@ -177,7 +177,7 @@ type SsMenuList = [SsNameMenuPair]
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> SC.ScnEditor -> IO (Session)
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> SC.ScnEditor -> IO Session
 ssCreate mf am nb ms sf ots ot db = do 
     mtid <- myThreadId
     tot  <- atomically $ newTChan
@@ -264,7 +264,7 @@ data TextWindow
                     twPanel             :: Panel (),            -- ^ The parent panel of text window
                     twPanelHwnd         :: HWND,                -- ^ HWND of panel
                     twHwnd              :: HWND,
-                    twFilePath          :: Maybe String }       -- ^ File name associated with window
+                    twTFilePath         :: TFilePath }          -- ^ File name associated with window
 
 data TextMenus 
     = TextMenus {   twMenuFunctions     :: [MenuFunction],
@@ -275,6 +275,7 @@ data TextMenus
 data HideWindow = HideWindow { hwWindow :: TextWindow, hwMenus :: TextMenus }
 data HideWindows = HideWindows { hwWindows :: [HideWindow] }
 type THideWindows = TVar HideWindows
+type TFilePath = TVar (Maybe String)
 
 ---------------------------------------------------------------
 
@@ -290,8 +291,10 @@ createDebugWindowType scn = (Debug scn)
 createOutputWindowType :: SC.ScnEditor -> TextWindowType
 createOutputWindowType scn = (Output scn)
 
-createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> TextWindow
-createTextWindow wtype panel hwndp hwnd file = (TextWindow wtype panel hwndp hwnd file)
+createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> IO TextWindow
+createTextWindow wtype panel hwndp hwnd file =  do
+    tfile <- (atomically $ newTVar file)
+    return (TextWindow wtype panel hwndp hwnd tfile)
 
 createTextMenus :: [MenuFunction] -> IO Bool -> IO Bool -> IO String -> TextMenus
 createTextMenus mfs focus clean status = (TextMenus mfs focus clean status)
@@ -394,6 +397,9 @@ hwSetFilePath hw fp = createHideWindow (twSetFilePath (hwWindow hw) fp) (hwMenus
 
 ----------------------------------------------------------------
 
+twFilePath :: TextWindow -> IO (Maybe String)
+twFilePath tw = atomically $ readTVar twTFilePath tw
+
 twFilePathToString :: TextWindow -> String                        
 twFilePathToString tw = maybe "" id (twFilePath tw)
 
@@ -404,7 +410,8 @@ twGetEditor tw =
         _                -> Nothing
 
 twSetFilePath :: TextWindow -> String -> TextWindow
-twSetFilePath (TextWindow wtype p phwnd hwnd _) fp = createTextWindow wtype p phwnd hwnd (Just fp)
+twSetFilePath (TextWindow wtype p phwnd hwnd _) fp = 
+    createTextWindow wtype p phwnd hwnd $ atomically $ newTVar (Just fp)
 
 twIsGhci :: TextWindow -> Bool
 twIsGhci tw = case twType tw of
