@@ -347,18 +347,24 @@ hwIsOutput = twIsOutput . hwWindow
 hwIsDebug :: HideWindow -> Bool
 hwIsDebug = twIsDebug . hwWindow 
 
-hwFilePath :: HideWindow -> Maybe String
+hwFilePath :: HideWindow -> IO (Maybe String)
 hwFilePath = twFilePath . hwWindow 
 
 hwIsSameWindow :: HideWindow -> HideWindow -> Bool
 hwIsSameWindow hw1 hw2 = (twPanelHwnd $ hwWindow hw1) == (twPanelHwnd $ hwWindow hw2)
 
-hwIsSameFile :: HideWindow -> HideWindow -> Bool
+hwIsSameFile :: HideWindow -> HideWindow -> IO Bool
 hwIsSameFile hw1 hw2 = twIsSameFile (hwWindow hw1) (hwWindow hw2)
 
 hwFindSourceFileWindow :: Session -> String -> IO (Maybe HideWindow)
-hwFindSourceFileWindow ss fp = 
-    hwFindWindow ss (\hw -> (hwIsSourceFile hw) && (fmap (map toLower) (hwFilePath hw) == Just ((map toLower) fp)))
+hwFindSourceFileWindow ss fp = do
+    hws <- hwGetWindows ss
+    MI.findIO (\hw -> do 
+        mfp <- hwFilePath hw
+        case mfp of
+            Just fp' -> return $ (hwIsSourceFile hw) && (map toLower) fp' == (map toLower) fp
+            Nothing  -> return False) hws
+        
 
 hwRemoveWindow :: Session -> HideWindow -> IO HideWindows
 hwRemoveWindow ss hw = hwUpdate ss (\hws -> MI.findAndRemove (\hw' -> hwIsSameWindow hw hw') hws)
@@ -390,18 +396,18 @@ hwUpdateWindow ss p = atomically (modifyTVar thws (\hws -> createHideWindows $ u
                 Nothing  -> hw:(update hws p)
             thws = ssHideWindows ss
 
-hwSetFilePath :: HideWindow -> String -> HideWindow
-hwSetFilePath hw fp = createHideWindow (twSetFilePath (hwWindow hw) fp) (hwMenus hw)
-
-
+hwSetFilePath :: HideWindow -> String -> IO ()
+hwSetFilePath hw  = twSetFilePath (hwWindow hw) 
 
 ----------------------------------------------------------------
 
 twFilePath :: TextWindow -> IO (Maybe String)
-twFilePath tw = atomically $ readTVar twTFilePath tw
+twFilePath tw = atomically $ readTVar $ twTFilePath tw
 
-twFilePathToString :: TextWindow -> String                        
-twFilePathToString tw = maybe "" id (twFilePath tw)
+twFilePathToString :: TextWindow -> IO String                        
+twFilePathToString tw = do
+    mfp <- twFilePath tw
+    return $ maybe "" id mfp
 
 twGetEditor :: TextWindow -> Maybe SC.ScnEditor
 twGetEditor tw = 
@@ -409,9 +415,8 @@ twGetEditor tw =
         (SourceFile scn) -> Just scn
         _                -> Nothing
 
-twSetFilePath :: TextWindow -> String -> TextWindow
-twSetFilePath (TextWindow wtype p phwnd hwnd _) fp = 
-    createTextWindow wtype p phwnd hwnd $ atomically $ newTVar (Just fp)
+twSetFilePath :: TextWindow -> String -> IO ()
+twSetFilePath tw fp = atomically $ modifyTVar (twTFilePath tw) (\_ -> Just fp) 
 
 twIsGhci :: TextWindow -> Bool
 twIsGhci tw = case twType tw of
@@ -436,16 +441,20 @@ twIsDebug tw = case twType tw of
 twMatchesHwnd :: TextWindow -> HWND -> Bool
 twMatchesHwnd tw h = MI.comparePtrs h (twPanelHwnd tw)
 
-twIsSameFile :: TextWindow -> TextWindow -> Bool
-twIsSameFile tw1 tw2 = fmap (map toLower) (twFilePath tw1) == fmap (map toLower) (twFilePath tw2)
+twIsSameFile :: TextWindow -> TextWindow -> IO Bool
+twIsSameFile tw1 tw2 = do
+    mfp1 <- twFilePath tw1
+    mfp2 <- twFilePath tw2
+    return $ fmap (map toLower) mfp1 == fmap (map toLower) mfp2
 
 twIsSameWindow :: TextWindow -> TextWindow -> Bool
 twIsSameWindow tw1 tw2 = twPanelHwnd tw1 == twPanelHwnd tw2
 
-twFindWindow :: Session -> (TextWindow -> Bool) -> IO (Maybe TextWindow)
+twFindWindow :: Session -> (TextWindow -> IO Bool) -> IO (Maybe TextWindow)
 twFindWindow ss p = do
-    hws <- atomically (readTVar $ ssHideWindows ss)
-    return $ liftM hwWindow $ find (\hw -> p $ hwWindow hw) $ hwWindows hws
+    hws <- hwGetWindows ss
+    mhw <- MI.findIO (\hw -> p $ hwWindow hw) hws
+    return $ liftM hwWindow mhw
 
 twRemoveWindow :: Session -> TextWindow -> IO HideWindows
 twRemoveWindow ss tw = hwUpdate ss (\hws -> MI.findAndRemove (\hw' -> twIsSameWindow tw $ hwWindow hw') hws)

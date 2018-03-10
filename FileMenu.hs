@@ -54,7 +54,7 @@ openSourceFileEditor ss fp = do
     auiNotebookSetArtProvider nb ta
 
     -- add text window to project
-    let hw = createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) (Just fp)
+    hw <- createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) (Just fp)
     SS.hwUpdate ss (\hws -> hw : hws)
 
     -- enable events
@@ -67,11 +67,12 @@ openSourceFileEditor ss fp = do
 
     return (hw, scn)
 
-createHideWindow :: SS.Session -> SC.ScnEditor -> Panel() -> HWND -> HWND -> Maybe String -> SS.HideWindow
-createHideWindow ss scn panel phwnd hwnd mfp = SS.createHideWindow tw tms
+createHideWindow :: SS.Session -> SC.ScnEditor -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
+createHideWindow ss scn panel phwnd hwnd mfp = do
+    tw <- SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
+    return $ SS.createHideWindow tw (tms tw)
 
-    where   tw = SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
-            tms = SS.createTextMenus
+    where  tms tw = SS.createTextMenus
                     [
                         (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                 (return True)),
                         (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                     (return True)),
@@ -148,7 +149,7 @@ newFile ss = do
     -- add panel to notebook
     auiNotebookAddPage nb p "..." False 0
 
-    let hw = createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) Nothing
+    hw <- createHideWindow ss scn p hwnd (SC.scnGetHwnd scn) Nothing
     SS.hwUpdate ss (\hws -> hw : hws)
 
     -- enable events
@@ -170,9 +171,10 @@ closeEditor ss tw scn = do
     else do            
         -- file is dirty so prompt the user if they want to save it
         EN.enbSelectTab ss tw
+        fs <- SS.twFilePathToString tw
         b <- confirmDialog (SS.ssFrame ss) 
             CN.programTitle 
-            ("Do you wish to save the file: ?\n" ++ (show $ SS.twFilePathToString tw))
+            ("Do you wish to save the file: ?\n" ++ (show fs))
             True                        
         if b then do                   
            -- save file
@@ -218,7 +220,6 @@ fileCloseAll ss = SS.hwFindWindows ss SS.hwIsSourceFile >>= MI.doWhileTrueIO (\h
 
 fileClose :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
 fileClose ss tw scn = do
-    SS.ssDebugInfo ss $ "fileClose:: file " ++ (show $ maybe "" id $ SS.twFilePath tw)
     b <- closeEditor ss tw scn   
     if b then do   
         -- remove page from notebook
@@ -248,8 +249,9 @@ fileSave :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool
 fileSave ss tw scn = do    
     ic <- SC.scnIsClean scn  
     if ic then return True
-    else       
-        case SS.twFilePath tw of
+    else do
+        mfp <- SS.twFilePath tw
+        case mfp of
             Just fp -> do
                 writeSourceFile ss tw scn
                 return True            
@@ -273,14 +275,10 @@ fileSaveAs ss tw scn = do
         5100 -> do    
             fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
-            let tw' = SS.twSetFilePath tw fp 
-            SS.hwUpdateWindow ss 
-                (\hw -> if SS.twIsSameWindow tw' (SS.hwWindow hw) 
-                        then Just $ SS.createHideWindow tw' (SS.hwMenus hw) 
-                        else Nothing)
-            writeSourceFile ss tw' scn                  
+            SS.twSetFilePath tw fp 
+            writeSourceFile ss tw scn                  
             -- update tab name
-            EN.enbSetTabText ss tw'
+            EN.enbSetTabText ss tw
             return True 
  
         --wxID_CANCEL -> do
@@ -291,8 +289,9 @@ fileSaveAs ss tw scn = do
   
 -- writes file to disk and sets editor to clean
 writeSourceFile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
-writeSourceFile ss tw scn= do
-    case SS.twFilePath tw of
+writeSourceFile ss tw scn = do
+    mfp <- SS.twFilePath tw
+    case mfp of
         Just fp -> do
             SC.scnGetAllText scn >>= BS.writeFile fp
             SC.scnSetSavePoint scn
@@ -314,7 +313,8 @@ updateStatus ss s = do
     
 writeSourceFileEditor :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
 writeSourceFileEditor ss hw scn = do
-    case SS.hwFilePath hw of
+    mfp <- SS.hwFilePath hw
+    case mfp of
         Just fp -> do
             text <- BS.readFile fp
             SC.scnSetText scn text

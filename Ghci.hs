@@ -26,7 +26,7 @@ module Ghci
 
 import Control.Concurrent 
 import Control.Concurrent.STM
-import Control.Monad (mapM_) 
+import Control.Monad (mapM_, liftM2) 
 import qualified Data.ByteString as BS (init, replicate)
 import qualified Data.ByteString.Internal as BS (ByteString)
 import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
@@ -79,22 +79,24 @@ foreign import ccall safe "wrapper" createCallback ::
 
 openWindowFile :: SS.Session -> SS.TextWindow -> IO ()
 openWindowFile ss ftw = do
-    mtw <- SS.twFindWindow ss (\tw -> (SS.twIsGhci tw) && (SS.twIsSameFile ftw tw)) 
+    mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (SS.twIsSameFile ftw tw)) 
     case mtw of
         Just tw -> do
             -- GHCI already open so select it
             let nb = SS.ssOutputs ss
             auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
             -- reload the source file
-            sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id (SS.twFilePath tw))
+            mfp <- SS.twFilePath tw
+            sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id mfp)
         Nothing -> do
             -- GHCI not open so open a new tab
-            case (SS.twFilePath ftw) of
+            mfp <- SS.twFilePath ftw
+            case mfp of
                 Just fp -> do
                     mw <- open ss fp                 
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
-                                let hw = createHideWindow ss panel hwndp hwnd (Just fp)
+                                hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
                                 setEventHandler ss hw
                                 enableEvents hwnd
@@ -108,7 +110,7 @@ openWindow ss = do
     m <- open ss "" 
     case m of
         Just (panel, hwndp, hwnd) -> do
-            let hw = createHideWindow ss panel hwndp hwnd Nothing
+            hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
             setEventHandler ss hw
             enableEvents hwnd
@@ -151,11 +153,12 @@ closeWindow ss tw = do
 closeAll :: SS.Session -> IO ()
 closeAll ss = SS.hwFindWindows ss SS.hwIsGhci >>= mapM_ (\hw -> closeWindow ss (SS.hwWindow hw))
 
-createHideWindow :: SS.Session -> Panel() -> HWND -> HWND -> Maybe String -> SS.HideWindow
-createHideWindow ss panel phwnd hwnd mfp = SS.createHideWindow tw tms
+createHideWindow :: SS.Session -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
+createHideWindow ss panel phwnd hwnd mfp = do
+    tw <- SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
+    return $ SS.createHideWindow tw (tms tw)
 
-    where   tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
-            tms = SS.createTextMenus 
+    where  tms tw = SS.createTextMenus 
                     [ 
                         (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw) (return True)),
                         (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)       (return True)),
@@ -213,13 +216,13 @@ getAllText hwnd = do
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
 fileSaveAs ss tw = do 
-    SS.ssDebugInfo ss $ "fileSaveAs :: filename " ++ (maybe "" id (SS.twFilePath tw)) 
-    -- prompt user for name to save to                   
+    -- prompt user for name to save to
+    mfp <- SS.twFilePath tw
     fd <- fileDialogCreate 
         (SS.ssFrame ss)
         "Save GHCI as" 
-        (maybe "." takeDirectory (SS.twFilePath tw))
-        (maybe "" id (SS.twFilePath tw)) 
+        (maybe "." takeDirectory (mfp))
+        (maybe "" id mfp) 
         "*.txt" 
         (Point 100 100) 
         (wxSAVE .|. wxOVERWRITE_PROMPT)
@@ -230,14 +233,9 @@ fileSaveAs ss tw = do
             fp <- fileDialogGetPath fd
             getAllText (SS.twPanelHwnd tw) >>= BS.writeFile fp
             -- save filename used
-            let tw' = SS.twSetFilePath tw fp 
-            SS.hwUpdateWindow ss 
-                (\hw -> if SS.twIsSameWindow tw' (SS.hwWindow hw) 
-                        then Just $ SS.createHideWindow tw' (SS.hwMenus hw) 
-                        else Nothing)
+            SS.twSetFilePath tw fp 
             return ()  
         otherwise -> return ()
-    return ()
    
 setEventHandler :: SS.Session -> SS.HideWindow -> IO ()
 setEventHandler ss hw = do

@@ -63,7 +63,8 @@ onBuildBuild ss tw scn fileSave = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                case SS.hwFilePath hw of
+                mfp <- SS.hwFilePath hw
+                case mfp of
                     Just fp -> cpBuildProject ss fp (Just $ compileComplete ss)
                     Nothing -> return ()
             Nothing -> do
@@ -84,7 +85,8 @@ onBuildCompile ss tw scn fileSave = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                case SS.hwFilePath hw of
+                mfp <- SS.hwFilePath hw
+                case mfp of
                     Just fp -> cpCompileFile ss fp (Just $ compileComplete ss)
                     Nothing -> return ()
             Nothing -> do
@@ -114,7 +116,8 @@ onBuildGhci ss tw scn fileSave = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                case SS.hwFilePath hw of
+                mfp <- SS.hwFilePath hw
+                case mfp of
                     Just fp -> cpCompileFile ss fp (Just $ ghciComplete ss hw)
                     Nothing -> return ()
             Nothing -> do
@@ -206,7 +209,8 @@ cpCompileFileDone ss mfinally ces = do
 
 cpDebugRun :: SS.Session -> SS.TextWindow -> IO ()
 cpDebugRun ss tw = do
-    case SS.twFilePath tw of
+    mfp <- SS.twFilePath tw
+    case mfp of
         Just fp -> do
             SS.ssDebugInfo ss $ "Start run: " ++ fp
             --  check .exe file exists
