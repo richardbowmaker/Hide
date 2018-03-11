@@ -47,7 +47,7 @@ openOutputWindow ss = do
     case mhw of
         Just hw -> do
             case SS.hwGetEditor hw of
-                Just scn -> SC.scnGrabFocus scn
+                Just scn -> SC.grabFocus scn
                 Nothing  -> return () -- shouldn't get here
         Nothing -> addOutputTab ss
     
@@ -59,8 +59,8 @@ closeOutputWindow ss = do
             case SS.hwGetEditor hw of
                 Just scn -> do
                     SS.ssSetOutput ss Nothing
-                    SC.scnDisableEvents scn
-                    SC.scnClose scn
+                    SC.disableEvents scn
+                    SC.close scn
                     auiNotebookDeletePage (SS.ssOutputs ss) 0
                     return ()
                 Nothing  -> return () -- shouldn't get here
@@ -72,30 +72,30 @@ addOutputTab ss = do
     -- create output tab
     panel <- panel nb []
     hwndp <- windowGetHandle panel
-    scn <- SC.scnCreateEditor hwndp
+    scn <- SC.createEditor hwndp
     auiNotebookInsertPage nb 0 panel "Output" False 0
     ta <- auiSimpleTabArtCreate
     auiNotebookSetArtProvider nb ta
     
     -- configure editor
-    SC.scnSetLexer scn (fromIntegral SC.sCLEX_CONTAINER :: Int)
-    SC.scnSetAStyle scn (fromIntegral SC.sTYLE_DEFAULT :: Word64) SC.scnBlack SC.scnWhite 9 "Courier New"
-    SC.scnStyleClearAll scn
-    SC.scnSetAStyle scn (fromIntegral SC.sCE_H_DEFAULT :: Word64) SC.scnBlack SC.scnWhite 9 "Courier New"
-    SC.scnSetReadOnly scn True
+    SC.setLexer scn (fromIntegral SC.sCLEX_CONTAINER :: Int)
+    SC.setAStyle scn (fromIntegral SC.sTYLE_DEFAULT :: Word64) SC.black SC.white 9 "Courier New"
+    SC.styleClearAll scn
+    SC.setAStyle scn (fromIntegral SC.sCE_H_DEFAULT :: Word64) SC.black SC.white 9 "Courier New"
+    SC.setReadOnly scn True
 
-    SC.scnSetSelectionMode scn SC.sC_SEL_LINES
+    SC.setSelectionMode scn SC.sC_SEL_LINES
 
     -- add text window to project
-    hw <- createHideWindow ss scn panel hwndp (SC.scnGetHwnd scn)
+    hw <- createHideWindow ss scn panel hwndp (SC.getHwnd scn)
     SS.ssSetOutput ss (Just hw)
 
     -- enable events
-    SC.scnSetEventHandler scn $ scnCallback ss hw scn
-    SC.scnEnableEvents scn
-    SC.scnGrabFocus scn
+    SC.setEventHandler scn $ scnCallback ss hw scn
+    SC.enableEvents scn
+    SC.grabFocus scn
 
-createHideWindow :: SS.Session -> SC.ScnEditor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
+createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd = do
     tw <- SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing
     return $ SS.createHideWindow tw (tms tw)
@@ -104,18 +104,18 @@ createHideWindow ss scn panel phwnd hwnd = do
                     [
                         (SS.createMenuFunction CN.menuFileClose         (closeOutputWindow ss)          (return True)),
                         (SS.createMenuFunction CN.menuFileSaveAs        (fileSave ss tw scn)            (return True)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.scnCopy scn)                (liftM not $ SC.scnSelectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.scnSelectAll scn)           (return True)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (return True)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True))
                     ]
-                    (SC.scnGetFocus scn)
+                    (SC.getFocus scn)
                     (return True)
                     (getStatusInfo scn)
 
 -- File Save As, returns False if user opted to cancel the save 
-fileSave :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO ()
+fileSave :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 fileSave ss tw scn = do   
     -- prompt user for name to save to
     mfp <-SS.twFilePath tw
@@ -135,7 +135,7 @@ fileSave ss tw scn = do
             fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
             SS.twSetFilePath tw fp 
-            SC.scnGetAllText scn >>= BS.writeFile fp             
+            SC.getAllText scn >>= BS.writeFile fp             
             return () 
  
         --wxID_CANCEL -> do
@@ -171,15 +171,15 @@ gotoCompileError ss line fileOpen = do
     where   gotoPos hw ce = do
                 case SS.hwGetEditor hw of
                     Just scn -> do
-                        SC.scnGotoLineCol scn ((SS.ceSrcLine ce)-1) ((SS.ceSrcCol ce)-1)
-                        SC.scnGrabFocus scn
-                        SC.scnSelectWord scn
+                        SC.gotoLineCol scn ((SS.ceSrcLine ce)-1) ((SS.ceSrcCol ce)-1)
+                        SC.grabFocus scn
+                        SC.selectWord scn
                     Nothing -> return ()
 
-scnCallback :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> SC.SCNotification -> IO ()
+scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 scnCallback ss hw scn sn = do 
     -- event from output pane
-    case (SC.scnNotifyGetCode sn) of
+    case (SC.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
             gotoCompileError ss (fromIntegral (SC.snLine sn) :: Int) (FM.fileOpen ss)
             return ()
@@ -197,9 +197,9 @@ scnCallback ss hw scn sn = do
         otherwise -> do
             return ()
 
-updateMenus :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
+updateMenus :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
 updateMenus ss hw scn = do
-    f <- SC.scnGetFocus scn 
+    f <- SC.getFocus scn 
     if f then do 
         setm ss tms CN.menuFileClose        
         setm ss tms CN.menuFileCloseAll        
@@ -264,9 +264,9 @@ getTabCount ss = do
     pc <- auiNotebookGetPageCount $ SS.ssOutputs ss
     return pc
 
-getStatusInfo :: SC.ScnEditor -> IO String   
+getStatusInfo :: SC.Editor -> IO String   
 getStatusInfo scn = do
-    (l, lp, dp, lc, cc) <- SC.scnGetPositionInfo scn
+    (l, lp, dp, lc, cc) <- SC.getPositionInfo scn
     return (printf "Line: %d Col: %d, Lines: %d Pos: %d Size: %d" (l+1) (lp+1) lc dp cc)  
     
 updateStatus :: SS.Session -> String -> IO ()

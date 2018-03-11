@@ -132,7 +132,7 @@ import System.FilePath.Windows (takeFileName)
 
 
 import qualified Constants as CN
-import Debug
+import Debug as DG
 import qualified Misc as MI
 import qualified Scintilla as SC
                 
@@ -180,7 +180,7 @@ type SsMenuList = [SsNameMenuPair]
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.ScnEditor -> IO Session
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> IO Session
 ssCreate mf am nb ms sf ots db = do 
     mtid <- myThreadId
     tot  <- atomically $ newTChan
@@ -188,9 +188,9 @@ ssCreate mf am nb ms sf ots db = do
     terr <- atomically $ newTVar []
     tfnd <- atomically $ newTVar (FindText "" 0 0)
     tout <- atomically $ newTVar Nothing
-    let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugError db s) else (\s -> return ())
-    let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugWarn  db s) else (\s -> return ())
-    let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ debugInfo  db s) else (\s -> return ())
+    let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugError db s) else (\s -> return ())
+    let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugWarn  db s) else (\s -> return ())
+    let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws)
 
@@ -269,7 +269,7 @@ ftFindText text currPos startPos = (FindText text currPos startPos)
 -- Text windows
 ----------------------------------------------------------------
 
-data TextWindowType = SourceFile SC.ScnEditor | Ghci | Debug SC.ScnEditor | Output SC.ScnEditor
+data TextWindowType = SourceFile SC.Editor | Ghci | Debug SC.Editor | Output SC.Editor
 
 -- | Text Window
 -- things to add return string for updating status bar, line col pos etc.
@@ -298,13 +298,13 @@ type TFilePath = TVar (Maybe String)
 createGhciWindowType :: TextWindowType
 createGhciWindowType = (Ghci)
 
-createSourceWindowType :: SC.ScnEditor -> TextWindowType
+createSourceWindowType :: SC.Editor -> TextWindowType
 createSourceWindowType scn = (SourceFile scn)
 
-createDebugWindowType :: SC.ScnEditor -> TextWindowType
+createDebugWindowType :: SC.Editor -> TextWindowType
 createDebugWindowType scn = (Debug scn)
 
-createOutputWindowType :: SC.ScnEditor -> TextWindowType
+createOutputWindowType :: SC.Editor -> TextWindowType
 createOutputWindowType scn = (Output scn)
 
 createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> IO TextWindow
@@ -390,7 +390,7 @@ hwUpdateHideWindows :: Session -> ([HideWindow] -> [HideWindow]) -> IO HideWindo
 hwUpdateHideWindows ss f = atomically (modifyTVar thws (\hws -> createHideWindows $ hwWindows hws) >> readTVar thws)
     where thws = ssHideWindows ss
 
-hwGetEditor :: HideWindow -> Maybe SC.ScnEditor
+hwGetEditor :: HideWindow -> Maybe SC.Editor
 hwGetEditor = twGetEditor . hwWindow
 
 hwMatchesHwnd :: HideWindow -> HWND -> Bool
@@ -426,7 +426,7 @@ twFilePathToString tw = do
     mfp <- twFilePath tw
     return $ maybe "" id mfp
 
-twGetEditor :: TextWindow -> Maybe SC.ScnEditor
+twGetEditor :: TextWindow -> Maybe SC.Editor
 twGetEditor tw = 
     case twType tw of
         (SourceFile scn) -> Just scn

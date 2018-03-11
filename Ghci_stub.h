@@ -2,7 +2,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern void Ghci_dQjz(StgStablePtr the_stableptr, HsPtr a1, HsInt a2);
+extern void Ghci_dxDX(StgStablePtr the_stableptr, HsPtr a1, HsInt a2);
 #ifdef __cplusplus
 }
 #endif

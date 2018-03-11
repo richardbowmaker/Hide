@@ -48,7 +48,7 @@ import qualified Session as SS
 -- Build Menu handlers
 ------------------------------------------------------------    
     
-onBuildBuild :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
 onBuildBuild ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
@@ -71,7 +71,7 @@ onBuildBuild ss tw scn fileSave = do
                     SS.ssDebugError ss "onBuildBuild:: no file name set"
     else return ()
     
-onBuildCompile :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
 onBuildCompile ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
@@ -102,7 +102,7 @@ compileComplete ss = do
     OT.addText ss $ BS.pack "Compile complete\n"
     return ()
 
-onBuildGhci :: SS.Session -> SS.TextWindow -> SC.ScnEditor -> IO Bool -> IO ()
+onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
 onBuildGhci ss tw scn fileSave = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        

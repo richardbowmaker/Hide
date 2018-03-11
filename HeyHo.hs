@@ -116,9 +116,9 @@ setUpMainWindow mf sf = do
     -- add floating debug window
     dp <- panel mf [size := (Size 400 400)]
     hwnd <- windowGetHandle dp
-    scn <- SC.scnCreateEditor hwnd
-    SC.scnConfigureHaskell scn
-    SC.scnSetReadOnly scn True
+    scn <- SC.createEditor hwnd
+    SC.configureHaskell scn
+    SC.setReadOnly scn True
   
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Debug"
@@ -254,7 +254,7 @@ onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do
     case mhw of
         Just hw -> do 
             case SS.hwGetEditor hw of
-                Just scn -> SC.scnGrabFocus scn
+                Just scn -> SC.grabFocus scn
                 Nothing  -> return ()
         Nothing -> return ()
 

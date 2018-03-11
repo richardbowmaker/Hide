@@ -46,7 +46,7 @@ debug = True
 
 
 programTitle :: String
-programTitle = "HIDE 11/03/2018 V.2"
+programTitle = "HIDE"
 
 -------------------------------------
 -- menu ids

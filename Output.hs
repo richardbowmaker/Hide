@@ -4,7 +4,7 @@ module Output
     clear,
     addText,
     addLine,
-    withScnEditor
+    withEditor
 ) where 
     
 
@@ -15,37 +15,37 @@ import qualified ScintillaConstants as SC
 import qualified Session as SS
 
 
-clear' :: SS.Session -> SC.ScnEditor -> IO ()
+clear' :: SS.Session -> SC.Editor -> IO ()
 clear' ss scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnClearAll scn
-    SC.scnSetReadOnly scn True
+    SC.setReadOnly scn False
+    SC.clearAll scn
+    SC.setReadOnly scn True
 
-addText' :: SS.Session -> BS.ByteString -> SC.ScnEditor -> IO ()
+addText' :: SS.Session -> BS.ByteString -> SC.Editor -> IO ()
 addText' ss bs scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnAppendText scn bs
-    SC.scnSetReadOnly scn True
-    SC.scnShowLastLine scn
+    SC.setReadOnly scn False
+    SC.appendText scn bs
+    SC.setReadOnly scn True
+    SC.showLastLine scn
     
-addLine' :: SS.Session -> BS.ByteString -> SC.ScnEditor -> IO ()
+addLine' :: SS.Session -> BS.ByteString -> SC.Editor -> IO ()
 addLine' ss bs scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnAppendLine scn bs
-    SC.scnSetReadOnly scn True
-    SC.scnShowLastLine scn
+    SC.setReadOnly scn False
+    SC.appendLine scn bs
+    SC.setReadOnly scn True
+    SC.showLastLine scn
 
 clear :: SS.Session -> IO ()
-clear ss = withScnEditor ss $ clear' ss 
+clear ss = withEditor ss $ clear' ss 
 
 addText :: SS.Session -> BS.ByteString -> IO ()
-addText ss bs = withScnEditor ss $ addText' ss bs 
+addText ss bs = withEditor ss $ addText' ss bs 
 
 addLine :: SS.Session -> BS.ByteString -> IO ()
-addLine ss bs = withScnEditor ss $ addLine' ss bs 
+addLine ss bs = withEditor ss $ addLine' ss bs 
 
-withScnEditor :: SS.Session -> (SC.ScnEditor -> IO ()) -> IO ()
-withScnEditor ss f = do    
+withEditor :: SS.Session -> (SC.Editor -> IO ()) -> IO ()
+withEditor ss f = do    
     mhw <- SS.ssOutput ss
     case mhw of
         Just hw -> do

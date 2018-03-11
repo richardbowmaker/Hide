@@ -16,22 +16,22 @@ import Data.Word (Word64)
 
 import Scintilla
 
-debugError :: ScnEditor -> String -> IO ()
+debugError :: Editor -> String -> IO ()
 debugError e s = debugOut e ("Error: " ++ s)
 
-debugWarn :: ScnEditor -> String -> IO ()
+debugWarn :: Editor -> String -> IO ()
 debugWarn e s = debugOut e ("Warning: " ++ s)
 
-debugInfo :: ScnEditor -> String -> IO ()
+debugInfo :: Editor -> String -> IO ()
 debugInfo e s = debugOut e ("Info: " ++ s)
 
-debugOut :: ScnEditor -> String -> IO ()
+debugOut :: Editor -> String -> IO ()
 debugOut e s = do
     let bs = BS.pack s
-    scnSetReadOnly e False
-    scnAppendLine e bs
-    scnSetReadOnly e True
-    scnShowLastLine e
+    setReadOnly e False
+    appendLine e bs
+    setReadOnly e True
+    showLastLine e
     return ()
 
 debugPause :: Frame () -> String -> IO ()
