@@ -4,7 +4,8 @@ module Debug
     debugError,
     debugWarn,
     debugInfo,
-    debugOut
+    debugOut,
+    debugPause
 ) where
 
 import qualified Data.ByteString.Char8 as BS (pack)
@@ -24,7 +25,6 @@ debugWarn e s = debugOut e ("Warning: " ++ s)
 debugInfo :: ScnEditor -> String -> IO ()
 debugInfo e s = debugOut e ("Info: " ++ s)
 
-
 debugOut :: ScnEditor -> String -> IO ()
 debugOut e s = do
     let bs = BS.pack s
@@ -34,3 +34,5 @@ debugOut e s = do
     scnShowLastLine e
     return ()
 
+debugPause :: Frame () -> String -> IO ()
+debugPause f s = infoDialog f "Debug" s

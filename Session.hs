@@ -20,6 +20,7 @@ module Session
     ssDebugWarn,
     ssDebugInfo,
     ssHideWindows,
+    ssGetCompilerReport,
     ssMenuListNew,
     ssMenuListCreate,
     ssMenuListAdd,
@@ -113,8 +114,6 @@ module Session
 ) where
 
 
-import Graphics.UI.WX
-import Graphics.UI.WXCore
 import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
@@ -125,8 +124,12 @@ import Data.List (find)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.Char (toLower)
 import Data.Word (Word64)
+import Graphics.UI.WX
+import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
+import System.FilePath.Windows (takeFileName)
+
 
 import qualified Constants as CN
 import Debug
@@ -229,6 +232,9 @@ ssOutput ss = atomically $ readTVar $ ssTMOutput ss
  
 ssSetOutput :: Session -> Maybe HideWindow -> IO ()
 ssSetOutput ss mhw = atomically $ writeTVar (ssTMOutput ss) mhw
+
+ssGetCompilerReport :: Session -> IO [CompError]
+ssGetCompilerReport ss = atomically $ readTVar $ ssCompilerReport ss
          
 ----------------------------------------------------------------
 -- Comp error
@@ -372,9 +378,10 @@ hwFindSourceFileWindow ss fp = do
     MI.findIO (\hw -> do 
         mfp <- hwFilePath hw
         case mfp of
-            Just fp' -> return $ (hwIsSourceFile hw) && (map toLower) fp' == (map toLower) fp
+            Just fp' -> do
+                return $ (hwIsSourceFile hw) && (namelc fp == namelc fp')
             Nothing  -> return False) hws
-        
+    where namelc f = (map toLower) (takeFileName f)
 
 hwRemoveWindow :: Session -> HideWindow -> IO HideWindows
 hwRemoveWindow ss hw = hwUpdate ss (\hws -> MI.findAndRemove (\hw' -> hwIsSameWindow hw hw') hws)

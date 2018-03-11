@@ -24,9 +24,7 @@ import System.Process
 import System.Process.Common
 
 -- project imports
-import qualified Compile as CP
 import qualified Constants as CN
-import qualified EditMenu as EM
 import qualified EditorNotebook as EN
 import qualified FileMenu as FM
 import qualified Ghci as GH
@@ -133,8 +131,7 @@ setUpMainWindow mf sf = do
     auiManagerUpdate am
     
     -- setup the menus
-    menus <- setupMenus mf 
-
+    menus <- setupMenus mf
     -- create the session data
     ss <- SS.ssCreate mf am enb menus sf onb scn 
     
@@ -142,7 +139,8 @@ setUpMainWindow mf sf = do
     set (SS.ssMenuListGet ss CN.menuFileOpen)  [on command := FM.onFileOpen ss]
     set (SS.ssMenuListGet ss CN.menuFileNew)   [on command := FM.onFileNew  ss]
     set (SS.ssMenuListGet ss CN.menuDebugGhci) [on command := GH.openWindow ss]
-    
+    set (SS.ssMenuListGet ss CN.menuTestTest)  [on command := onTestTest    ss]
+
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
@@ -235,14 +233,15 @@ setupMenus mf  = do
     _      <- toolMenu tbar menuFileSave    "" "save.png"    []
     _      <- toolMenu tbar menuFileSaveAll "" "saveall.png" []
   
-    return (ml)
+    return ml
     
 ------------------------------------------------------------    
--- File Menu handlers
+-- Event handlers
 ------------------------------------------------------------    
 
 onClosing :: SS.Session -> IO ()
 onClosing ss = do
+    OT.closeOutputWindow ss
     GH.closeAll ss
     FM.fileCloseAll ss
     (auiManagerUnInit . SS.ssAuiMgr) ss
@@ -272,47 +271,12 @@ onTabClose ss enb = do
         Nothing -> return ()
     return ()
 
-{-
-got EventAuiNotebook
-expected Object (CWxObject (CEvtHandler (CAuiManagerEvent a0)))
-
-auiManagerEventVeto :: AuiManagerEvent  a -> Bool ->  IO ()
-
-data EventAuiNotebook = AuiNotebookAllowDnd { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookBeginDrag  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookBgDclick  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookButton  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookDragDone  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookDragMotion  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookEndDrag  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookPageChanged  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookPageChanging  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookPageClose  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookPageClosed  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookTabMiddleDown  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookTabMiddleUp  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookTabRightDown  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookTabRightUp  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiNotebookUnknown
-                      | AuiTabCtrlPageChanging  { newSel ::  WindowSelection, oldSel ::  WindowSelection }
-                      | AuiTabCtrlUnknown
-                      deriving (Show, Eq)
-
-eventGetEventObject :: Event a -> IO (WxObject ())
-withCurrentEvent :: (Event () -> IO ()) -> IO ()
-
-    withCurrentEvent (\ev -> do
-                            x <- (eventGetEventObject (objectCast ev))                          
-                            auiManagerEventVeto x  True)
--}
-
-
 onOutputTabClose :: SS.Session -> EventAuiNotebook -> IO ()
 onOutputTabClose ss _ = do
     mhw <- OT.getSelectedGhci ss 
     case mhw of
         Just hw -> GH.closeWindow ss $ SS.hwWindow hw
-        Nothing -> return ()
+        Nothing -> OT.closeOutputWindow ss
 
 onOutputTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
 onOutputTabChanged ss _ = do
@@ -327,24 +291,10 @@ onOutputTabChanged ss _ = do
  
 onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
+    OT.addLine ss $ BS.pack "line 1"
+    OT.addLine ss $ BS.pack "line 1"
+    OT.addLine ss $ BS.pack "line 1"
     return ()
-
-------------------------------------------------------------    
--- Debug menu handlers
-------------------------------------------------------------    
- 
-{-   
-onDebugRun :: Session -> IO ()
-onDebugRun ss = do
-    sf <- enbGetSelectedSourceFile ss
-    case (sfFilePath sf) of
-        Just fp -> cpDebugRun ss fp 
-        Nothing -> warningDialog (ssFrame ss) CN.programTitle "Source file has not been given a name" 
-    return ()
-
-onDebugGhci :: Session -> IO ()
-onDebugGhci ss = GH.openWindow ss (ghciCallback ss)
--}
 
 ------------------------------------------------------------    
 -- Timer handler
@@ -352,15 +302,11 @@ onDebugGhci ss = GH.openWindow ss (ghciCallback ss)
     
 onTimer :: SS.Session -> IO ()
 onTimer ss = do
-
     -- update output pane
-    withTChan (SS.ssTOutput ss) (OT.addText ss) 
-    
+    withTChan (SS.ssTOutput ss) (OT.addText ss)   
     -- run any scheduled functions
-    withTChan (SS.ssCFunc ss) (\f -> f)
-   
+    withTChan (SS.ssCFunc ss) (\f -> f)   
     where
-
         -- calls supplied function whilst there is still data in the channel
         withTChan :: TChan a -> (a -> IO ()) -> IO ()
         withTChan chan f =  

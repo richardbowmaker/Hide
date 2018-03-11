@@ -22,6 +22,7 @@ import Text.Printf (printf)
 -- project imports
 
 import qualified Constants as CN
+import qualified Debug as DG
 import qualified EditMenu as EM
 import qualified FileMenu as FM
 import qualified EditorNotebook as EN
@@ -57,6 +58,7 @@ closeOutputWindow ss = do
         Just hw -> do
             case SS.hwGetEditor hw of
                 Just scn -> do
+                    SS.ssSetOutput ss Nothing
                     SC.scnDisableEvents scn
                     SC.scnClose scn
                     auiNotebookDeletePage (SS.ssOutputs ss) 0
@@ -146,7 +148,7 @@ fileSave ss tw scn = do
 gotoCompileError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
 gotoCompileError ss line fileOpen = do
     -- get compiler errors and lookup the error
-    ces <- atomically $ readTVar $ SS.ssCompilerReport ss
+    ces <- SS.ssGetCompilerReport ss
     let mce = find (\ce -> (SS.ceErrLine ce) <= line ) (reverse ces)
     case mce of
         Just ce -> do
