@@ -88,7 +88,7 @@ findIO _ [] = return Nothing
 findIO p (x:xs) = do
     b <- p x
     if b then return (Just x) else findIO p xs
-  
+     
 ------------------------------------------------------------    
 -- Tree Control
 ------------------------------------------------------------    

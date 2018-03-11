@@ -423,6 +423,8 @@ twGetEditor :: TextWindow -> Maybe SC.ScnEditor
 twGetEditor tw = 
     case twType tw of
         (SourceFile scn) -> Just scn
+        (Output scn)     -> Just scn
+        (Debug scn)      -> Just scn
         _                -> Nothing
 
 twSetFilePath :: TextWindow -> String -> IO ()

@@ -45,7 +45,7 @@ import Data.Maybe (maybe)
 debug = True
 
 programTitle :: String
-programTitle = "HIDE"
+programTitle = "HIDE Dev"
 
 -------------------------------------
 -- menu ids

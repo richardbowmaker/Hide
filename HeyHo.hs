@@ -32,6 +32,7 @@ import qualified FileMenu as FM
 import qualified Ghci as GH
 import qualified Misc as MI
 import qualified OutputPane as OT
+import qualified Output as OT
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -146,8 +147,10 @@ setUpMainWindow mf sf = do
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
     set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
-   
-    return (ss)
+
+    OT.openOutputWindow ss
+
+    return ss
   
 ------------------------------------------------------------    
 -- Setup menus

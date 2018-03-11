@@ -212,7 +212,7 @@ fileOpen ss fp = do
         Nothing -> do       
             -- existing file so add to list, create window and set focus
             (hw, scn) <- openSourceFileEditor ss fp
-            writeSourceFileEditor ss hw scn 
+            loadEditor ss hw scn 
             SC.scnGrabFocus scn
 
 fileCloseAll :: SS.Session -> IO Bool
@@ -321,8 +321,8 @@ updateStatus ss s = do
     let st = SS.ssStatus ss
     set st [text:= s]
     
-writeSourceFileEditor :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
-writeSourceFileEditor ss hw scn = do
+loadEditor :: SS.Session -> SS.HideWindow -> SC.ScnEditor -> IO ()
+loadEditor ss hw scn = do
     mfp <- SS.hwFilePath hw
     case mfp of
         Just fp -> do

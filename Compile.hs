@@ -40,7 +40,7 @@ import System.Process.Common
 import qualified Constants as CN
 import qualified Ghci as GH
 import qualified Misc as MI
-import qualified OutputPane as OT
+import qualified Output as OT
 import qualified Scintilla as SC
 import qualified Session as SS
 

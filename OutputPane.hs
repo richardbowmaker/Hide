@@ -4,9 +4,6 @@ module OutputPane
     createOutputWindow,
     openOutputWindow,
     closeOutputWindow,
-    clear,
-    addText,
-    addLine,
     getSelectedGhci
 ) where 
     
@@ -28,6 +25,7 @@ import qualified Constants as CN
 import qualified EditMenu as EM
 import qualified FileMenu as FM
 import qualified EditorNotebook as EN
+import Output
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -143,7 +141,7 @@ fileSave ss tw scn = do
             return ()           
         otherwise  -> do
             return ()
-  
+
 -- jump to source file error location
 gotoCompileError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
 gotoCompileError ss line fileOpen = do
@@ -239,45 +237,6 @@ updateMenus ss hw scn = do
                     set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
                 tms = SS.hwMenus hw
-          
-clear' :: SS.Session -> SC.ScnEditor -> IO ()
-clear' ss scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnClearAll scn
-    SC.scnSetReadOnly scn True
-
-addText' :: SS.Session -> BS.ByteString -> SC.ScnEditor -> IO ()
-addText' ss bs scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnAppendText scn bs
-    SC.scnSetReadOnly scn True
-    SC.scnShowLastLine scn
-    
-addLine' :: SS.Session -> BS.ByteString -> SC.ScnEditor -> IO ()
-addLine' ss bs scn = do
-    SC.scnSetReadOnly scn False
-    SC.scnAppendLine scn bs
-    SC.scnSetReadOnly scn True
-    SC.scnShowLastLine scn
-
-clear :: SS.Session -> IO ()
-clear ss = withScnEditor ss $ clear' ss 
-
-addText :: SS.Session -> BS.ByteString -> IO ()
-addText ss bs = withScnEditor ss $ addText' ss bs 
-
-addLine :: SS.Session -> BS.ByteString -> IO ()
-addLine ss bs = withScnEditor ss $ addLine' ss bs 
-
-withScnEditor :: SS.Session -> (SC.ScnEditor -> IO ()) -> IO ()
-withScnEditor ss f = do    
-    mhw <- SS.ssOutput ss
-    case mhw of
-        Just hw -> do
-            case SS.hwGetEditor hw of
-                Just scn -> f scn
-                Nothing  -> return () -- shouldn't get here
-        Nothing -> return ()
 
 -- returns the HWND of the child panel of the currently selected notebook page
 getSelectedTabHwnd :: SS.Session -> IO (Maybe HWND)
