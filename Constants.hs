@@ -19,6 +19,8 @@ module Constants
     menuEditFind,
     menuEditFindForward,
     menuEditFindBackward,
+    menuEditSort,
+    menuEditClear,
     menuBuildCompile,
     menuBuildBuild,
     menuBuildRebuild,
@@ -103,32 +105,38 @@ menuEditFindForward = 16
 menuEditFindBackward :: Int
 menuEditFindBackward = 17
 
+menuEditSort :: Int
+menuEditSort = 18
+
+menuEditClear :: Int
+menuEditClear = 19
+
 menuBuildCompile :: Int
-menuBuildCompile = 18
+menuBuildCompile = 20
 
 menuBuildBuild :: Int
-menuBuildBuild = 19
+menuBuildBuild = 21
 
 menuBuildRebuild :: Int
-menuBuildRebuild = 20
+menuBuildRebuild = 22
 
 menuBuildClean :: Int
-menuBuildClean = 21
+menuBuildClean = 23
 
 menuBuildGhci :: Int
-menuBuildGhci = 22
+menuBuildGhci = 24
 
 menuDebugRun :: Int
-menuDebugRun = 23
+menuDebugRun = 25
 
 menuDebugGhci :: Int
-menuDebugGhci = 24
+menuDebugGhci = 26
 
 menuTestTest :: Int
-menuTestTest = 25
+menuTestTest = 27
 
 menuHelpAbout :: Int
-menuHelpAbout = 26
+menuHelpAbout = 28
 
 -----------------------------
 -- menu names
@@ -154,6 +162,8 @@ menuNames = [   (Menu menuFileOpen           "Open"             "Ctrl-O"        
                 (Menu menuEditFind           "Find"             "Ctrl-F"        "Find text"),
                 (Menu menuEditFindForward    "Find Forward"     "F3"            "Find next occurrence"),
                 (Menu menuEditFindBackward   "Find Backward"    "Shift-F3"      "Find previous occurrence"),
+                (Menu menuEditSort           "Sort"             ""              "Sort selected text"),
+                (Menu menuEditClear          "Clear"            ""              "Clear all text"),
                 (Menu menuBuildCompile       "Compile"          "Ctrl-F7"       "Compiles current file"),
                 (Menu menuBuildBuild         "Build"            "Ctrl-Shift-B"  "Builds the project"),
                 (Menu menuBuildRebuild       "Rebuild"          ""              "Rebuilds the project"),

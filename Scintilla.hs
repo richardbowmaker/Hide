@@ -95,17 +95,19 @@ module Scintilla
     selectWord,
     setSelectionStart,
     setSelectionEnd,
-    setSelectionRange
+    setSelectionRange,
+    sortSelectedText
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
 
 import Data.Word (Word32, Word64)
 import Data.Int (Int32, Int64)
-import qualified Data.ByteString as BS (append, init, replicate)
-import qualified Data.ByteString.Char8 as BS (pack, unpack)
-import Data.ByteString.Internal (ByteString)
-import Data.ByteString.Unsafe (unsafeUseAsCString, unsafeUseAsCStringLen)
+import Data.List (sort)
+import qualified Data.ByteString as BS (append, ByteString, init, replicate, useAsCString)
+import qualified Data.ByteString.Char8 as BS (pack, unpack, lines, unlines)
+import qualified Data.ByteString.Internal as BS (ByteString)
+import qualified Data.ByteString.Unsafe  as BS (unsafeUseAsCString, unsafeUseAsCStringLen)
 import Data.String.Combinators (punctuate)
 import Data.Strings (strNull)
 
@@ -429,30 +431,30 @@ clearAll :: Editor -> IO ()
 clearAll e = c_ScnSendEditorII (getHwnd e) sCI_CLEARALL 0 0 >> ioNull
 
 -- set the entire content of the editor    
-setText :: Editor -> ByteString -> IO ()
+setText :: Editor -> BS.ByteString -> IO ()
 setText e bs = do
     let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
-    unsafeUseAsCString bs0 (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_SETTEXT 0 cs)
+    BS.unsafeUseAsCString bs0 (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_SETTEXT 0 cs)
     return ()
 
 -- get all text from editor    
-getAllText :: Editor -> IO ByteString
+getAllText :: Editor -> IO BS.ByteString
 getAllText e = do            
     len <- getTextLen e
     let bs = (BS.replicate (len+1) 0)   -- allocate buffer
-    unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_GETTEXT (fromIntegral (len+1) :: Word64) cs)   
+    BS.unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_GETTEXT (fromIntegral (len+1) :: Word64) cs)   
     return (BS.init bs) -- drop the zero byte at the end
     
 getTextLen :: Editor -> IO Int
 getTextLen e = c_ScnSendEditorII (getHwnd e) sCI_GETLENGTH 0 0 >>= ioInt
   
-appendText :: Editor -> ByteString -> IO ()
+appendText :: Editor -> BS.ByteString -> IO ()
 appendText e bs = do
     let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
-    unsafeUseAsCStringLen bs0 (\(cs, l) -> do c_ScnSendEditorIS (getHwnd e) sCI_APPENDTEXT (fromIntegral (l-1) :: Word64) cs)
+    BS.unsafeUseAsCStringLen bs0 (\(cs, l) -> do c_ScnSendEditorIS (getHwnd e) sCI_APPENDTEXT (fromIntegral (l-1) :: Word64) cs)
     return ()
     
-appendLine :: Editor -> ByteString -> IO ()
+appendLine :: Editor -> BS.ByteString -> IO ()
 appendLine scn bs = appendText scn $ BS.append bs $ BS.pack "\n"
     
 getCharAt :: Editor -> Int -> IO Char
@@ -470,7 +472,7 @@ getTextRange :: Editor -> Int -> Int -> IO String
 getTextRange e start end = do
 
     let bs = (BS.replicate (end-start+2) 0)   -- allocate for return string
-    s <- unsafeUseAsCString bs (\cs -> do 
+    s <- BS.unsafeUseAsCString bs (\cs -> do 
         s <- alloca (\(ptr :: Ptr SciTextRange) -> do
             let range = (SciTextRange 
                     (fromIntegral start :: Int32)
@@ -594,7 +596,6 @@ isClean e = do
 close :: Editor -> IO ()
 close e = c_ScnDestroyEditor (getHwnd e)
  
- 
 ----------------------------------------------
 -- Undo and Redo 
 ----------------------------------------------
@@ -666,10 +667,10 @@ setSelectionMode e m = c_ScnSendEditorII (getHwnd e) sCI_SETSELECTIONMODE (fromI
 getSelText :: Editor -> IO String
 getSelText e = do
     len <- c_ScnSendEditorII (getHwnd e) sCI_GETSELTEXT 0 0
-    if len > 0 then do
-        let bs = (BS.replicate ((fromIntegral len :: Int)+1) 0)   -- allocate buffer
-        unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_GETSELTEXT 0 cs)   
-        return $ BS.unpack $ BS.init bs
+    if len > 1 then do
+        let bs = (BS.replicate (fromIntegral len :: Int) 0)   -- allocate buffer
+        BS.unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_GETSELTEXT 0 cs)   
+        return $ BS.unpack bs
     else return ""
 
 selectWord :: Editor -> IO ()
@@ -689,6 +690,46 @@ setSelectionEnd e p = c_ScnSendEditorII (getHwnd e) sCI_SETSELECTIONEND (fromInt
 
 setSelectionRange :: Editor -> Int -> Int -> IO ()
 setSelectionRange e p1 p2 = setSelectionStart e p1 >> setSelectionEnd e p2
+
+getSelectionStart :: Editor -> IO Int
+getSelectionStart e = do
+    p <- c_ScnSendEditorII (getHwnd e) sCI_GETSELECTIONSTART 0 0
+    return (fromIntegral p :: Int)
+
+getSelectionEnd :: Editor -> IO Int
+getSelectionEnd e = do
+    p <- c_ScnSendEditorII (getHwnd e) sCI_GETSELECTIONEND 0 0
+    return (fromIntegral p :: Int)
+
+sortSelectedText :: Editor -> IO ()
+sortSelectedText e = do
+    -- returns length of string + 1 for terminating null
+    len <- c_ScnSendEditorII (getHwnd e) sCI_GETSELTEXT 0 0
+    if len > 1 then do
+        -- modify selection range to include whole lines only 
+        ps <- getSelectionStart e 
+        pe <- getSelectionEnd e
+        let lp = sort [ps,pe]
+        let ps' = lp !! 0       
+        let pe' = lp !! 1        
+        p1 <- findText e "\n" 0 ps' 0
+        setSelectionStart e (p1+1)
+        len <- getTextLen e
+        p2 <- findText e "\n" 0 (pe'-1) len
+        if p2 == -1 then setSelectionEnd e len
+        else setSelectionEnd e (p2+1)
+        -- selection size may have changed
+        len <- c_ScnSendEditorII (getHwnd e) sCI_GETSELTEXT  0 0 
+        beginUndoAction e
+        let bs = (BS.replicate (fromIntegral len :: Int) 0)   -- allocate buffer
+        BS.unsafeUseAsCString bs (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_GETSELTEXT 0 cs)         
+        let bs' = (BS.unlines . sort . BS.lines) (BS.init bs)
+        BS.useAsCString bs' (\cs -> c_ScnSendEditorIS (getHwnd e) sCI_REPLACESEL 0 cs) 
+        endUndoAction e
+        setSelectionStart e (p1+1)
+        setSelectionEnd e (p2+1)
+        return ()
+    else return ()
 
 ----------------------------------------------
 -- Brace Highlighting 
@@ -875,7 +916,6 @@ setSearchFlags e f = c_ScnSendEditorII (getHwnd e) sCI_SETSEARCHFLAGS  (fromInte
 
 setTargetWholeDocument :: Editor -> IO ()
 setTargetWholeDocument e = c_ScnSendEditorII (getHwnd e) sCI_TARGETWHOLEDOCUMENT 0 0 >> ioNull
-
 
 searchInTarget :: Editor -> String -> IO Int
 searchInTarget e s = do

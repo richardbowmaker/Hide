@@ -13,7 +13,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad (liftM)
 import Data.Bits ((.&.), (.|.)) 
-import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
+import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, unpack, writeFile)
 import qualified Data.ByteString as BS (append)
 import Data.List (find, findIndex)
 import Data.Word (Word64)
@@ -72,7 +72,7 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
     tw <- SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
     return $ SS.createHideWindow tw (tms tw)
 
-    where  tms tw = SS.createTextMenus
+    where   tms tw = SS.createTextMenus
                     [
                         (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                 (return True)),
                         (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                     (return True)),
@@ -81,13 +81,14 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)                                      (liftM not $ allFilesClean ss)),
                         (SS.createMenuFunction CN.menuEditUndo          (SC.undo scn)                                           (SC.canUndo scn)),
                         (SS.createMenuFunction CN.menuEditRedo          (SC.redo scn)                                           (SC.canRedo scn)),
-                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                            (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                           (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                             (return True)), -- (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                            (return True)), -- (liftM not $ SC.selectionIsEmpty scn)),
                         (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                                          (SC.canPaste scn)),
                         (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                      (return True)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                 (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                          (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                         (return True)),
+                        (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)                                (return True)), -- (liftM not $ SC.selectionIsEmpty scn)),
                         (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn))      (return True)),
                         (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn))        (return True)),
                         (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                             (return True)),
@@ -98,7 +99,6 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                     (SC.getFocus scn)
                     (SC.isClean scn)
                     (getStatusInfo scn)
-
 
 -- File Open
 onFileOpen :: SS.Session -> IO ()
@@ -392,6 +392,8 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuEditFind          
         setm ss tms CN.menuEditFindForward   
         setm ss tms CN.menuEditFindBackward  
+        setm ss tms CN.menuEditSort          
+        setm ss tms CN.menuEditClear          
         setm ss tms CN.menuBuildCompile
         setm ss tms CN.menuBuildBuild
         setm ss tms CN.menuBuildRebuild
@@ -412,6 +414,8 @@ updateMenus ss hw scn = do
         setm' ss CN.menuEditFind          (return False) (return ())
         setm' ss CN.menuEditFindForward   (return False) (return ())
         setm' ss CN.menuEditFindBackward  (return False) (return ())
+        setm' ss CN.menuEditSort          (return False) (return ())
+        setm' ss CN.menuEditClear         (return False) (return ())
         setm' ss CN.menuBuildCompile      (return False) (return ())
         setm' ss CN.menuBuildBuild        (return False) (return ())
         setm' ss CN.menuBuildRebuild      (return False) (return ())

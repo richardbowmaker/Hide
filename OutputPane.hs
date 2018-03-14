@@ -108,7 +108,8 @@ createHideWindow ss scn panel phwnd hwnd = do
                         (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (return True)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
-                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True))
+                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
+                        (SS.createMenuFunction CN.menuEditClear         (SC.clearAll scn)               (liftM (>0) (SC.getTextLen scn)))
                     ]
                     (SC.getFocus scn)
                     (return True)
@@ -215,6 +216,8 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuEditFind          
         setm ss tms CN.menuEditFindForward   
         setm ss tms CN.menuEditFindBackward  
+        setm ss tms CN.menuEditSort          
+        setm ss tms CN.menuEditClear          
     else do
         setm' ss CN.menuFileClose         (return False) (return ())
         setm' ss CN.menuFileCloseAll      (return False) (return ())
@@ -229,6 +232,8 @@ updateMenus ss hw scn = do
         setm' ss CN.menuEditFind          (return False) (return ())
         setm' ss CN.menuEditFindForward   (return False) (return ())
         setm' ss CN.menuEditFindBackward  (return False) (return ())
+        setm' ss CN.menuEditSort          (return False) (return ())
+        setm' ss CN.menuEditClear         (return False) (return ())
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
                 setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)

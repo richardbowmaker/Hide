@@ -13,6 +13,4 @@ start explorer "D:\_Rick's\haskell\ScintillaProxy"
 start C:\Windows\System32\cmd.exe "D:\_Rick's\haskell\Hide"
 start "C:\Program Files (x86)\OpenOffice 4\program\swriter.exe" "D:\_Rick's\Notes\Programming Notes.odt"
 start "C:\Program Files\Notepad++\notepad++.exe"
-start "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\IDE devenv.exe" "D:\_Rick's\haskell\ScintillaProxy\ScintillaProxy\ScintillaProxy.sln"
-
-
+rem start "C:\Program Files (x86)\Microsoft Visual Studio\2017\Community\Common7\IDE devenv.exe" "D:\_Rick's\haskell\ScintillaProxy\ScintillaProxy\ScintillaProxy.sln"

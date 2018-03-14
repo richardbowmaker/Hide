@@ -179,9 +179,13 @@ setupMenus mf  = do
     menuEditCopy            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditCopy),             help := (CN.menuHelp' CN.menuEditCopy)]
     menuEditPaste           <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditPaste),            help := (CN.menuHelp' CN.menuEditPaste)]
     menuEditAll             <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditSelectAll),        help := (CN.menuHelp' CN.menuEditSelectAll)]
+    menuAppendSeparator menuEdit
     menuEditFind            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFind),             help := (CN.menuHelp' CN.menuEditFind)]
     menuEditFindForward     <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindForward),      help := (CN.menuHelp' CN.menuEditFindForward)]
     menuEditFindBackward    <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindBackward),     help := (CN.menuHelp' CN.menuEditFindBackward)]
+    menuAppendSeparator menuEdit
+    menuEditSort            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditSort),             help := (CN.menuHelp' CN.menuEditSort)]
+    menuEditClear           <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditClear),            help := (CN.menuHelp' CN.menuEditClear)]
     
     menuBuild        <- menuPane            [text := "&Build"]
     menuBuildCompile <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildCompile),    help := (CN.menuHelp' CN.menuBuildCompile)]
@@ -220,6 +224,8 @@ setupMenus mf  = do
                                     (CN.menuEditFind,            menuEditFind),
                                     (CN.menuEditFindForward,     menuEditFindForward),
                                     (CN.menuEditFindBackward,    menuEditFindBackward),
+                                    (CN.menuEditSort,            menuEditSort),
+                                    (CN.menuEditClear,           menuEditClear),
                                     (CN.menuBuildBuild,          menuBuildBuild),
                                     (CN.menuBuildCompile,        menuBuildCompile),
                                     (CN.menuBuildGhci,           menuBuildGhci),
