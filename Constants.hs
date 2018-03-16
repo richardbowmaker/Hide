@@ -27,7 +27,8 @@ module Constants
     menuBuildClean,
     menuBuildGhci,
     menuDebugRun,
-    menuDebugGhci,
+    menuWindowGhci,
+    menuWindowOutput,
     menuTestTest,
     menuHelpAbout,
     menuId,
@@ -46,9 +47,8 @@ import Data.Maybe (maybe)
 
 debug = True
 
-
 programTitle :: String
-programTitle = "HIDE"
+programTitle = "HIDE Dev"
 
 -------------------------------------
 -- menu ids
@@ -129,14 +129,17 @@ menuBuildGhci = 24
 menuDebugRun :: Int
 menuDebugRun = 25
 
-menuDebugGhci :: Int
-menuDebugGhci = 26
+menuWindowGhci :: Int
+menuWindowGhci = 26
+
+menuWindowOutput :: Int
+menuWindowOutput = 27
 
 menuTestTest :: Int
-menuTestTest = 27
+menuTestTest = 28
 
 menuHelpAbout :: Int
-menuHelpAbout = 28
+menuHelpAbout = 29
 
 -----------------------------
 -- menu names
@@ -170,7 +173,8 @@ menuNames = [   (Menu menuFileOpen           "Open"             "Ctrl-O"        
                 (Menu menuBuildClean         "Clean"            ""              "Cleans the project files"),
                 (Menu menuBuildGhci          "Open GHCI"        "Alt-F11"       "Open file in GHCI"),
                 (Menu menuDebugRun           "Run"              "F5"            "Run program"),
-                (Menu menuDebugGhci          "GHCI"             "F11"           "Start GHCI"),
+                (Menu menuWindowGhci         "GHCI"             "F11"           "Start GHCI"),
+                (Menu menuWindowOutput       "Output"           "F12"           "Open output window"),
                 (Menu menuTestTest           "Test"             "Ctrl-T"        ""),
                 (Menu menuHelpAbout          "About"            ""              "About HIDE")]
                             

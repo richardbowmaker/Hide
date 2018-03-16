@@ -70,6 +70,7 @@ foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND 
 foreign import ccall safe "GhciIsTextSelected"  c_GhciIsTextSelected    :: HWND -> IO Int32
 foreign import ccall safe "GhciGetTextLength"   c_GhciGetTextLength     :: HWND -> IO Int32 
 foreign import ccall safe "GhciGetText"         c_GhciGetText           :: HWND -> CString -> Int32 -> IO Int32 
+foreign import ccall safe "GhciClear"           c_GhciClear             :: HWND -> IO ()
 
 -- callback wrapper
 foreign import ccall safe "wrapper" createCallback ::
@@ -163,10 +164,11 @@ createHideWindow ss panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw) (return True)),
                         (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)       (return True)),
                         (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)  (return True)),
-                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (return False)),
+                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (isTextSelected hwnd)),
                         (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
                         (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True))
+                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True)),
+                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)        (return True))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -212,6 +214,9 @@ getAllText hwnd = do
     len' <- BS.unsafeUseAsCString bs (\cs -> do c_GhciGetText hwnd cs (fromIntegral len :: Int32))
     if len == (fromIntegral len' :: Int) then return bs
     else return $ BS.take (fromIntegral len' :: Int) bs
+
+clear :: HWND -> IO ()
+clear = c_GhciClear
 
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
@@ -265,6 +270,7 @@ callback ss hw hwnd evt
             setm' ss CN.menuEditFind          (return False) (return ())
             setm' ss CN.menuEditFindForward   (return False) (return ())
             setm' ss CN.menuEditFindBackward  (return False) (return ())
+            setm' ss CN.menuEditClear         (return False) (return ())
     | evt == eventGotFocus  = do
             setm ss tms CN.menuFileClose        
             setm ss tms CN.menuFileCloseAll        
@@ -279,7 +285,8 @@ callback ss hw hwnd evt
             setm ss tms CN.menuEditSelectAll     
             setm ss tms CN.menuEditFind          
             setm ss tms CN.menuEditFindForward   
-            setm ss tms CN.menuEditFindBackward  
+            setm ss tms CN.menuEditFindBackward            
+            setm ss tms CN.menuEditClear          
     | evt == eventSelectionSet || evt == eventSelectionClear = do
             setm ss tms CN.menuEditCut           
             setm ss tms CN.menuEditCopy          

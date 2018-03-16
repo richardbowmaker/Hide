@@ -61,6 +61,20 @@ closeOutputWindow ss = do
                     SS.ssSetOutput ss Nothing
                     SC.disableEvents scn
                     SC.close scn
+                    return ()
+                Nothing  -> return () -- shouldn't get here
+        Nothing -> return ()
+
+closeOutputTab :: SS.Session -> IO ()
+closeOutputTab ss = do
+    mhw <- SS.ssOutput ss
+    case mhw of
+        Just hw -> do
+            case SS.hwGetEditor hw of
+                Just scn -> do
+                    SS.ssSetOutput ss Nothing
+                    SC.disableEvents scn
+                    SC.close scn
                     auiNotebookDeletePage (SS.ssOutputs ss) 0
                     return ()
                 Nothing  -> return () -- shouldn't get here
@@ -102,14 +116,14 @@ createHideWindow ss scn panel phwnd hwnd = do
 
     where  tms tw = SS.createTextMenus
                     [
-                        (SS.createMenuFunction CN.menuFileClose         (closeOutputWindow ss)          (return True)),
+                        (SS.createMenuFunction CN.menuFileClose         (closeOutputTab ss)             (return True)),
                         (SS.createMenuFunction CN.menuFileSaveAs        (fileSave ss tw scn)            (return True)),
                         (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
                         (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (return True)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
-                        (SS.createMenuFunction CN.menuEditClear         (SC.clearAll scn)               (liftM (>0) (SC.getTextLen scn)))
+                        (SS.createMenuFunction CN.menuEditClear         (clearText scn)                 (return True))
                     ]
                     (SC.getFocus scn)
                     (return True)
@@ -278,6 +292,14 @@ updateStatus :: SS.Session -> String -> IO ()
 updateStatus ss s = do
     let st = SS.ssStatus ss
     set st [text:= s]
+
+clearText :: SC.Editor -> IO ()
+clearText scn = do 
+    SC.setReadOnly scn False
+    SC.clearAll scn
+    SC.setReadOnly scn True
+
+
     
  
      

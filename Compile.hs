@@ -272,7 +272,7 @@ errorFile = do
 
 fileError :: P.GenParser Char () SS.CompError
 fileError = do
-    P.optional fileTitle
+    P.many fileTitle
     P.string eol
     pos <- P.getPosition
     (fn, el, ec) <- fileName

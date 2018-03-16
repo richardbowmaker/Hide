@@ -136,10 +136,11 @@ setUpMainWindow mf sf = do
     ss <- SS.ssCreate mf am enb menus sf onb scn 
     
     -- setup static menu handlers
-    set (SS.ssMenuListGet ss CN.menuFileOpen)  [on command := FM.onFileOpen ss]
-    set (SS.ssMenuListGet ss CN.menuFileNew)   [on command := FM.onFileNew  ss]
-    set (SS.ssMenuListGet ss CN.menuDebugGhci) [on command := GH.openWindow ss]
-    set (SS.ssMenuListGet ss CN.menuTestTest)  [on command := onTestTest    ss]
+    set (SS.ssMenuListGet ss CN.menuFileOpen)       [on command := FM.onFileOpen        ss]
+    set (SS.ssMenuListGet ss CN.menuFileNew)        [on command := FM.onFileNew         ss]
+    set (SS.ssMenuListGet ss CN.menuWindowGhci)     [on command := GH.openWindow        ss]
+    set (SS.ssMenuListGet ss CN.menuWindowOutput)   [on command := OT.openOutputWindow  ss]
+    set (SS.ssMenuListGet ss CN.menuTestTest)       [on command := onTestTest           ss]
 
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
@@ -196,7 +197,10 @@ setupMenus mf  = do
           
     menuDebug        <- menuPane            [text := "Debug"]
     menuDebugRun     <- menuItem menuDebug  [text := (CN.menuText' CN.menuDebugRun),    help := (CN.menuHelp' CN.menuDebugRun)]
-    menuDebugGhci    <- menuItem menuDebug  [text := (CN.menuText' CN.menuDebugGhci),   help := (CN.menuHelp' CN.menuDebugGhci)]
+
+    menuWindow        <- menuPane             [text := "Window"]
+    menuWindowGhci    <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowGhci),   help := (CN.menuHelp' CN.menuWindowGhci)]
+    menuWindowOutput  <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowOutput), help := (CN.menuHelp' CN.menuWindowOutput)]
 
     menuTest         <- menuPane            [text := "Test"]
     menuTestTest     <- menuItem menuTest   [text := (CN.menuText' CN.menuTestTest),    help := (CN.menuHelp' CN.menuTestTest)]
@@ -205,7 +209,7 @@ setupMenus mf  = do
     menuHelp'        <- menuHelp []
     menuHelpAbout    <- menuAbout menuHelp' [help := (CN.menuHelp' CN.menuHelpAbout), on command := infoDialog mf "About HeyHo" "mmmmm !"]
       
-    set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuTest, menuHelp']]
+    set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuWindow, menuTest, menuHelp']]
 
     -- create lookup list of menus for session data   
     ml <- SS.ssMenuListCreate [     (CN.menuFileOpen,            menuFileOpen), 
@@ -230,7 +234,8 @@ setupMenus mf  = do
                                     (CN.menuBuildCompile,        menuBuildCompile),
                                     (CN.menuBuildGhci,           menuBuildGhci),
                                     (CN.menuDebugRun,            menuDebugRun),
-                                    (CN.menuDebugGhci,           menuDebugGhci),
+                                    (CN.menuWindowGhci,          menuWindowGhci),
+                                    (CN.menuWindowOutput,        menuWindowOutput),
                                     (CN.menuTestTest,            menuTestTest)]
 
     
@@ -297,9 +302,6 @@ onOutputTabChanged ss _ = do
  
 onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
-    OT.addLine ss $ BS.pack "line 1"
-    OT.addLine ss $ BS.pack "line 1"
-    OT.addLine ss $ BS.pack "line 1"
     return ()
 
 ------------------------------------------------------------    

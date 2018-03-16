@@ -1,2 +1,11 @@
-[7 of 7] Compiling Main             ( D:\_Rick's\haskell\HeyHo\HeyHo.hs, D:\_Rick's\haskell\HeyHo\HeyHo.o )
-Linking D:\_Rick's\haskell\HeyHo\HeyHo.exe ...
+GHCi, version 8.0.1: http://www.haskell.org/ghc/  :? for help
+Prelude> 5678
+5678
+Prelude> 
+Prelude> 
+Prelude> aafgh
+
+<interactive>:4:1: error: Variable not in scope: aafgh
+Prelude> 
+Prelude> 
+Prelude> 
