@@ -53,7 +53,7 @@ editFindForward ss tw scn = do
         -- set search range from current pos to end of doc
         pos <- SC.getCurrentPos scn
         len <- SC.getTextLen scn
-        p <- findTextInRange scn s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
+        p <- findTextInRange1 scn s pos ((SS.ftStartPos ft), len) (0, ((SS.ftStartPos ft) + (length s) -1))
         if p >= 0 then do
             SS.ssDebugInfo ss $ "Found at: " ++ (show p)
             -- save find string for next and prev

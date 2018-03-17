@@ -30,7 +30,6 @@ import qualified FileMenu as FM
 import qualified Ghci as GH
 import qualified Misc as MI
 import qualified OutputPane as OT
-import qualified Output as OT
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -139,7 +138,7 @@ setUpMainWindow mf sf = do
     set (SS.ssMenuListGet ss CN.menuFileOpen)       [on command := FM.onFileOpen        ss]
     set (SS.ssMenuListGet ss CN.menuFileNew)        [on command := FM.onFileNew         ss]
     set (SS.ssMenuListGet ss CN.menuWindowGhci)     [on command := GH.openWindow        ss]
-    set (SS.ssMenuListGet ss CN.menuWindowOutput)   [on command := OT.openOutputWindow  ss]
+    set (SS.ssMenuListGet ss CN.menuWindowOutput)   [on command := OT.openOutputWindow  ss (FM.fileOpen ss)]
     set (SS.ssMenuListGet ss CN.menuTestTest)       [on command := onTestTest           ss]
 
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
@@ -147,7 +146,7 @@ setUpMainWindow mf sf = do
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
     set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
 
-    OT.openOutputWindow ss
+    OT.openOutputWindow ss (FM.fileOpen ss)
 
     return ss
   

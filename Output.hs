@@ -10,6 +10,7 @@ module Output
 
 import qualified Data.ByteString.Char8 as BS (ByteString, writeFile)
 
+
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS

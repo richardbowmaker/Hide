@@ -74,27 +74,27 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
 
     where   tms tw = SS.createTextMenus
                     [
-                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                 (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                     (return True)),
-                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)                                  (liftM not $ SC.isClean scn)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)                                (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)                                      (liftM not $ allFilesClean ss)),
-                        (SS.createMenuFunction CN.menuEditUndo          (SC.undo scn)                                           (SC.canUndo scn)),
-                        (SS.createMenuFunction CN.menuEditRedo          (SC.redo scn)                                           (SC.canRedo scn)),
-                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                            (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                           (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                                          (SC.canPaste scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                      (return True)),
-                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                 (return True)),
-                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                          (return True)),
-                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                         (return True)),
-                        (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)                               (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn))      (return True)),
-                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn))        (return True)),
-                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                             (return True)),
-                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                             (return True)),
-                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn))         (return True)),
-                        (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                   (return True))
+                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                                 (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                                     (return True)),
+                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)                                                  (liftM not $ SC.isClean scn)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)                                                (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)                                                      (liftM not $ allFilesClean ss)),
+                        (SS.createMenuFunction CN.menuEditUndo          (SC.undo scn)                                                           (SC.canUndo scn)),
+                        (SS.createMenuFunction CN.menuEditRedo          (SC.redo scn)                                                           (SC.canRedo scn)),
+                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                                            (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                                           (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                                                          (SC.canPaste scn)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                                      (return True)),
+                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                                 (return True)),
+                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                                          (return True)),
+                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                                         (return True)),
+                        (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)                                               (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn) (fileOpen ss))        (return True)),
+                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn) (fileOpen ss))          (return True)),
+                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                                             (return True)),
+                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                                             (return True)),
+                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn)  (fileOpen ss))          (return True)),
+                        (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                                   (return True))
                     ]
                     (SC.getFocus scn)
                     (SC.isClean scn)

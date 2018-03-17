@@ -1,10 +1,14 @@
 
 module OutputPane
 ( 
-    createOutputWindow,
-    openOutputWindow,
+    addLine,
+    addText,
+    clear,
     closeOutputWindow,
-    getSelectedGhci
+    createOutputWindow,
+    getSelectedGhci,
+    openOutputWindow,
+    withEditor    
 ) where 
     
 import Control.Concurrent.STM (atomically, readTVar)
@@ -24,9 +28,7 @@ import Text.Printf (printf)
 import qualified Constants as CN
 import qualified Debug as DG
 import qualified EditMenu as EM
-import qualified FileMenu as FM
 import qualified EditorNotebook as EN
-import Output
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -41,15 +43,15 @@ createOutputWindow f =
     auiNotebookCreate f idAny (Point 0 0) (Size 0 0) 
         (wxCLIP_CHILDREN + wxAUI_NB_TOP + wxAUI_NB_CLOSE_ON_ACTIVE_TAB)
 
-openOutputWindow :: SS.Session -> IO ()
-openOutputWindow ss = do
+openOutputWindow :: SS.Session -> (String -> IO ()) -> IO ()
+openOutputWindow ss fileOpen = do
     mhw <- SS.ssOutput ss
     case mhw of
         Just hw -> do
             case SS.hwGetEditor hw of
                 Just scn -> SC.grabFocus scn
                 Nothing  -> return () -- shouldn't get here
-        Nothing -> addOutputTab ss
+        Nothing -> addOutputTab ss fileOpen
     
 closeOutputWindow :: SS.Session -> IO ()
 closeOutputWindow ss = do
@@ -80,8 +82,8 @@ closeOutputTab ss = do
                 Nothing  -> return () -- shouldn't get here
         Nothing -> return ()
 
-addOutputTab :: SS.Session -> IO ()
-addOutputTab ss = do
+addOutputTab :: SS.Session -> (String -> IO ()) -> IO ()
+addOutputTab ss fileOpen = do
     let nb = SS.ssOutputs ss
     -- create output tab
     panel <- panel nb []
@@ -105,7 +107,7 @@ addOutputTab ss = do
     SS.ssSetOutput ss (Just hw)
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw scn
+    SC.setEventHandler scn $ scnCallback ss hw scn fileOpen
     SC.enableEvents scn
     SC.grabFocus scn
 
@@ -160,11 +162,10 @@ fileSave ss tw scn = do
             return ()
 
 -- jump to source file error location
-gotoCompileError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
-gotoCompileError ss line fileOpen = do
+gotoError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
+gotoError ss line fileOpen = do
     -- get compiler errors and lookup the error
-    ces <- SS.ssGetCompilerReport ss
-    let mce = find (\ce -> (SS.ceErrLine ce) <= line ) (reverse ces)
+    mce <- SS.crFindError ss line 
     case mce of
         Just ce -> do
             -- goto source file from list of open files
@@ -172,14 +173,14 @@ gotoCompileError ss line fileOpen = do
             case mhw of          
                 Just hw -> do
                     b <- EN.enbSelectTab ss $ SS.hwWindow hw
-                    if b then gotoPos hw ce
+                    if b then gotoPos hw ce >> highlightOutput ss ce
                     else return ()
                 Nothing -> do
                     -- source file not open
                     fileOpen $ SS.ceFilePath ce
                     mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
                     case mhw of
-                        Just hw -> gotoPos hw ce
+                        Just hw -> gotoPos hw ce >> highlightOutput ss ce
                         Nothing -> return ()
         Nothing -> return ()
      
@@ -190,13 +191,48 @@ gotoCompileError ss line fileOpen = do
                         SC.grabFocus scn
                         SC.selectWord scn
                     Nothing -> return ()
+            
+            highlightOutput ss ce = do
+                mout <- SS.ssOutput ss
+                case mout of
+                    Just hw ->
+                        case SS.hwGetEditor hw of
+                            Just scn -> do
+                                ls <- SC.getLineFromPosition scn (SS.ceErrLine ce)
+                                ps <- SC.getPositionFromLine scn ls
+                                le <- SC.getLineFromPosition scn $ (SS.ceErrLine ce) + xxxx (length $ SS.ceErrLines ce)
+                                pe <- SC.getPositionFromLine scn le
+                                SC.setSelectionRange scn ps pe
+                                SC.setFirstVisibleLine scn (ls-1)
+                            Nothing -> return ()
+                    Nothing -> return ()
 
-scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
-scnCallback ss hw scn sn = do 
+gotoNextError :: SS.Session -> (String -> IO ()) -> IO ()
+gotoNextError ss fileOpen = do
+    report <- SS.ssGetCompilerReport ss
+    let merr = SS.crCurrErr report
+    case merr of
+        Just err -> do
+            if err < (SS.crErrorCount report) - 1 then gotoError ss (err+1) fileOpen
+            else infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
+        Nothing -> gotoError ss 0 fileOpen
+
+gotoPreviousError :: SS.Session -> (String -> IO ()) -> IO ()
+gotoPreviousError ss fileOpen = do
+    report <- SS.ssGetCompilerReport ss
+    let merr = SS.crCurrErr report
+    case merr of
+        Just err -> do
+            if err > 0 then gotoError ss (err-1) fileOpen
+            else infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
+        Nothing -> gotoError ss 0 fileOpen
+
+scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> (String -> IO ()) -> SC.SCNotification -> IO ()
+scnCallback ss hw scn fileOpen sn = do 
     -- event from output pane
     case (SC.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
-            gotoCompileError ss (fromIntegral (SC.snLine sn) :: Int) (FM.fileOpen ss)
+            gotoError ss (fromIntegral (SC.snLine sn) :: Int) fileOpen
             return ()
         2007 -> do -- sCN_UPDATEUI
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
@@ -299,6 +335,44 @@ clearText scn = do
     SC.clearAll scn
     SC.setReadOnly scn True
 
+clear' :: SS.Session -> SC.Editor -> IO ()
+clear' ss scn = do
+    SC.setReadOnly scn False
+    SC.clearAll scn
+    SC.setReadOnly scn True
+
+addText' :: SS.Session -> BS.ByteString -> SC.Editor -> IO ()
+addText' ss bs scn = do
+    SC.setReadOnly scn False
+    SC.appendText scn bs
+    SC.setReadOnly scn True
+    SC.showLastLine scn
+    
+addLine' :: SS.Session -> BS.ByteString -> SC.Editor -> IO ()
+addLine' ss bs scn = do
+    SC.setReadOnly scn False
+    SC.appendLine scn bs
+    SC.setReadOnly scn True
+    SC.showLastLine scn
+
+clear :: SS.Session -> IO ()
+clear ss = withEditor ss $ clear' ss 
+
+addText :: SS.Session -> BS.ByteString -> IO ()
+addText ss bs = withEditor ss $ addText' ss bs 
+
+addLine :: SS.Session -> BS.ByteString -> IO ()
+addLine ss bs = withEditor ss $ addLine' ss bs 
+
+withEditor :: SS.Session -> (SC.Editor -> IO ()) -> IO ()
+withEditor ss f = do    
+    mhw <- SS.ssOutput ss
+    case mhw of
+        Just hw -> do
+            case SS.hwGetEditor hw of
+                Just scn -> f scn
+                Nothing  -> return () -- shouldn't get here
+        Nothing -> return ()
 
     
  

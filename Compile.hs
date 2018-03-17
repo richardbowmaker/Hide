@@ -40,7 +40,7 @@ import System.Process.Common
 import qualified Constants as CN
 import qualified Ghci as GH
 import qualified Misc as MI
-import qualified Output as OT
+import qualified OutputPane as OT
 import qualified Scintilla as SC
 import qualified Session as SS
 
@@ -48,13 +48,15 @@ import qualified Session as SS
 -- Build Menu handlers
 ------------------------------------------------------------    
     
-onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
-onBuildBuild ss tw scn fileSave = do
+onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
+onBuildBuild ss tw scn fileSave fileOpen = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
+
+    OT.openOutputWindow ss fileOpen
 
     -- save file first
     ans <- fileSave
@@ -71,12 +73,14 @@ onBuildBuild ss tw scn fileSave = do
                     SS.ssDebugError ss "onBuildBuild:: no file name set"
     else return ()
     
-onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
-onBuildCompile ss tw scn fileSave = do
+onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
+onBuildCompile ss tw scn fileSave fileOpen = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+
+    OT.openOutputWindow ss fileOpen
 
     -- save file first
     ans <- fileSave
@@ -102,12 +106,14 @@ compileComplete ss = do
     OT.addText ss $ BS.pack "Compile complete\n"
     return ()
 
-onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> IO ()
-onBuildGhci ss tw scn fileSave = do
+onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
+onBuildGhci ss tw scn fileSave fileOpen = do
 
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+
+    OT.openOutputWindow ss fileOpen
 
    -- save file first
     ans <- fileSave
@@ -131,14 +137,14 @@ ghciComplete ss hw = do
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
     OT.addText ss $ BS.pack "Compile complete\n"
 
-    ces <- atomically $ readTVar $ SS.ssCompilerReport ss
-    case ces of
-        [] -> GH.openWindowFile ss $ SS.hwWindow hw 
-        _  -> do
-            ans <- proceedDialog (SS.ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
-            case ans of
-                True -> GH.openWindowFile ss $ SS.hwWindow hw 
-                False -> return ()
+    nerrs <- SS.crGetNoOfErrors ss
+    if nerrs == 0 then do
+        GH.openWindowFile ss $ SS.hwWindow hw 
+    else do
+        ans <- proceedDialog (SS.ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
+        case ans of
+            True -> GH.openWindowFile ss $ SS.hwWindow hw 
+            False -> return ()
 
 -- | Build the project
 cpBuildProject ::   SS.Session             -- ^ The HIDE session
@@ -188,17 +194,17 @@ cpCompileFile ss fp mfinally = do
 
     return ()
  
-cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> [SS.CompError] -> IO ()
+cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> SS.CompReport -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
-    if length ces == 0 then
+    if SS.crErrorCount ces == 0 then
         outStr "\nNo errors\n"
     else 
-        outStr $ "\n" ++ (show $ length ces) ++ " errors\n"
+        outStr $ "\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"
 
     -- save compilation results to session
-    atomically $ writeTVar (SS.ssCompilerReport ss) ces
-
+    SS.ssSetCompilerReport ss ces
+ 
     -- schedule GUI finally function
     maybe (return ()) (\f-> atomically $ writeTChan (SS.ssCFunc ss) f) mfinally
 
@@ -226,7 +232,7 @@ cpDebugRun ss tw = do
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function
-runGHC :: SS.Session -> [String] -> String -> SS.TOutput -> Maybe ([SS.CompError] -> IO ()) -> IO ()
+runGHC :: SS.Session -> [String] -> String -> SS.TOutput -> Maybe (SS.CompReport -> IO ()) -> IO ()
 runGHC ss args dir cerr mfinally = do
     
     SS.ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
@@ -243,9 +249,9 @@ runGHC ss args dir cerr mfinally = do
 
     case (P.parse errorFile "" s) of
         Left _   -> SS.ssDebugError ss "Parse of compilation errors failed"
-        Right es -> do
+        Right report -> do
             SS.ssDebugInfo ss $ "parsed ok"           
-            maybe (return ()) (\f -> f es) mfinally
+            maybe (return ()) (\f -> f report) mfinally
 
 -- captures output from handle, wrtes to the output pane and returns
 -- the captured data
@@ -264,11 +270,11 @@ captureOutput ss h tot str = do
 -- compiler output parser
 ------------------------------------------
 
-errorFile :: P.GenParser Char () [SS.CompError]
+errorFile :: P.GenParser Char () SS.CompReport
 errorFile = do
     errs <- P.many (P.try fileError)
     P.optional linkLine
-    return errs
+    return $ SS.crCreateCompReport errs
 
 fileError :: P.GenParser Char () SS.CompError
 fileError = do
@@ -277,7 +283,7 @@ fileError = do
     pos <- P.getPosition
     (fn, el, ec) <- fileName
     els <- errorDesc
-    return $ SS.ceCompError fn el ec (P.sourceLine pos) els
+    return $ SS.crCreateCompError fn el ec (P.sourceLine pos) els
 
 fileDrive :: P.GenParser Char () String
 fileDrive = do

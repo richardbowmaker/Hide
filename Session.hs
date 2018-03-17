@@ -1,116 +1,119 @@
 module Session 
 (
-    Session,
-    TOutput,
+    CompError,
+    CompReport,
+    FindText,
     FunctionChannel,
-    TErrors,
---
-    ssCreate,
-    ssFrame,
-    ssAuiMgr,
-    ssEditors,
-    ssMenus,
-    ssStatus,
-    ssTOutput,
-    ssCFunc,
-    ssOutputs,
-    ssOutput,
-    ssSetOutput,
-    ssDebugError,
-    ssDebugWarn,
-    ssDebugInfo,
-    ssHideWindows,
-    ssGetCompilerReport,
-    ssMenuListNew,
-    ssMenuListCreate,
-    ssMenuListAdd,
-    ssMenuListGet,
-    ssCompilerReport,
-    ssFindText,
-    ssToString,
+    HideWindow,
+    HideWindows,
+    Session,
     SsMenuList,
     SsNameMenuPair,
---
-    CompError,
-    ceFilePath,
-    ceSrcLine,
-    ceSrcCol,
+    TErrors,
+    THideWindows,
+    TOutput,
+    TextMenus,
+    TextWindow,
     ceErrLine,
     ceErrLines,
-    ceCompError,
+    ceFilePath,
+    ceSrcCol,
+    ceSrcLine,
     compErrorToString,
     compErrorsToString,
---
-    FindText,
-    ftFindText,
-    ftText,
-    ftCurrPos,
-    ftStartPos, 
---
-    THideWindows,
-    HideWindows,
-    HideWindow,
-    TextWindow,
-    TextMenus,
-    hwWindows,
-    hwWindow,
-    hwMenus,
-    createGhciWindowType,
-    createSourceWindowType,
+    crCreateCompError,
+    crCreateCompReport,
+    crCurrErr,
+    crGetNoOfErrors,
+    crErrorCount,
+    crErrors,
+    crFindError,
+    crUpdateReport,
     createDebugWindowType,
-    createOutputWindowType,
-    createTextWindow,
-    createTextMenus,
+    createGhciWindowType,
     createHideWindow,
     createHideWindows,
     createMenuFunction,
-    hwPanelHwnd,
-    hwFindWindow,
-    hwUpdate,
-    hwFindFocusedWindow,
-    hwHasFocus,
-    hwGetWindows,
-    hwIsGhci,
-    hwIsSourceFile,
-    hwIsOutput,
-    hwIsDebug,
+    createOutputWindowType,
+    createSourceWindowType,
+    createTextMenus,
+    createTextWindow,
+    ftCurrPos,
+    ftFindText,
+    ftStartPos, 
+    ftText,
     hwFilePath,
-    hwIsSameWindow,
-    hwIsSameFile,
+    hwFindFocusedWindow,
     hwFindSourceFileWindow,
-    hwRemoveWindow,
-    hwUpdateHideWindows,
-    hwGetEditor,
-    hwMatchesHwnd,
-    hwIsClean,
+    hwFindWindow,
     hwFindWindows,
+    hwGetEditor,
+    hwGetWindows,
+    hwHasFocus,
+    hwIsClean,
+    hwIsDebug,
+    hwIsGhci,
+    hwIsOutput,
+    hwIsSameFile,
+    hwIsSameWindow,
+    hwIsSourceFile,
+    hwMatchesHwnd,
+    hwMenus,
+    hwPanelHwnd,
+    hwRemoveWindow,
     hwSetFilePath,
+    hwUpdate,
+    hwUpdateHideWindows,
     hwUpdateWindow,
---    
-    twType,
-    twPanel,
-    twPanelHwnd,
-    twHwnd,
+    hwWindow,
+    hwWindows,
+    ssAuiMgr,
+    ssCFunc,
+    ssCompilerReport,
+    ssCreate,
+    ssDebugError,
+    ssDebugInfo,
+    ssDebugWarn,
+    ssEditors,
+    ssFindText,
+    ssFrame,
+    ssGetCompilerReport,
+    ssHideWindows,
+    ssMenuListAdd,
+    ssMenuListCreate,
+    ssMenuListGet,
+    ssMenuListNew,
+    ssMenus,
+    ssOutput,
+    ssOutputs,
+    ssSetCompilerReport,
+    ssSetOutput,
+    ssStatus,
+    ssTOutput,
+    ssToString,
+    tmGetMenuEnabled, 
+    tmGetMenuFunction,
     twFilePath,
-    twMenuFunctions,
-    twHasFocus,
-    twIsClean,
-    twStatusInfo,
     twFilePathToString,
+    twFindWindow,
     twGetEditor,
-    twSetFilePath,
-    twIsGhci,
-    twIsSourceFile,
-    twIsOutput,
+    twHasFocus,
+    twHwnd,
+    twIsClean,
     twIsDebug,
-    twMatchesHwnd,
+    twIsGhci,
+    twIsOutput,
     twIsSameFile,
     twIsSameWindow,
-    twFindWindow,
+    twIsSourceFile,
+    twMatchesHwnd,
+    twMenuFunctions,
+    twPanel,
+    twPanelHwnd,
     twRemoveWindow,
---
-    tmGetMenuFunction,
-    tmGetMenuEnabled 
+    twSetFilePath,
+    twStatusInfo,
+    twType 
 ) where
 
 
@@ -163,7 +166,7 @@ data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int
 type TOutput = TChan ByteString
 
 -- compiler errors
-type TErrors = TVar [CompError]
+type TErrors = TVar CompReport
 
 type TFindText = TVar FindText
 
@@ -185,7 +188,7 @@ ssCreate mf am nb ms sf ots db = do
     mtid <- myThreadId
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
-    terr <- atomically $ newTVar []
+    terr <- atomically $ newTVar (crCreateCompReport [])
     tfnd <- atomically $ newTVar (FindText "" 0 0)
     tout <- atomically $ newTVar Nothing
     let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugError db s) else (\s -> return ())
@@ -233,22 +236,43 @@ ssOutput ss = atomically $ readTVar $ ssTMOutput ss
 ssSetOutput :: Session -> Maybe HideWindow -> IO ()
 ssSetOutput ss mhw = atomically $ writeTVar (ssTMOutput ss) mhw
 
-ssGetCompilerReport :: Session -> IO [CompError]
+ssGetCompilerReport :: Session -> IO CompReport
 ssGetCompilerReport ss = atomically $ readTVar $ ssCompilerReport ss
          
+ssSetCompilerReport :: Session -> CompReport -> IO ()
+ssSetCompilerReport ss cr = atomically $ writeTVar (ssCompilerReport ss) cr
+
 ----------------------------------------------------------------
 -- Comp error
 ----------------------------------------------------------------
 
--- compilation error
+-- compilation report
+data CompReport = CompReport {  crCurrErr       :: Maybe Int,  -- the last error jumped to
+                                crErrorCount    :: Int, 
+                                crErrors        :: [CompError] }
+
 data CompError = CompError {    ceFilePath  :: String, 
                                 ceSrcLine   :: Int, 
                                 ceSrcCol    :: Int, 
                                 ceErrLine   :: Int, -- line in compiler output
                                 ceErrLines  :: [String] } deriving (Show)
 
-ceCompError :: String -> Int -> Int -> Int -> [String] -> CompError
-ceCompError fp sl sc el els = (CompError fp sl sc el els)
+crCreateCompReport :: [CompError] -> CompReport
+crCreateCompReport errs = (CompReport Nothing (length errs) errs)
+
+crUpdateReport :: Session -> (CompReport -> CompReport) -> IO ()
+crUpdateReport ss f = atomically $ modifyTVar (ssCompilerReport ss) f
+
+crCreateCompError :: String -> Int -> Int -> Int -> [String] -> CompError
+crCreateCompError fp sl sc el els = (CompError fp sl sc el els)
+
+crFindError :: Session -> Int -> IO (Maybe CompError)
+crFindError ss line = do
+    ces <- ssGetCompilerReport ss
+    return $ find (\ce -> (ceErrLine ce) <= line ) (reverse $ crErrors ces)
+
+crGetNoOfErrors :: Session -> IO Int
+crGetNoOfErrors ss = ssGetCompilerReport ss >>= (return . crErrorCount)
 
 compErrorsToString :: [CompError] -> String
 compErrorsToString ces = "Errors = " ++ (show $ length ces) ++ (concat $ map (\ce -> (compErrorToString ce) ++ "\n" ) ces)
