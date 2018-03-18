@@ -16,6 +16,7 @@ module Session
     TextWindow,
     ceErrLine,
     ceErrLines,
+    ceErrorNo,
     ceFilePath,
     ceSrcCol,
     ceSrcLine,
@@ -28,6 +29,7 @@ module Session
     crErrorCount,
     crErrors,
     crFindError,
+    crUpdateCurrentError,
     crUpdateReport,
     createDebugWindowType,
     createGhciWindowType,
@@ -188,7 +190,7 @@ ssCreate mf am nb ms sf ots db = do
     mtid <- myThreadId
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
-    terr <- atomically $ newTVar (crCreateCompReport [])
+    terr <- atomically $ newTVar (crCreateCompReport Nothing [])
     tfnd <- atomically $ newTVar (FindText "" 0 0)
     tout <- atomically $ newTVar Nothing
     let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugError db s) else (\s -> return ())
@@ -251,25 +253,32 @@ data CompReport = CompReport {  crCurrErr       :: Maybe Int,  -- the last error
                                 crErrorCount    :: Int, 
                                 crErrors        :: [CompError] }
 
-data CompError = CompError {    ceFilePath  :: String, 
+data CompError = CompError {    ceErrorNo   :: Int,    
+                                ceFilePath  :: String, 
                                 ceSrcLine   :: Int, 
                                 ceSrcCol    :: Int, 
-                                ceErrLine   :: Int, -- line in compiler output
+                                ceErrLine   :: Int, -- line in compiler output 
                                 ceErrLines  :: [String] } deriving (Show)
 
-crCreateCompReport :: [CompError] -> CompReport
-crCreateCompReport errs = (CompReport Nothing (length errs) errs)
+crCreateCompReport :: Maybe Int -> [CompError] -> CompReport
+crCreateCompReport mcerr errs = (CompReport mcerr (length errs) errs)
 
 crUpdateReport :: Session -> (CompReport -> CompReport) -> IO ()
 crUpdateReport ss f = atomically $ modifyTVar (ssCompilerReport ss) f
 
-crCreateCompError :: String -> Int -> Int -> Int -> [String] -> CompError
-crCreateCompError fp sl sc el els = (CompError fp sl sc el els)
+crUpdateCurrentError :: Session -> Maybe Int -> IO ()
+crUpdateCurrentError ss mcerr = crUpdateReport ss (\cr -> crCreateCompReport mcerr $ crErrors cr)
+
+crCreateCompError :: Int -> String -> Int -> Int -> Int -> [String] -> CompError
+crCreateCompError errn fp sl sc el els = (CompError errn fp sl sc el els)
 
 crFindError :: Session -> Int -> IO (Maybe CompError)
 crFindError ss line = do
     ces <- ssGetCompilerReport ss
-    return $ find (\ce -> (ceErrLine ce) <= line ) (reverse $ crErrors ces)
+    return $ find (\ce -> 
+        let ls = ceErrLine ce
+            le = (ceErrLine ce) + (length $ ceErrLines ce) - 1
+        in  line >= ls && line <= le) (crErrors ces)
 
 crGetNoOfErrors :: Session -> IO Int
 crGetNoOfErrors ss = ssGetCompilerReport ss >>= (return . crErrorCount)
@@ -279,7 +288,10 @@ compErrorsToString ces = "Errors = " ++ (show $ length ces) ++ (concat $ map (\c
 
 compErrorToString :: CompError -> String
 compErrorToString c =
-    "Filename: " ++ (show $ ceFilePath c) ++ " (" ++ (show $ ceSrcLine c) ++ "," ++ (show $ ceSrcCol c) ++ ") errout = " ++ (show $ ceErrLine c) ++ "\n" ++
+    "Filename: " ++ (show $ ceFilePath c) ++ " (" ++ (show $ ceSrcLine c) ++ "," ++ 
+        (show $ ceSrcCol c) ++ ") errout = " ++ 
+        (show $ ceErrorNo c) ++ ", " ++ 
+        (show $ ceErrLine c) ++ "\n" ++
         (concat $ map (\s -> " " ++ s ++ "\n") (ceErrLines c))
      
 ----------------------------------------------------------------

@@ -27,7 +27,8 @@ import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Numeric (showHex)
-import qualified Text.ParserCombinators.Parsec as P -- (<|>, anyChar, char, GenParser, getPosition, many, sourceLine, string, try, parse)
+import qualified Text.ParserCombinators.Parsec as P
+import qualified Text.Parsec.Prim as P (modifyState)
 import Text.Printf (printf)
 import System.Directory 
 import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName, takeDirectory)
@@ -51,10 +52,12 @@ import qualified Session as SS
 onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildBuild ss tw scn fileSave fileOpen = do
 
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)          [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
 
     OT.openOutputWindow ss fileOpen
 
@@ -76,9 +79,12 @@ onBuildBuild ss tw scn fileSave fileOpen = do
 onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildCompile ss tw scn fileSave fileOpen = do
 
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
+    set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildGhci)          [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
 
     OT.openOutputWindow ss fileOpen
 
@@ -197,10 +203,14 @@ cpCompileFile ss fp mfinally = do
 cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> SS.CompReport -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
-    if SS.crErrorCount ces == 0 then
+    if SS.crErrorCount ces == 0 then do
         outStr "\nNo errors\n"
-    else 
+        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
+        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+    else do
         outStr $ "\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"
+        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
+        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
 
     -- save compilation results to session
     SS.ssSetCompilerReport ss ces
@@ -247,10 +257,10 @@ runGHC ss args dir cerr mfinally = do
 
     waitForProcess ph
 
-    case (P.parse errorFile "" s) of
+    case (P.runParser errorFile 0 "" s) of
         Left _   -> SS.ssDebugError ss "Parse of compilation errors failed"
         Right report -> do
-            SS.ssDebugInfo ss $ "parsed ok"           
+            SS.ssDebugInfo ss $ "parsed ok\n" ++ (SS.compErrorsToString $ SS.crErrors report)
             maybe (return ()) (\f -> f report) mfinally
 
 -- captures output from handle, wrtes to the output pane and returns
@@ -270,28 +280,30 @@ captureOutput ss h tot str = do
 -- compiler output parser
 ------------------------------------------
 
-errorFile :: P.GenParser Char () SS.CompReport
+errorFile :: P.GenParser Char Int SS.CompReport
 errorFile = do
     errs <- P.many (P.try fileError)
     P.optional linkLine
-    return $ SS.crCreateCompReport errs
+    return $ SS.crCreateCompReport Nothing errs
 
-fileError :: P.GenParser Char () SS.CompError
+fileError :: P.GenParser Char Int SS.CompError
 fileError = do
     P.many fileTitle
     P.string eol
     pos <- P.getPosition
     (fn, el, ec) <- fileName
     els <- errorDesc
-    return $ SS.crCreateCompError fn el ec (P.sourceLine pos) els
+    errn <- P.getState
+    P.modifyState (+1)
+    return $ SS.crCreateCompError errn fn el ec (P.sourceLine pos) els
 
-fileDrive :: P.GenParser Char () String
+fileDrive :: P.GenParser Char Int String
 fileDrive = do
     c <- P.anyChar
     P.char ':'
     return $ c:":"
 
-fileName :: P.GenParser Char () (String, Int, Int)
+fileName :: P.GenParser Char Int (String, Int, Int)
 fileName = do    
     drive <- (P.try fileDrive P.<|> return "")
     path <- P.many (P.noneOf ":")
@@ -303,26 +315,26 @@ fileName = do
     P.string eol
     return (drive ++ path, read line, read col)
 
-fileTitle :: P.GenParser Char () ()
+fileTitle :: P.GenParser Char Int ()
 fileTitle = do
     P.char '['
     P.many (P.noneOf eol)
     P.string eol
     return ()
 
-errorDesc :: P.GenParser Char () ([String])
+errorDesc :: P.GenParser Char Int ([String])
 errorDesc = do
     lines <- P.many errorLine
     return (lines)
 
-errorLine :: P.GenParser Char () String
+errorLine :: P.GenParser Char Int String
 errorLine = do
     P.string "    "
     eline <- P.many (P.noneOf eol)
     P.string eol
     return eline
 
-linkLine :: P.GenParser Char () ()
+linkLine :: P.GenParser Char Int ()
 linkLine = do
     P.string "Linking"
     P.many (P.noneOf eol)

@@ -27,6 +27,8 @@ module Constants
     menuBuildClean,
     menuBuildGhci,
     menuDebugRun,
+    menuDebugNextError,
+    menuDebugPreviousError,
     menuWindowGhci,
     menuWindowOutput,
     menuTestTest,
@@ -129,17 +131,23 @@ menuBuildGhci = 24
 menuDebugRun :: Int
 menuDebugRun = 25
 
+menuDebugNextError :: Int
+menuDebugNextError = 26
+
+menuDebugPreviousError :: Int
+menuDebugPreviousError = 27
+
 menuWindowGhci :: Int
-menuWindowGhci = 26
+menuWindowGhci = 28
 
 menuWindowOutput :: Int
-menuWindowOutput = 27
+menuWindowOutput = 29
 
 menuTestTest :: Int
-menuTestTest = 28
+menuTestTest = 30
 
 menuHelpAbout :: Int
-menuHelpAbout = 29
+menuHelpAbout = 31
 
 -----------------------------
 -- menu names
@@ -173,6 +181,8 @@ menuNames = [   (Menu menuFileOpen           "Open"             "Ctrl-O"        
                 (Menu menuBuildClean         "Clean"            ""              "Cleans the project files"),
                 (Menu menuBuildGhci          "Open GHCI"        "Alt-F11"       "Open file in GHCI"),
                 (Menu menuDebugRun           "Run"              "F5"            "Run program"),
+                (Menu menuDebugNextError     "Next error"       "F4"            "Goto next compile error"),
+                (Menu menuDebugPreviousError "Previous error"   "Shift-F4"      "Goto previous compile error"),
                 (Menu menuWindowGhci         "GHCI"             "F11"           "Start GHCI"),
                 (Menu menuWindowOutput       "Output"           "F12"           "Open output window"),
                 (Menu menuTestTest           "Test"             "Ctrl-T"        ""),

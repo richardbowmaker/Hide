@@ -7,8 +7,10 @@ module OutputPane
     closeOutputWindow,
     createOutputWindow,
     getSelectedGhci,
+    gotoNextError,
+    gotoPreviousError,
     openOutputWindow,
-    withEditor    
+    withEditor
 ) where 
     
 import Control.Concurrent.STM (atomically, readTVar)
@@ -162,28 +164,73 @@ fileSave ss tw scn = do
             return ()
 
 -- jump to source file error location
-gotoError :: SS.Session -> Int -> (String -> IO ()) -> IO ()
-gotoError ss line fileOpen = do
-    -- get compiler errors and lookup the error
+gotoErrorLine :: SS.Session -> Int -> (String -> IO ()) -> IO ()
+gotoErrorLine ss line fileOpen = do
     mce <- SS.crFindError ss line 
     case mce of
-        Just ce -> do
-            -- goto source file from list of open files
-            mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
-            case mhw of          
-                Just hw -> do
-                    b <- EN.enbSelectTab ss $ SS.hwWindow hw
-                    if b then gotoPos hw ce >> highlightOutput ss ce
-                    else return ()
-                Nothing -> do
-                    -- source file not open
-                    fileOpen $ SS.ceFilePath ce
-                    mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
-                    case mhw of
-                        Just hw -> gotoPos hw ce >> highlightOutput ss ce
-                        Nothing -> return ()
+        Just ce -> gotoError ss ce fileOpen
         Nothing -> return ()
+
+gotoNextError :: SS.Session -> (String -> IO ()) -> IO ()
+gotoNextError ss fileOpen = do
+    report <- SS.ssGetCompilerReport ss
+    if SS.crErrorCount report > 0 then do
+        let merr = SS.crCurrErr report
+        case merr of
+            Just err -> do
+                if err < (SS.crErrorCount report) - 1 then gotoErrorNo ss (err+1) fileOpen
+                else do
+                    infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
+                    SS.crUpdateCurrentError ss $ Nothing
+            Nothing -> gotoErrorNo ss 0 fileOpen
+    else return ()
+
+gotoPreviousError :: SS.Session -> (String -> IO ()) -> IO ()
+gotoPreviousError ss fileOpen = do
+    report <- SS.ssGetCompilerReport ss
+    if SS.crErrorCount report > 0 then do
+        let merr = SS.crCurrErr report
+        case merr of
+            Just err -> do
+                if err > 0 then gotoErrorNo ss (err-1) fileOpen
+                else do
+                    infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
+                    SS.crUpdateCurrentError ss $ Nothing
+            Nothing -> gotoErrorNo ss 0 fileOpen
+    else return ()
      
+gotoErrorNo :: SS.Session -> Int -> (String -> IO ()) -> IO ()
+gotoErrorNo ss errno fileOpen = do
+    report <- SS.ssGetCompilerReport ss
+    let errs = SS.crErrorCount report
+    if errno >=0 && errno < errs then 
+        gotoError ss ((SS.crErrors report) !! errno) fileOpen
+    else
+        return ()
+
+gotoError :: SS.Session -> SS.CompError -> (String -> IO ()) -> IO ()
+gotoError ss ce fileOpen = do
+    -- goto source file from list of open files
+    mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
+    case mhw of          
+        Just hw -> do
+            b <- EN.enbSelectTab ss $ SS.hwWindow hw
+            if b then do
+                highlightOutput ss ce
+                gotoPos hw ce 
+                SS.crUpdateCurrentError ss (Just $ SS.ceErrorNo ce)
+            else return ()
+        Nothing -> do
+            -- source file not open
+            fileOpen $ SS.ceFilePath ce
+            mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
+            case mhw of
+                Just hw -> do
+                    highlightOutput ss ce
+                    gotoPos hw ce 
+                    SS.crUpdateCurrentError ss (Just $ SS.ceErrorNo ce)
+                Nothing -> return ()
+    
     where   gotoPos hw ce = do
                 case SS.hwGetEditor hw of
                     Just scn -> do
@@ -198,41 +245,21 @@ gotoError ss line fileOpen = do
                     Just hw ->
                         case SS.hwGetEditor hw of
                             Just scn -> do
-                                ls <- SC.getLineFromPosition scn (SS.ceErrLine ce)
+                                let ls = SS.ceErrLine ce
                                 ps <- SC.getPositionFromLine scn ls
-                                le <- SC.getLineFromPosition scn $ (SS.ceErrLine ce) + xxxx (length $ SS.ceErrLines ce)
+                                let le = ls + (length $ SS.ceErrLines ce) + 1
                                 pe <- SC.getPositionFromLine scn le
                                 SC.setSelectionRange scn ps pe
                                 SC.setFirstVisibleLine scn (ls-1)
                             Nothing -> return ()
                     Nothing -> return ()
 
-gotoNextError :: SS.Session -> (String -> IO ()) -> IO ()
-gotoNextError ss fileOpen = do
-    report <- SS.ssGetCompilerReport ss
-    let merr = SS.crCurrErr report
-    case merr of
-        Just err -> do
-            if err < (SS.crErrorCount report) - 1 then gotoError ss (err+1) fileOpen
-            else infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
-        Nothing -> gotoError ss 0 fileOpen
-
-gotoPreviousError :: SS.Session -> (String -> IO ()) -> IO ()
-gotoPreviousError ss fileOpen = do
-    report <- SS.ssGetCompilerReport ss
-    let merr = SS.crCurrErr report
-    case merr of
-        Just err -> do
-            if err > 0 then gotoError ss (err-1) fileOpen
-            else infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
-        Nothing -> gotoError ss 0 fileOpen
-
 scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> (String -> IO ()) -> SC.SCNotification -> IO ()
 scnCallback ss hw scn fileOpen sn = do 
     -- event from output pane
     case (SC.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
-            gotoError ss (fromIntegral (SC.snLine sn) :: Int) fileOpen
+            gotoErrorLine ss (fromIntegral (SC.snLine sn) :: Int) fileOpen
             return ()
         2007 -> do -- sCN_UPDATEUI
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 

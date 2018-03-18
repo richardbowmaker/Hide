@@ -121,7 +121,7 @@ onFileOpen ss = do
 
 onFileNew :: SS.Session -> IO ()
 onFileNew ss = do
-    hw <- newFile ss 
+    hw <- newFile ss1 
     EN.enbSelectTab ss $ SS.hwWindow hw      
     return ()
 
@@ -149,7 +149,7 @@ newFile ss = do
     p <- panel nb []
     hwnd <- windowGetHandle p
     scn <- SC.createEditor hwnd
-    SC.configureHaskell scn
+    SC.configureHaskell scn1
 
     -- add panel to notebook
     auiNotebookAddPage nb p "..." False 0

@@ -135,11 +135,13 @@ setUpMainWindow mf sf = do
     ss <- SS.ssCreate mf am enb menus sf onb scn 
     
     -- setup static menu handlers
-    set (SS.ssMenuListGet ss CN.menuFileOpen)       [on command := FM.onFileOpen        ss]
-    set (SS.ssMenuListGet ss CN.menuFileNew)        [on command := FM.onFileNew         ss]
-    set (SS.ssMenuListGet ss CN.menuWindowGhci)     [on command := GH.openWindow        ss]
-    set (SS.ssMenuListGet ss CN.menuWindowOutput)   [on command := OT.openOutputWindow  ss (FM.fileOpen ss)]
-    set (SS.ssMenuListGet ss CN.menuTestTest)       [on command := onTestTest           ss]
+    set (SS.ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen        ss]
+    set (SS.ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew         ss]
+    set (SS.ssMenuListGet ss CN.menuWindowGhci)         [on command := GH.openWindow        ss]
+    set (SS.ssMenuListGet ss CN.menuWindowOutput)       [on command := OT.openOutputWindow  ss (FM.fileOpen ss)]
+    set (SS.ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
+    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [on command := OT.gotoNextError     ss (FM.fileOpen ss), enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [on command := OT.gotoPreviousError ss (FM.fileOpen ss), enabled := False]
 
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
@@ -149,7 +151,7 @@ setUpMainWindow mf sf = do
     OT.openOutputWindow ss (FM.fileOpen ss)
 
     return ss
-  
+
 ------------------------------------------------------------    
 -- Setup menus
 ------------------------------------------------------------    
@@ -158,51 +160,52 @@ setupMenus :: Frame () -> IO SS.SsMenuList
 setupMenus mf  = do
 
     -- file menu  
-    menuFile            <- menuPane             [text := "&File"]
-    menuFileOpen        <- menuItem menuFile    [text := (CN.menuText' CN.menuFileOpen),        help := (CN.menuHelp' CN.menuFileOpen)]
-    menuFileNew         <- menuItem menuFile    [text := (CN.menuText' CN.menuFileNew),         help := (CN.menuHelp' CN.menuFileNew)]
-    menuFileClose       <- menuItem menuFile    [text := (CN.menuText' CN.menuFileClose),       help := (CN.menuHelp' CN.menuFileClose)]
-    menuFileCloseAll    <- menuItem menuFile    [text := (CN.menuText' CN.menuFileCloseAll),    help := (CN.menuHelp' CN.menuFileCloseAll)]                                             
-    menuFileSave        <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSave),        help := (CN.menuHelp' CN.menuFileSave),     enabled := False]
-    menuFileSaveAs      <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAs),      help := (CN.menuHelp' CN.menuFileSaveAs)]
-    menuFileSaveAll     <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAll),     help := (CN.menuHelp' CN.menuFileSaveAll),  enabled := False]
-                                             
-    menuAppendSeparator menuFile
-                             
+    menuFile                <- menuPane             [text := "&File"]
+    menuFileOpen            <- menuItem menuFile    [text := (CN.menuText' CN.menuFileOpen),            help := (CN.menuHelp' CN.menuFileOpen)]
+    menuFileNew             <- menuItem menuFile    [text := (CN.menuText' CN.menuFileNew),             help := (CN.menuHelp' CN.menuFileNew)]
+    menuFileClose           <- menuItem menuFile    [text := (CN.menuText' CN.menuFileClose),           help := (CN.menuHelp' CN.menuFileClose)]
+    menuFileCloseAll        <- menuItem menuFile    [text := (CN.menuText' CN.menuFileCloseAll),        help := (CN.menuHelp' CN.menuFileCloseAll)]                                             
+    menuFileSave            <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSave),            help := (CN.menuHelp' CN.menuFileSave),     enabled := False]
+    menuFileSaveAs          <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAs),          help := (CN.menuHelp' CN.menuFileSaveAs)]
+    menuFileSaveAll         <- menuItem menuFile    [text := (CN.menuText' CN.menuFileSaveAll),         help := (CN.menuHelp' CN.menuFileSaveAll),  enabled := False]                                            
+    menuAppendSeparator menuFile                            
     menuQuit  <- menuQuit menuFile [help := "Quit", on command := close mf]
 
-    menuEdit                <- menuPane            [text := "&Edit"]
-    menuEditUndo            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditUndo),             help := (CN.menuHelp' CN.menuEditUndo)]
-    menuEditRedo            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditRedo),             help := (CN.menuHelp' CN.menuEditRedo)]
+    menuEdit                <- menuPane             [text := "&Edit"]
+    menuEditUndo            <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditUndo),            help := (CN.menuHelp' CN.menuEditUndo)]
+    menuEditRedo            <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditRedo),            help := (CN.menuHelp' CN.menuEditRedo)]
     menuAppendSeparator menuEdit
-    menuEditCut             <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditCut),              help := (CN.menuHelp' CN.menuEditCut)]
-    menuEditCopy            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditCopy),             help := (CN.menuHelp' CN.menuEditCopy)]
-    menuEditPaste           <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditPaste),            help := (CN.menuHelp' CN.menuEditPaste)]
-    menuEditAll             <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditSelectAll),        help := (CN.menuHelp' CN.menuEditSelectAll)]
+    menuEditCut             <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditCut),             help := (CN.menuHelp' CN.menuEditCut)]
+    menuEditCopy            <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditCopy),            help := (CN.menuHelp' CN.menuEditCopy)]
+    menuEditPaste           <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditPaste),           help := (CN.menuHelp' CN.menuEditPaste)]
+    menuEditAll             <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditSelectAll),       help := (CN.menuHelp' CN.menuEditSelectAll)]
     menuAppendSeparator menuEdit
-    menuEditFind            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFind),             help := (CN.menuHelp' CN.menuEditFind)]
-    menuEditFindForward     <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindForward),      help := (CN.menuHelp' CN.menuEditFindForward)]
-    menuEditFindBackward    <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditFindBackward),     help := (CN.menuHelp' CN.menuEditFindBackward)]
+    menuEditFind            <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditFind),            help := (CN.menuHelp' CN.menuEditFind)]
+    menuEditFindForward     <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditFindForward),     help := (CN.menuHelp' CN.menuEditFindForward)]
+    menuEditFindBackward    <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditFindBackward),    help := (CN.menuHelp' CN.menuEditFindBackward)]
     menuAppendSeparator menuEdit
-    menuEditSort            <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditSort),             help := (CN.menuHelp' CN.menuEditSort)]
-    menuEditClear           <- menuItem menuEdit   [text := (CN.menuText' CN.menuEditClear),            help := (CN.menuHelp' CN.menuEditClear)]
+    menuEditSort            <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditSort),            help := (CN.menuHelp' CN.menuEditSort)]
+    menuEditClear           <- menuItem menuEdit    [text := (CN.menuText' CN.menuEditClear),           help := (CN.menuHelp' CN.menuEditClear)]
     
-    menuBuild        <- menuPane            [text := "&Build"]
-    menuBuildCompile <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildCompile),    help := (CN.menuHelp' CN.menuBuildCompile)]
-    menuBuildBuild   <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildBuild),      help := (CN.menuHelp' CN.menuBuildBuild)]
-    menuBuildReBuild <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildRebuild),    help := (CN.menuHelp' CN.menuBuildRebuild)]
-    menuBuildClean   <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildClean),      help := (CN.menuHelp' CN.menuBuildClean)]
-    menuBuildGhci    <- menuItem menuBuild  [text := (CN.menuText' CN.menuBuildGhci),       help := (CN.menuHelp' CN.menuBuildGhci)]
+    menuBuild               <- menuPane             [text := "&Build"]
+    menuBuildCompile        <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildCompile),        help := (CN.menuHelp' CN.menuBuildCompile)]
+    menuBuildBuild          <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildBuild),          help := (CN.menuHelp' CN.menuBuildBuild)]
+    menuBuildReBuild        <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildRebuild),        help := (CN.menuHelp' CN.menuBuildRebuild)]
+    menuBuildClean          <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildClean),          help := (CN.menuHelp' CN.menuBuildClean)]
+    menuBuildGhci           <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildGhci),           help := (CN.menuHelp' CN.menuBuildGhci)]
           
-    menuDebug        <- menuPane            [text := "Debug"]
-    menuDebugRun     <- menuItem menuDebug  [text := (CN.menuText' CN.menuDebugRun),    help := (CN.menuHelp' CN.menuDebugRun)]
+    menuDebug               <- menuPane             [text := "Debug"]
+    menuDebugRun            <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugRun),            help := (CN.menuHelp' CN.menuDebugRun)]
+    menuAppendSeparator menuDebug
+    menuDebugNextError      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugNextError),      help := (CN.menuHelp' CN.menuDebugNextError)]
+    menuDebugPreviousError  <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugPreviousError),  help := (CN.menuHelp' CN.menuDebugPreviousError)]
 
-    menuWindow        <- menuPane             [text := "Window"]
-    menuWindowGhci    <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowGhci),   help := (CN.menuHelp' CN.menuWindowGhci)]
-    menuWindowOutput  <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowOutput), help := (CN.menuHelp' CN.menuWindowOutput)]
+    menuWindow              <- menuPane             [text := "Window"]
+    menuWindowGhci          <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowGhci),          help := (CN.menuHelp' CN.menuWindowGhci)]
+    menuWindowOutput        <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowOutput),        help := (CN.menuHelp' CN.menuWindowOutput)]
 
-    menuTest         <- menuPane            [text := "Test"]
-    menuTestTest     <- menuItem menuTest   [text := (CN.menuText' CN.menuTestTest),    help := (CN.menuHelp' CN.menuTestTest)]
+    menuTest                <- menuPane             [text := "Test"]
+    menuTestTest            <- menuItem menuTest    [text := (CN.menuText' CN.menuTestTest),            help := (CN.menuHelp' CN.menuTestTest)]
 
     -- create Help menu
     menuHelp'        <- menuHelp []
@@ -233,6 +236,8 @@ setupMenus mf  = do
                                     (CN.menuBuildCompile,        menuBuildCompile),
                                     (CN.menuBuildGhci,           menuBuildGhci),
                                     (CN.menuDebugRun,            menuDebugRun),
+                                    (CN.menuDebugNextError,      menuDebugNextError),
+                                    (CN.menuDebugPreviousError,  menuDebugPreviousError),
                                     (CN.menuWindowGhci,          menuWindowGhci),
                                     (CN.menuWindowOutput,        menuWindowOutput),
                                     (CN.menuTestTest,            menuTestTest)]

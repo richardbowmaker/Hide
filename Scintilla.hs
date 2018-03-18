@@ -519,7 +519,7 @@ configureHaskell e = do
     setLexer e (fromIntegral sCLEX_HASKELL :: Int)
     setKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
                         "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let",
-                        "newtype", "type", "class"]
+                        "newtype", "type", "class", "in"]
     setAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) black white 9 "Courier New"
     styleClearAll e
     setAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) black white 9 "Courier New"
