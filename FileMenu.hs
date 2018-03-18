@@ -89,11 +89,11 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                                          (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                                         (return True)),
                         (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)                                               (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn) (fileOpen ss))        (return True)),
-                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn) (fileOpen ss))          (return True)),
-                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                                             (return True)),
-                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                                             (return True)),
-                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn)  (fileOpen ss))          (return True)),
+                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn) (fileOpen ss))        (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn) (fileOpen ss))          (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                                             (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                                             (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn)  (fileOpen ss))          (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
                         (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                                   (return True))
                     ]
                     (SC.getFocus scn)

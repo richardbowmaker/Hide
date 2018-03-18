@@ -20,6 +20,7 @@ import qualified Control.Concurrent.Thread as Thread
 import Control.Exception
 import Control.Monad (liftM)
 import Control.Monad.Loops
+import Data.Bits ((.&.), xor)
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetContents, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
 import qualified Data.ByteString as BS (append, empty)
 import Data.List (find, findIndex, isInfixOf)
@@ -52,6 +53,8 @@ import qualified Session as SS
 onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildBuild ss tw scn fileSave fileOpen = do
 
+    SS.ssUpdateState ss ((.&.) SS.ssStateCompile)
+
     set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
@@ -78,6 +81,11 @@ onBuildBuild ss tw scn fileSave fileOpen = do
     
 onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildCompile ss tw scn fileSave fileOpen = do
+
+    SS.ssUpdateState ss ((.&.) SS.ssStateCompile)
+    st <- SS.ssGetState ss
+    SS.ssDebugInfo ss $ "pre updated state = " ++ (show st)
+
 
     set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
@@ -115,6 +123,8 @@ compileComplete ss = do
 onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildGhci ss tw scn fileSave fileOpen = do
 
+    SS.ssUpdateState ss ((.&.) SS.ssStateCompile)
+
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
@@ -138,15 +148,24 @@ onBuildGhci ss tw scn fileSave fileOpen = do
 
 ghciComplete :: SS.Session -> SS.HideWindow -> IO ()
 ghciComplete ss hw = do
+
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
     OT.addText ss $ BS.pack "Compile complete\n"
 
+    SS.ssUpdateState ss (xor SS.ssStateCompile)
+
     nerrs <- SS.crGetNoOfErrors ss
     if nerrs == 0 then do
+        SS.ssWriteToOutputChan ss "\nNo errors\n"
+        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
+        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
         GH.openWindowFile ss $ SS.hwWindow hw 
     else do
+        SS.ssWriteToOutputChan ss $ "\n" ++ (show nerrs) ++ " errors\n"
+        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
+        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
         ans <- proceedDialog (SS.ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
         case ans of
             True -> GH.openWindowFile ss $ SS.hwWindow hw 
@@ -204,24 +223,24 @@ cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> SS.CompReport -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
     if SS.crErrorCount ces == 0 then do
-        outStr "\nNo errors\n"
+        SS.ssWriteToOutputChan ss "\nNo errors\n"
         set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
         set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
     else do
-        outStr $ "\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"
+        SS.ssWriteToOutputChan ss $ "\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"
         set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
         set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
 
     -- save compilation results to session
     SS.ssSetCompilerReport ss ces
- 
+    SS.ssUpdateState ss (xor SS.ssStateCompile)
+    st <- SS.ssGetState ss
+    SS.ssDebugInfo ss $ "post updated state = " ++ (show st)
+
     -- schedule GUI finally function
     maybe (return ()) (\f-> atomically $ writeTChan (SS.ssCFunc ss) f) mfinally
 
     return ()
-
-    where outStr s = atomically $ writeTChan (SS.ssTOutput ss) $ BS.pack s
-
 
 cpDebugRun :: SS.Session -> SS.TextWindow -> IO ()
 cpDebugRun ss tw = do

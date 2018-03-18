@@ -178,7 +178,8 @@ gotoNextError ss fileOpen = do
         let merr = SS.crCurrErr report
         case merr of
             Just err -> do
-                if err < (SS.crErrorCount report) - 1 then gotoErrorNo ss (err+1) fileOpen
+                if err < (SS.crErrorCount report) - 1 then 
+                    gotoErrorNo ss (err+1) fileOpen
                 else do
                     infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
                     SS.crUpdateCurrentError ss $ Nothing
@@ -203,7 +204,7 @@ gotoErrorNo :: SS.Session -> Int -> (String -> IO ()) -> IO ()
 gotoErrorNo ss errno fileOpen = do
     report <- SS.ssGetCompilerReport ss
     let errs = SS.crErrorCount report
-    if errno >=0 && errno < errs then 
+    if errno >= 0 && errno < errs then 
         gotoError ss ((SS.crErrors report) !! errno) fileOpen
     else
         return ()

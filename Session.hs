@@ -25,10 +25,10 @@ module Session
     crCreateCompError,
     crCreateCompReport,
     crCurrErr,
-    crGetNoOfErrors,
     crErrorCount,
     crErrors,
     crFindError,
+    crGetNoOfErrors,
     crUpdateCurrentError,
     crUpdateReport,
     createDebugWindowType,
@@ -80,6 +80,7 @@ module Session
     ssFindText,
     ssFrame,
     ssGetCompilerReport,
+    ssGetState,
     ssHideWindows,
     ssMenuListAdd,
     ssMenuListCreate,
@@ -90,9 +91,13 @@ module Session
     ssOutputs,
     ssSetCompilerReport,
     ssSetOutput,
+    ssStateCompile,
     ssStatus,
     ssTOutput,
+    ssTestState,
     ssToString,
+    ssUpdateState,
+    ssWriteToOutputChan,
     tmGetMenuEnabled, 
     tmGetMenuFunction,
     twFilePath,
@@ -115,14 +120,15 @@ module Session
     twRemoveWindow,
     twSetFilePath,
     twStatusInfo,
-    twType 
+    twType
 ) where
 
 
 import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
-import Control.Monad (liftM)
+import Control.Monad (liftM, liftM2)
+import Data.Bits ((.&.))
 import Data.ByteString.Internal (ByteString)
 import Data.String.Combinators (punctuate)
 import Data.List (find)
@@ -160,7 +166,8 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssMainThreadId      :: ThreadId,
                             ssCompilerReport    :: TErrors,
                             ssFindText          :: TFindText,
-                            ssHideWindows       :: THideWindows}
+                            ssHideWindows       :: THideWindows,
+                            ssState             :: TState}
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
@@ -180,6 +187,8 @@ data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :
 type SsNameMenuPair = (Int, MenuItem ())                               
 type SsMenuList = [SsNameMenuPair]
 
+type TState = TVar Int
+
 ----------------------------------------------------------------
 -- Session  helpers
 ----------------------------------------------------------------
@@ -197,7 +206,8 @@ ssCreate mf am nb ms sf ots db = do
     let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugWarn  db s) else (\s -> return ())
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
-    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws)
+    state <- atomically $ newTVar 0 
+    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws state)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -243,6 +253,23 @@ ssGetCompilerReport ss = atomically $ readTVar $ ssCompilerReport ss
          
 ssSetCompilerReport :: Session -> CompReport -> IO ()
 ssSetCompilerReport ss cr = atomically $ writeTVar (ssCompilerReport ss) cr
+
+ssWriteToOutputChan :: Session -> String -> IO ()
+ssWriteToOutputChan ss s = atomically $ writeTChan (ssTOutput ss) $ BS.pack s
+
+-- state management
+
+ssGetState :: Session -> IO Int
+ssGetState ss = atomically $ readTVar $ ssState ss
+
+ssUpdateState :: Session -> (Int -> Int) -> IO ()
+ssUpdateState ss f = atomically $ modifyTVar (ssState ss) f
+
+ssTestState :: Session -> Int -> IO Bool
+ssTestState ss mask = liftM (>0) $ liftM2 ((.&.)) (ssGetState ss) (return mask)
+
+ssStateCompile :: Int
+ssStateCompile = 1
 
 ----------------------------------------------------------------
 -- Comp error
