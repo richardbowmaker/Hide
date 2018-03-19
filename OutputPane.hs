@@ -113,6 +113,13 @@ addOutputTab ss fileOpen = do
     SC.enableEvents scn
     SC.grabFocus scn
 
+    SC.usePopup scn SC.sC_POPUP_NEVER
+    SC.addPopupMenuItem scn 1000 "Option1" (menuOption ss)
+
+menuOption :: SS.Session -> SC.Editor -> Int -> IO ()
+menuOption ss scn id = do
+    infoDialog (SS.ssFrame ss) CN.programTitle ("menu item " ++ (show id))
+
 createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd = do
     tw <- SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing

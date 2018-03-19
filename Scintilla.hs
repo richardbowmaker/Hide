@@ -5,6 +5,7 @@ module Scintilla
 (   
     Editor,
     SCNotification,
+    addPopupMenuItem,
     appendLine,
     appendLineS,
     appendText,
@@ -94,7 +95,8 @@ module Scintilla
     snUpdated,
     sortSelectedText,
     styleClearAll,
-    undo, 
+    undo,
+    usePopup,
     white
 ) where 
     
@@ -134,19 +136,23 @@ import Misc
 type HHOOK = Word64
 
 -- imports from ScintillaProxy.dll
-foreign import ccall safe "ScnNewEditor"        c_ScnNewEditor       :: HWND -> IO (HWND)      
-foreign import ccall safe "ScnDestroyEditor"    c_ScnDestroyEditor   :: HWND -> IO ()      
-foreign import ccall safe "ScnSetEventHandler"  c_ScnSetEventHandler :: HWND -> FunPtr (Ptr (SCNotification) -> IO ()) -> IO ()
-foreign import ccall safe "ScnEnableEvents"     c_ScnEnableEvents    :: HWND -> IO ()
-foreign import ccall safe "ScnDisableEvents"    c_ScnDisableEvents   :: HWND -> IO ()      
+foreign import ccall safe "ScnNewEditor"        c_ScnNewEditor          :: HWND -> IO (HWND)      
+foreign import ccall safe "ScnDestroyEditor"    c_ScnDestroyEditor      :: HWND -> IO ()      
+foreign import ccall safe "ScnSetEventHandler"  c_ScnSetEventHandler    :: HWND -> FunPtr (Ptr (SCNotification) -> IO ()) -> IO ()
+foreign import ccall safe "ScnEnableEvents"     c_ScnEnableEvents       :: HWND -> IO ()
+foreign import ccall safe "ScnDisableEvents"    c_ScnDisableEvents      :: HWND -> IO ()      
+foreign import ccall safe "ScnAddPopupMenuItem" c_ScnAddPopupMenuItem   :: HWND -> Int32 -> CString -> FunPtr (Int -> IO ()) -> IO ()      
 
 -- direct call to Scintilla, different aliases simplify conversion to WPARAM and LPARAM types 
 foreign import ccall safe "ScnSendEditor"    c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
 foreign import ccall safe "ScnSendEditor"    c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
 
--- callback wrapper
+-- callback wrappers
 foreign import ccall safe "wrapper" createCallback ::
     (Ptr (SCNotification) -> IO ()) -> IO (FunPtr (Ptr (SCNotification) -> IO ()))
+
+foreign import ccall safe "wrapper" createMenuCallback ::
+    (Int -> IO ()) -> IO (FunPtr (Int -> IO ()))
 
 --------------------------------------------------------------
 -- data types
@@ -539,9 +545,9 @@ configureHaskell e = do
     setIndentationGuides e sC_IV_LOOKBOTH    
     setStyleColour e (fromIntegral sTYLE_INDENTGUIDE :: Word64) indents  white
 
-    -- inhibit keys
-    disbleKey e 16
-    
+    -- popup menu handled by scintilla proxy dll
+    usePopup e sC_POPUP_NEVER
+   
     return ()
     
 setLexer :: Editor -> Int -> IO ()
@@ -955,6 +961,26 @@ searchPrev e text ops =
 ----------------------------------------------
 
 -- see scintilla help online for key codes
-disbleKey :: Editor -> Int -> IO ()
-disbleKey e kc = c_ScnSendEditorII (getHwnd e) sCI_ASSIGNCMDKEY (fromIntegral kc :: Word64) (fromIntegral sCI_NULL :: Int64) >> ioNull
+clearCmdKey :: Editor -> Int -> IO ()
+clearCmdKey e kc = c_ScnSendEditorII (getHwnd e) sCI_CLEARCMDKEY (fromIntegral kc :: Word64) 0 >> ioNull
+
+----------------------------------------------
+-- Popup Menu
+----------------------------------------------
+
+{-
+    Second argument is the popup selection:-
+
+    sC_POPUP_NEVER,
+    sC_POPUP_ALL,
+    sC_POPUP_TEXT,
+-}
+usePopup :: Editor -> Word32 -> IO ()
+usePopup e p = c_ScnSendEditorII (getHwnd e) sCI_USEPOPUP  (fromIntegral p :: Word64) 0 >> ioNull
+
+addPopupMenuItem :: Editor -> Int -> String -> (Editor -> Int -> IO ()) -> IO ()
+addPopupMenuItem e id title callback = do
+    eh <- createMenuCallback $ callback e
+    withCString title (\cs -> c_ScnAddPopupMenuItem (getHwnd e) (fromIntegral id :: Int32) cs eh)
+    
 
