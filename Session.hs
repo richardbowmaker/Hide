@@ -71,6 +71,7 @@ module Session
     hwWindows,
     ssAuiMgr,
     ssCFunc,
+    ssClearStateBit,
     ssCompilerReport,
     ssCreate,
     ssDebugError,
@@ -80,7 +81,6 @@ module Session
     ssFindText,
     ssFrame,
     ssGetCompilerReport,
-    ssGetState,
     ssHideWindows,
     ssMenuListAdd,
     ssMenuListCreate,
@@ -91,12 +91,12 @@ module Session
     ssOutputs,
     ssSetCompilerReport,
     ssSetOutput,
+    ssSetStateBit,
     ssStateCompile,
     ssStatus,
     ssTOutput,
     ssTestState,
     ssToString,
-    ssUpdateState,
     ssWriteToOutputChan,
     tmGetMenuEnabled, 
     tmGetMenuFunction,
@@ -128,7 +128,7 @@ import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Control.Monad (liftM, liftM2)
-import Data.Bits ((.&.))
+import Data.Bits ((.&.), setBit, clearBit, testBit)
 import Data.ByteString.Internal (ByteString)
 import Data.String.Combinators (punctuate)
 import Data.List (find)
@@ -259,14 +259,16 @@ ssWriteToOutputChan ss s = atomically $ writeTChan (ssTOutput ss) $ BS.pack s
 
 -- state management
 
-ssGetState :: Session -> IO Int
-ssGetState ss = atomically $ readTVar $ ssState ss
-
-ssUpdateState :: Session -> (Int -> Int) -> IO ()
-ssUpdateState ss f = atomically $ modifyTVar (ssState ss) f
-
 ssTestState :: Session -> Int -> IO Bool
-ssTestState ss mask = liftM (>0) $ liftM2 ((.&.)) (ssGetState ss) (return mask)
+ssTestState ss mask = atomically (do 
+    s <- readTVar (ssState ss) 
+    return $ testBit s mask)
+
+ssSetStateBit :: Session -> Int -> IO ()
+ssSetStateBit ss n = atomically $ modifyTVar (ssState ss) (\s -> setBit s n) 
+
+ssClearStateBit :: Session -> Int -> IO ()
+ssClearStateBit ss n = atomically $ modifyTVar (ssState ss) (\s -> clearBit s n) 
 
 ssStateCompile :: Int
 ssStateCompile = 1

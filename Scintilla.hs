@@ -27,6 +27,7 @@ module Scintilla
     createEditor,
     cut,
     disableEvents,
+    emptyUndoBuffer,
     enableEvents,
     endUndoAction,
     findText,
@@ -141,18 +142,22 @@ foreign import ccall safe "ScnDestroyEditor"    c_ScnDestroyEditor      :: HWND 
 foreign import ccall safe "ScnSetEventHandler"  c_ScnSetEventHandler    :: HWND -> FunPtr (Ptr (SCNotification) -> IO ()) -> IO ()
 foreign import ccall safe "ScnEnableEvents"     c_ScnEnableEvents       :: HWND -> IO ()
 foreign import ccall safe "ScnDisableEvents"    c_ScnDisableEvents      :: HWND -> IO ()      
-foreign import ccall safe "ScnAddPopupMenuItem" c_ScnAddPopupMenuItem   :: HWND -> Int32 -> CString -> FunPtr (Int -> IO ()) -> IO ()      
+foreign import ccall safe "ScnAddPopupMenuItem" c_ScnAddPopupMenuItem   :: 
+    HWND -> Int32 -> CString -> FunPtr (Int -> IO ()) -> FunPtr (Int -> IO Int) -> IO ()      
 
 -- direct call to Scintilla, different aliases simplify conversion to WPARAM and LPARAM types 
-foreign import ccall safe "ScnSendEditor"    c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
-foreign import ccall safe "ScnSendEditor"    c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
 
 -- callback wrappers
 foreign import ccall safe "wrapper" createCallback ::
     (Ptr (SCNotification) -> IO ()) -> IO (FunPtr (Ptr (SCNotification) -> IO ()))
 
-foreign import ccall safe "wrapper" createMenuCallback ::
+foreign import ccall safe "wrapper" createHandlerCallback ::
     (Int -> IO ()) -> IO (FunPtr (Int -> IO ()))
+
+foreign import ccall safe "wrapper" createEnabledCallback ::
+    (Int -> IO Int) -> IO (FunPtr (Int -> IO Int))
 
 --------------------------------------------------------------
 -- data types
@@ -440,6 +445,7 @@ setText :: Editor -> BS.ByteString -> IO ()
 setText e bs = do
     let bs0 = BS.append bs (BS.replicate 1 0) -- add terminating null 
     BS.unsafeUseAsCString bs0 (\cs -> do c_ScnSendEditorIS (getHwnd e) sCI_SETTEXT 0 cs)
+    emptyUndoBuffer e
     return ()
 
 -- get all text from editor    
@@ -629,6 +635,9 @@ setUndoCollection e b = c_ScnSendEditorII (getHwnd e) sCI_SETUNDOCOLLECTION (fro
 getUndoCollection :: Editor -> IO Bool
 getUndoCollection e = c_ScnSendEditorII (getHwnd e) sCI_GETUNDOCOLLECTION 0 0 >>= ioBool
     
+emptyUndoBuffer :: Editor -> IO ()
+emptyUndoBuffer e = c_ScnSendEditorII (getHwnd e) sCI_EMPTYUNDOBUFFER 0 0 >> ioNull 
+
 ----------------------------------------------
 -- Cut and Paste 
 ----------------------------------------------
@@ -978,9 +987,14 @@ clearCmdKey e kc = c_ScnSendEditorII (getHwnd e) sCI_CLEARCMDKEY (fromIntegral k
 usePopup :: Editor -> Word32 -> IO ()
 usePopup e p = c_ScnSendEditorII (getHwnd e) sCI_USEPOPUP  (fromIntegral p :: Word64) 0 >> ioNull
 
-addPopupMenuItem :: Editor -> Int -> String -> (Editor -> Int -> IO ()) -> IO ()
-addPopupMenuItem e id title callback = do
-    eh <- createMenuCallback $ callback e
-    withCString title (\cs -> c_ScnAddPopupMenuItem (getHwnd e) (fromIntegral id :: Int32) cs eh)
+-- addPopupMenuItem scn 1000 "Option 1" menufunction isenabled :-
+--  appends a menu item to the editors context menu with resource id 100, title = Option 1, 
+--  a function that is executed when the option is selected
+--  a function that is called before the popup is displayed and returns 0-disabled, 1-enabled
+addPopupMenuItem :: Editor -> Int -> String -> (Editor -> Int -> IO ()) -> (Editor -> Int -> IO Int) -> IO ()
+addPopupMenuItem e id title handler enabled = do
+    mf <- createHandlerCallback $ handler e
+    eh <- createEnabledCallback $ enabled e
+    withCString title (\cs -> c_ScnAddPopupMenuItem (getHwnd e) (fromIntegral id :: Int32) cs mf eh)
     
 

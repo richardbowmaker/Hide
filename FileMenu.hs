@@ -65,6 +65,7 @@ openSourceFileEditor ss fp = do
     ix <- auiNotebookGetPageIndex nb p
     auiNotebookSetSelection nb ix 
 
+    createPopupMenu scn
     return (hw, scn)
 
 createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
@@ -84,7 +85,7 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                                            (liftM not $ SC.selectionIsEmpty scn)),
                         (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                                           (liftM not $ SC.selectionIsEmpty scn)),
                         (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                                                          (SC.canPaste scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                                      (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                                      (liftM (>0) $ SC.getTextLen scn)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                                 (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                                          (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                                         (return True)),
@@ -99,6 +100,16 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                     (SC.getFocus scn)
                     (SC.isClean scn)
                     (getStatusInfo scn)
+
+
+createPopupMenu :: SC.Editor -> IO ()
+createPopupMenu scn = do
+    SC.usePopup scn SC.sC_POPUP_NEVER
+    SC.addPopupMenuItem scn 1000 "Cut"          (\scn _ -> SC.cut scn)              (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
+    SC.addPopupMenuItem scn 1001 "Copy"         (\scn _ -> SC.copy scn)             (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
+    SC.addPopupMenuItem scn 1002 "Paste"        (\scn _ -> SC.paste scn)            (\scn _ -> liftM MI.boolToInt $ SC.canPaste scn)
+    SC.addPopupMenuItem scn 1003 "Select All"   (\scn _ -> SC.selectAll scn)        (\scn _ -> liftM MI.boolToInt $ liftM (>0) $ SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1004 "Sort"         (\scn _ -> SC.sortSelectedText scn) (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
 
 -- File Open
 onFileOpen :: SS.Session -> IO ()
@@ -162,6 +173,7 @@ newFile ss = do
     SC.enableEvents scn
     SC.setSavePoint scn
       
+    createPopupMenu scn
     return hw
    
 allFilesClean :: SS.Session -> IO Bool

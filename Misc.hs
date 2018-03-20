@@ -1,21 +1,22 @@
 
 module Misc
 (
-    ptrToString,
-    frameToString,
-    windowToString,
-    panelToString,
-    ptrToWord64,
-    ptrToInt64,
-    findAndUpdate1,
-    findAndUpdate2,
+    boolToInt,
     comparePtrs,
-    isSameWindow,
-    findAndRemove,
-    doWhileTrueIO,
     createGrid, 
     createTree,
-    findIO
+    doWhileTrueIO,
+    findAndRemove,
+    findAndUpdate1,
+    findAndUpdate2,
+    findIO,
+    frameToString,
+    isSameWindow,
+    panelToString,
+    ptrToInt64,
+    ptrToString,
+    ptrToWord64,
+    windowToString
 ) where
 
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
@@ -24,7 +25,6 @@ import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Data.Word (Word64)
 import Data.Int (Int64)
-
 
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
@@ -89,6 +89,9 @@ findIO p (x:xs) = do
     b <- p x
     if b then return (Just x) else findIO p xs
      
+boolToInt :: Bool -> Int
+boolToInt b = if b then 1 else 0
+
 ------------------------------------------------------------    
 -- Tree Control
 ------------------------------------------------------------    

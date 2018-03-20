@@ -31,6 +31,7 @@ import qualified Constants as CN
 import qualified Debug as DG
 import qualified EditMenu as EM
 import qualified EditorNotebook as EN
+import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
 import qualified Session as SS
@@ -113,8 +114,12 @@ addOutputTab ss fileOpen = do
     SC.enableEvents scn
     SC.grabFocus scn
 
+    -- setup the context menu
     SC.usePopup scn SC.sC_POPUP_NEVER
-    SC.addPopupMenuItem scn 1000 "Option1" (menuOption ss)
+    SC.addPopupMenuItem scn 1000 "Save As ... " (\scn _ -> fileSave ss (SS.hwWindow hw) scn) (\scn _ -> SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1001 "Copy"         (\scn _ -> SC.copy scn)                      (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
+    SC.addPopupMenuItem scn 1002 "Select All"   (\scn _ -> SC.selectAll scn)                 (\scn _ -> SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1003 "Clear"        (\scn _ -> clearText scn)                    (\scn _ -> SC.getTextLen scn)
 
 menuOption :: SS.Session -> SC.Editor -> Int -> IO ()
 menuOption ss scn id = do
@@ -128,13 +133,13 @@ createHideWindow ss scn panel phwnd hwnd = do
     where  tms tw = SS.createTextMenus
                     [
                         (SS.createMenuFunction CN.menuFileClose         (closeOutputTab ss)             (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSave ss tw scn)            (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSave ss tw scn)            (liftM (>0) $ SC.getTextLen scn)),
                         (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn)),
                         (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
                         (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
                         (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
-                        (SS.createMenuFunction CN.menuEditClear         (clearText scn)                 (return True))
+                        (SS.createMenuFunction CN.menuEditClear         (clearText scn)                 (liftM (>0) $ SC.getTextLen scn))
                     ]
                     (SC.getFocus scn)
                     (return True)
