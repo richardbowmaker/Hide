@@ -122,10 +122,6 @@ compileComplete ss = do
 onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
 onBuildGhci ss tw scn fileSave fileOpen = do
 
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := False]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := False]
-
    -- save file first
     ans <- fileSave
     if ans then do
@@ -135,50 +131,14 @@ onBuildGhci ss tw scn fileSave fileOpen = do
             Just hw -> do
                 mfp <- SS.hwFilePath hw
                 case mfp of
-                    Just fp -> do
-                        OT.openOutputWindow ss fileOpen
-                        SS.ssSetStateBit ss SS.ssStateCompile
-                        cpCompileFile ss fp (Just $ ghciComplete ss hw)
+                    Just fp -> GH.openWindowFile ss $ SS.hwWindow hw 
                     Nothing -> return ()
             Nothing -> do
                     SS.ssDebugError ss "onBuildGhci:: no file name set"
     else return ()
 
-ghciComplete :: SS.Session -> SS.HideWindow -> IO ()
-ghciComplete ss hw = do
-
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
-    OT.addText ss $ BS.pack "Compile complete\n"
-
-    SS.ssClearStateBit ss SS.ssStateCompile
-
-    --  delete object file, force GHCI to load .hs file
-    mfp <- SS.hwFilePath hw
-    case mfp of
-        Just fp -> do
-                try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-                return ()
-        Nothing -> return ()
-
-    nerrs <- SS.crGetNoOfErrors ss
-    if nerrs == 0 then do
-        SS.ssWriteToOutputChan ss "\nNo errors\n"
-        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
-        GH.openWindowFile ss $ SS.hwWindow hw 
-    else do
-        SS.ssWriteToOutputChan ss $ "\n" ++ (show nerrs) ++ " errors\n"
-        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
-        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
-        ans <- proceedDialog (SS.ssFrame ss) CN.programTitle "There were compilation errors, continue ?"
-        case ans of
-            True -> GH.openWindowFile ss $ SS.hwWindow hw 
-            False -> return ()
-
 -- | Build the project
-cpBuildProject ::   SS.Session             -- ^ The HIDE session
+cpBuildProject ::   SS.Session          -- ^ The HIDE session
                     -> String           -- ^ Filename of project to build
                     -> Maybe (IO ())    -- ^ Optional function called on completion in GUI thread
                     -> IO ()            

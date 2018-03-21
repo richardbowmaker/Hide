@@ -11,6 +11,9 @@ where
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Prim (modifyState)
 -- import Text.ParserCombinators.ReadP (skipSpaces)
+-- import Language.Haskell.Exts.Parser
+import System.IO
+import Data.List
 
 -- import qualified Session as SS
 
@@ -18,14 +21,33 @@ import Text.Parsec.Prim (modifyState)
 -- source file module header parser
 ------------------------------------------
 
+myReadFile :: IO String
+myReadFile = do
+    h <- openFile "D:\\_Rick's\\haskell\\starter.hs" ReadMode
+    s <- hGetContents h
+--    hClose h
+    return s
+   
+
+noGo :: String
+noGo = "hello"
+
 {-
 
 module Parsers
 (
-    errorFile
+  errorFile
 ) where 
 
 module Main where
+
+offset :: String -> SourcePos -> Maybe Location
+offset source pos = elemIndex pos positions
+  where positions = scanl updatePosChar firstPos source
+        firstPos = initialPos (sourceName pos)
+
+https://stackoverflow.com/questions/10473857/parsec-positions-as-offsets
+
 
 -}
 
@@ -41,22 +63,28 @@ moduleHeader = do
 --    string "module"
 --    many commentLine
 --    endBy (many (noneOf "m")) (string "module")
-    commentBlock
+    commentLine
     pos <- getPosition
     return (sourceLine pos,False)
 
-commentLine :: GenParser Char () ()
+commentLine :: GenParser Char () (Int, Int)
 commentLine = do
-    many (char ' ')
-    string "--"
+    manyTill anyChar (try $ string "--")
+    p1 <- getPosition
     many (noneOf "\n")
-    return ()
+    p2 <- getPosition
+    return (0, 0)
 
 commentBlock :: GenParser Char () ()
 commentBlock = do
-
-    between (string "{-") (string "-}") (many anyChar)
+    many (char ' ')
+    string "{-"
+    manyTill anyChar (try $ string "-}")
     return ()
+    where 
+
+
+
 
 {-
 ------------------------------------------

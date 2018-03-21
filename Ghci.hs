@@ -24,22 +24,23 @@ module Ghci
 ) where 
   
 
-import Control.Concurrent 
-import Control.Concurrent.STM
-import Control.Monad (mapM_, liftM2) 
 import qualified Data.ByteString as BS (init, replicate)
+import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
 import qualified Data.ByteString.Internal as BS (ByteString)
 import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
-import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
+import Control.Concurrent 
+import Control.Concurrent.STM
+import Control.Monad (mapM_, liftM, liftM2) 
 import Data.Bits ((.|.))
-import Data.List (find, findIndex)
-import Data.Word (Word64)
 import Data.Int (Int32)
+import Data.List (find, findIndex)
+import Data.Maybe (isJust)
+import Data.Word (Word64)
 import Foreign.C.String (CString, withCString)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
-import Graphics.Win32.GDI.Types (HWND)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
+import Graphics.Win32.GDI.Types (HWND)
 import System.FilePath.Windows (takeFileName, takeDirectory)
 import System.IO
 import System.Win32.Types (nullHANDLE)
@@ -48,6 +49,7 @@ import System.Win32.Types (nullHANDLE)
 
 import qualified Constants as CN
 import qualified Misc as MI
+import qualified Scintilla as SC
 import qualified Session as SS
 
 -----------------------
@@ -161,14 +163,15 @@ createHideWindow ss panel phwnd hwnd mfp = do
 
     where  tms tw = SS.createTextMenus 
                     [ 
-                        (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw) (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)       (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)  (return True)),
-                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)          (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)         (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)        (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)    (return True)),
-                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)        (return True))
+                        (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw)    (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)          (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)     (return True)),
+                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)             (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)            (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)           (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)       (return True)),
+                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)           (return True)),
+                        (SS.createMenuFunction CN.menuBuildGhci      (openWindowFile ss tw) (liftM (isJust) (SS.twFilePath tw)))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -271,6 +274,7 @@ callback ss hw hwnd evt
             setm' ss CN.menuEditFindForward   (return False) (return ())
             setm' ss CN.menuEditFindBackward  (return False) (return ())
             setm' ss CN.menuEditClear         (return False) (return ())
+            setm' ss CN.menuBuildGhci         (return False) (return ())
     | evt == eventGotFocus  = do
             setm ss tms CN.menuFileClose        
             setm ss tms CN.menuFileCloseAll        
@@ -287,6 +291,7 @@ callback ss hw hwnd evt
             setm ss tms CN.menuEditFindForward   
             setm ss tms CN.menuEditFindBackward            
             setm ss tms CN.menuEditClear          
+            setm ss tms CN.menuBuildGhci         
     | evt == eventSelectionSet || evt == eventSelectionClear = do
             setm ss tms CN.menuEditCut           
             setm ss tms CN.menuEditCopy          

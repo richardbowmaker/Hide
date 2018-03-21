@@ -51,6 +51,7 @@ openOutputWindow ss fileOpen = do
     mhw <- SS.ssOutput ss
     case mhw of
         Just hw -> do
+            auiNotebookSetSelection (SS.ssOutputs ss) 0
             case SS.hwGetEditor hw of
                 Just scn -> SC.grabFocus scn
                 Nothing  -> return () -- shouldn't get here
@@ -95,6 +96,7 @@ addOutputTab ss fileOpen = do
     auiNotebookInsertPage nb 0 panel "Output" False 0
     ta <- auiSimpleTabArtCreate
     auiNotebookSetArtProvider nb ta
+    auiNotebookSetSelection nb 0
     
     -- configure editor
     SC.setLexer scn (fromIntegral SC.sCLEX_CONTAINER :: Int)

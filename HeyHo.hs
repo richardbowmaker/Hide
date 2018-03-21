@@ -78,7 +78,9 @@ setUpMainWindow mf sf = do
     auiPaneInfoCaption api "Tree Control"
     auiPaneInfoLeft api
     auiPaneInfoCloseButton api True
-    
+    auiPaneInfoIsFloatable api
+    auiPaneInfoIsDockable api
+   
     auiManagerAddPaneByPaneInfo am tree api
     
 {-
@@ -99,6 +101,8 @@ setUpMainWindow mf sf = do
     auiPaneInfoCentre api
     auiPaneInfoCloseButton api True
     auiPaneInfoMaximizeButton api True
+    auiPaneInfoIsFloatable api
+    auiPaneInfoIsDockable api
 
     auiManagerAddPaneByPaneInfo am enb api
    
@@ -109,10 +113,12 @@ setUpMainWindow mf sf = do
     auiPaneInfoCaption api "Output"
     auiPaneInfoBottom api
     auiPaneInfoCloseButton api True
+    auiPaneInfoIsFloatable api
+    auiPaneInfoIsDockable api
 
     auiManagerAddPaneByPaneInfo am onb api
     
-    -- add floating debug window
+    -- add debug window
     dp <- panel mf [size := (Size 400 400)]
     hwnd <- windowGetHandle dp
     scn <- SC.createEditor hwnd
@@ -123,6 +129,8 @@ setUpMainWindow mf sf = do
     auiPaneInfoCaption api "Debug"
     auiPaneInfoBottom api
     auiPaneInfoCloseButton api True
+    auiPaneInfoIsFloatable api
+    auiPaneInfoIsDockable api
 
     auiManagerAddPaneByPaneInfo am dp api   
 
