@@ -34,6 +34,7 @@ import qualified EditorNotebook as EN
 import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
+import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
 ------------------------------------------------------------    
@@ -52,9 +53,12 @@ openOutputWindow ss fileOpen = do
     case mhw of
         Just hw -> do
             auiNotebookSetSelection (SS.ssOutputs ss) 0
+            return ()
+{-
             case SS.hwGetEditor hw of
                 Just scn -> SC.grabFocus scn
                 Nothing  -> return () -- shouldn't get here
+-}
         Nothing -> addOutputTab ss fileOpen
     
 closeOutputWindow :: SS.Session -> IO ()
@@ -272,13 +276,13 @@ gotoError ss ce fileOpen = do
 scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> (String -> IO ()) -> SC.SCNotification -> IO ()
 scnCallback ss hw scn fileOpen sn = do 
     -- event from output pane
-    case (SC.notifyGetCode sn) of
+    case (SI.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
-            gotoErrorLine ss (fromIntegral (SC.snLine sn) :: Int) fileOpen
+            gotoErrorLine ss (fromIntegral (SI.snLine sn) :: Int) fileOpen
             return ()
         2007 -> do -- sCN_UPDATEUI
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
-            if  ( (.&.) (fromIntegral (SC.snUpdated sn) :: Int) 
+            if  ( (.&.) (fromIntegral (SI.snUpdated sn) :: Int) 
                         (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
                 updateMenus ss hw scn
             else

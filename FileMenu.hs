@@ -35,6 +35,7 @@ import qualified Ghci as GH
 import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
+import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
 openSourceFileEditor :: SS.Session -> String -> IO (SS.HideWindow, SC.Editor)
@@ -364,14 +365,14 @@ setSourceFileFocus ss fp = do
 
 scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 scnCallback ss hw scn sn = do 
-    case (SC.notifyGetCode sn) of                   
+    case (SI.notifyGetCode sn) of                   
         2002 -> do -- sCN_SAVEPOINTREACHED
             updateMenus ss hw scn
         2003 -> do -- sCN_SAVEPOINTLEFT
             updateMenus ss hw scn              
         2007 -> do -- sCN_UPDATEUI
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
-            if  ( (.&.) (fromIntegral (SC.snUpdated sn) :: Int) 
+            if  ( (.&.) (fromIntegral (SI.snUpdated sn) :: Int) 
                         (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
                 updateMenus ss hw scn
             else

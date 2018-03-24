@@ -48,37 +48,10 @@ import System.Win32.Types (nullHANDLE)
 -- project imports
 
 import qualified Constants as CN
+import qualified ScintillaProxyImports as SI
 import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified Session as SS
-
------------------------
--- Windows API calls --
------------------------
-
--- imports from ScintillaProxy.dll
-foreign import ccall safe "GhciNew"             c_GhciNew               :: HWND -> CString -> CString -> IO HWND 
-foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> IO ()) -> IO ()
-foreign import ccall safe "GhciEnableEvents"    c_GhciEnableEvents      :: HWND -> IO ()
-foreign import ccall safe "GhciDisableEvents"   c_GhciDisableEvents     :: HWND -> IO ()
-foreign import ccall safe "GhciClose"           c_GhciClose             :: HWND -> IO ()
-foreign import ccall safe "GhciPaste"           c_GhciPaste             :: HWND -> IO ()
-foreign import ccall safe "GhciCut"             c_GhciCut               :: HWND -> IO () 
-foreign import ccall safe "GhciCopy"            c_GhciCopy              :: HWND -> IO ()
-foreign import ccall safe "GhciSelectAll"       c_GhciSelectAll         :: HWND -> IO () 
-foreign import ccall safe "GhciHasFocus"        c_GhciHasFocus          :: HWND -> IO Int32 
-foreign import ccall safe "GhciSetFocus"        c_GhciSetFocus          :: HWND -> IO () 
-foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
-foreign import ccall safe "GhciIsTextSelected"  c_GhciIsTextSelected    :: HWND -> IO Int32
-foreign import ccall safe "GhciGetTextLength"   c_GhciGetTextLength     :: HWND -> IO Int32 
-foreign import ccall safe "GhciGetText"         c_GhciGetText           :: HWND -> CString -> Int32 -> IO Int32 
-foreign import ccall safe "GhciClear"           c_GhciClear             :: HWND -> IO ()
-
--- callback wrapper
-foreign import ccall safe "wrapper" createCallback ::
-    (HWND -> Int -> IO ()) -> IO (FunPtr (HWND -> Int -> IO ()))
-
---------------------------------------------------------------------------
 
 openWindowFile :: SS.Session -> SS.TextWindow -> IO ()
 openWindowFile ss ftw = do
@@ -129,7 +102,7 @@ open ss fp = do
     p <- panel nb []
     hp <- windowGetHandle p
     hwnd <- withCString fp (\cfp -> 
-        withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> c_GhciNew hp cop cfp))
+        withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> SI.c_GhciNew hp cop cfp))
 
     case (MI.ptrToWord64 hwnd) of
 
@@ -149,7 +122,7 @@ closeWindow :: SS.Session -> SS.TextWindow -> IO ()
 closeWindow ss tw = do
     let nb = SS.ssOutputs ss
     p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
-    windowGetHandle p >>= c_GhciClose
+    windowGetHandle p >>= SI.c_GhciClose
     SS.twRemoveWindow ss tw
     return ()
 
@@ -178,48 +151,48 @@ createHideWindow ss panel phwnd hwnd mfp = do
                     (return "")
 
 sendCommand :: HWND -> String -> IO ()
-sendCommand hwnd cmd = withCString cmd (\cs -> c_GhciSendCommand hwnd cs) >> return ()
+sendCommand hwnd cmd = withCString cmd (\cs -> SI.c_GhciSendCommand hwnd cs) >> return ()
 
 paste :: HWND -> IO ()
-paste = c_GhciPaste
+paste = SI.c_GhciPaste
 
 cut :: HWND -> IO ()
-cut = c_GhciCut
+cut = SI.c_GhciCut
 
 copy :: HWND -> IO ()
-copy = c_GhciCopy
+copy = SI.c_GhciCopy
 
 selectAll :: HWND -> IO ()
-selectAll = c_GhciSelectAll
+selectAll = SI.c_GhciSelectAll
 
 isTextSelected :: HWND -> IO Bool
 isTextSelected hwnd = do
-    n <- c_GhciIsTextSelected hwnd
+    n <- SI.c_GhciIsTextSelected hwnd
     return (n /= 0)
 
 hasFocus :: HWND -> IO Bool
 hasFocus h = do 
-        b <- c_GhciHasFocus h
+        b <- SI.c_GhciHasFocus h
         return (b /= 0)
 
 setFocus :: HWND -> IO ()
-setFocus = c_GhciSetFocus
+setFocus = SI.c_GhciSetFocus
 
 getTextLength :: HWND -> IO Int
 getTextLength hwnd = do 
-    n <- c_GhciGetTextLength hwnd
+    n <- SI.c_GhciGetTextLength hwnd
     return (fromIntegral n :: Int)
 
 getAllText :: HWND -> IO BS.ByteString
 getAllText hwnd = do            
     len <- getTextLength hwnd
     let bs = (BS.replicate len 0)   -- allocate buffer
-    len' <- BS.unsafeUseAsCString bs (\cs -> do c_GhciGetText hwnd cs (fromIntegral len :: Int32))
+    len' <- BS.unsafeUseAsCString bs (\cs -> do SI.c_GhciGetText hwnd cs (fromIntegral len :: Int32))
     if len == (fromIntegral len' :: Int) then return bs
     else return $ BS.take (fromIntegral len' :: Int) bs
 
 clear :: HWND -> IO ()
-clear = c_GhciClear
+clear = SI.c_GhciClear
 
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
@@ -247,15 +220,15 @@ fileSaveAs ss tw = do
    
 setEventHandler :: SS.Session -> SS.HideWindow -> IO ()
 setEventHandler ss hw = do
-    cb <- createCallback (callback ss hw)
-    c_GhciSetEventHandler (SS.hwPanelHwnd hw) cb    
+    cb <- SI.c_GhciCreateCallback (callback ss hw)
+    SI.c_GhciSetEventHandler (SS.hwPanelHwnd hw) cb    
     return ()
 
 enableEvents :: HWND -> IO ()
-enableEvents = c_GhciEnableEvents
+enableEvents = SI.c_GhciEnableEvents
 
 disableEvents :: HWND -> IO ()
-disableEvents = c_GhciDisableEvents
+disableEvents = SI.c_GhciDisableEvents
     
 callback :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
 callback ss hw hwnd evt 

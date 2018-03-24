@@ -32,8 +32,10 @@ import qualified Misc as MI
 import qualified OutputPane as OT
 import qualified Scintilla as SC
 import qualified ScintillaConstants as SC
+import qualified ScintillaProxyImports as SI
 import qualified Session as SS
-   
+  
+ 
 --------------------------------------
 -- Main
 --------------------------------------   
@@ -42,26 +44,32 @@ main = start mainGUI
 
 mainGUI :: IO ()
 mainGUI = do 
-  
-    -- main window
-    mf <- frame []    
-    set mf [ text := CN.programTitle, size := (Size 1300 800)]  
+
+    ok <- SI.c_ScintillaProxyInitialise 
+    
+    if ok then do
      
-     -- create statusbar field
-    sf <- statusField []
+        -- main window
+        mf <- frame []    
+        set mf [ text := CN.programTitle, size := (Size 1300 800)]  
+         
+         -- create statusbar field
+        sf <- statusField []
 
-    -- AUI manager and child windows
-    ss <- setUpMainWindow mf sf
-    
-    -- set the statusbar and menubar
-    set mf [statusBar := [sf]]
+        -- AUI manager and child windows
+        ss <- setUpMainWindow mf sf
+        
+        -- set the statusbar and menubar
+        set mf [statusBar := [sf]]
 
-    set mf [on closing := onClosing ss]
-    
-    -- create a timer that updates the display
-    t <- timer mf [interval := 100, on command := onTimer ss] 
-       
-    return ()
+        set mf [on closing := onClosing ss]
+        
+        -- create a timer that updates the display
+        t <- timer mf [interval := 100, on command := onTimer ss] 
+           
+        return ()
+        
+    else return ()
    
 ------------------------------------------------------------    
 -- Setup main window, AUI manager its child windows and the menus
@@ -269,6 +277,7 @@ onClosing ss = do
     FM.fileCloseAll ss
     (auiManagerUnInit . SS.ssAuiMgr) ss
     (windowDestroy . SS.ssFrame) ss
+    SI.c_ScintillaProxyUninitialise
     return ()
 
 onTabChanged :: SS.Session -> EventAuiNotebook -> IO ()

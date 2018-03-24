@@ -4,23 +4,29 @@ import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Graphics.UI.WX.Events
 
+-- import Foreign.C.String (CString, peekCString, withCString, withCStringLen)
+-- import Foreign.Marshal.Alloc (alloca)
+-- import Foreign.Marshal.Utils (fromBool)
+-- import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
+-- import Foreign.Storable (Storable, alignment, sizeOf, peek, poke, pokeByteOff, peekByteOff)
+
+import qualified Scintilla as SC
 
 
-
-
-
-
+foreign import ccall safe "ScintillaProxyInitialise" c_ScintillaProxyInitialise :: IO Bool      
 
 main = start mainGUI
 
 mainGUI :: IO ()
 mainGUI = do 
 
-    f <- frame [] 
-    
+    c_ScintillaProxyInitialise
+
+    f <- frame []
+
     set f [ text := "Aui Test", 
             size := (Size 500 500)]
-                       
+
     auiMgr <- auiManagerCreate f wxAUI_MGR_DEFAULT
       
     -- add dockable tree
@@ -87,9 +93,14 @@ mainGUI = do
 
     -- add page to notebook
     p <- panel nb []
+    hwnd <- windowGetHandle p
+    scn <- SC.createEditor hwnd
+    SC.configureHaskell scn
     auiNotebookAddPage nb p "1" False 0
     ta <- auiSimpleTabArtCreate
     auiNotebookSetArtProvider nb ta
+    
+
     
     p <- panel nb []
     auiNotebookAddPage nb p "2" False 0
@@ -132,7 +143,7 @@ mainGUI = do
     auiToolBarEnableTool tb 101 True
     auiToolBarRealize tb
     
-    set tbi [on command := cmdToolbar]
+--    set tbi [on command := cmdToolbar]
     
  
     api <- auiPaneInfoCreateDefault
