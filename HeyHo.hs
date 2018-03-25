@@ -153,7 +153,7 @@ setUpMainWindow mf sf = do
     -- setup static menu handlers
     set (SS.ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen        ss]
     set (SS.ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew         ss]
-    set (SS.ssMenuListGet ss CN.menuWindowGhci)         [on command := GH.openWindow        ss]
+    set (SS.ssMenuListGet ss CN.menuWindowGhci)         [on command := GH.openWindow ss >> return ()]
     set (SS.ssMenuListGet ss CN.menuWindowOutput)       [on command := OT.openOutputWindow  ss (FM.fileOpen ss)]
     set (SS.ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
     set (SS.ssMenuListGet ss CN.menuDebugNextError)     [on command := OT.gotoNextError     ss (FM.fileOpen ss), enabled := False]
@@ -212,6 +212,7 @@ setupMenus mf  = do
           
     menuDebug               <- menuPane             [text := "Debug"]
     menuDebugRun            <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugRun),            help := (CN.menuHelp' CN.menuDebugRun)]
+    menuDebugDebug          <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugDebug),          help := (CN.menuHelp' CN.menuDebugDebug)]
     menuAppendSeparator menuDebug
     menuDebugNextError      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugNextError),      help := (CN.menuHelp' CN.menuDebugNextError)]
     menuDebugPreviousError  <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugPreviousError),  help := (CN.menuHelp' CN.menuDebugPreviousError)]
@@ -252,6 +253,7 @@ setupMenus mf  = do
                                     (CN.menuBuildCompile,        menuBuildCompile),
                                     (CN.menuBuildGhci,           menuBuildGhci),
                                     (CN.menuDebugRun,            menuDebugRun),
+                                    (CN.menuDebugDebug,          menuDebugDebug),
                                     (CN.menuDebugNextError,      menuDebugNextError),
                                     (CN.menuDebugPreviousError,  menuDebugPreviousError),
                                     (CN.menuWindowGhci,          menuWindowGhci),

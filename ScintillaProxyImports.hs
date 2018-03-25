@@ -83,7 +83,7 @@ foreign import ccall safe "wrapper" c_ScnCreateEnabledCallback ::
   
 
 foreign import ccall safe "GhciNew"             c_GhciNew               :: HWND -> CString -> CString -> IO HWND 
-foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> IO ()) -> IO ()
+foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> CString -> IO ()) -> IO ()
 foreign import ccall safe "GhciEnableEvents"    c_GhciEnableEvents      :: HWND -> IO ()
 foreign import ccall safe "GhciDisableEvents"   c_GhciDisableEvents     :: HWND -> IO ()
 foreign import ccall safe "GhciClose"           c_GhciClose             :: HWND -> IO ()
@@ -101,7 +101,7 @@ foreign import ccall safe "GhciClear"           c_GhciClear             :: HWND 
 
 -- callback wrapper
 foreign import ccall safe "wrapper" c_GhciCreateCallback ::
-    (HWND -> Int -> IO ()) -> IO (FunPtr (HWND -> Int -> IO ()))
+    (HWND -> Int -> CString -> IO ()) -> IO (FunPtr (HWND -> Int -> CString -> IO ()))
 
 -- Structure for Scintilla Notification (64 bit version)
 -- See Scintilla.h SCNotification for original       

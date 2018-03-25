@@ -1,7 +1,9 @@
 module Session 
 (
+    BreakPoint,
     CompError,
     CompReport,
+    DebugSession,
     FindText,
     FunctionChannel,
     HideWindow,
@@ -31,6 +33,8 @@ module Session
     crGetNoOfErrors,
     crUpdateCurrentError,
     crUpdateReport,
+    createBreakPoint,
+    createDebugSession,
     createDebugWindowType,
     createGhciWindowType,
     createHideWindow,
@@ -40,6 +44,14 @@ module Session
     createSourceWindowType,
     createTextMenus,
     createTextWindow,
+    dsAddBreakPoint,
+    dsBreakPointSet,
+    dsColumn,
+    dsEqualBreakPoint,
+    dsFilePath,
+    dsLine,
+    dsModule,
+    dsNo,
     ftCurrPos,
     ftFindText,
     ftStartPos, 
@@ -76,6 +88,8 @@ module Session
     ssCreate,
     ssDebugError,
     ssDebugInfo,
+    ssDebugOutput,
+    ssDebugSession,
     ssDebugWarn,
     ssEditors,
     ssFindText,
@@ -167,7 +181,9 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssCompilerReport    :: TErrors,
                             ssFindText          :: TFindText,
                             ssHideWindows       :: THideWindows,
-                            ssState             :: TState}
+                            ssState             :: TState,
+                            ssDebugSession      :: TDebugSession,
+                            ssDebugOutput       :: TDebugOutput}
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
@@ -195,7 +211,7 @@ type TState = TVar Int
 
 -- please call this on the main thread
 ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> IO Session
-ssCreate mf am nb ms sf ots db = do 
+ssCreate mf am nb ms sf ots db = do
     mtid <- myThreadId
     tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
@@ -207,7 +223,9 @@ ssCreate mf am nb ms sf ots db = do
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
-    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws state)
+    debug <- atomically $ newTVar $ createDebugSession []
+    dbout  <- atomically $ newTChan
+    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -270,8 +288,12 @@ ssSetStateBit ss n = atomically $ modifyTVar (ssState ss) (\s -> setBit s n)
 ssClearStateBit :: Session -> Int -> IO ()
 ssClearStateBit ss n = atomically $ modifyTVar (ssState ss) (\s -> clearBit s n) 
 
+-- use bit no.s for states
 ssStateCompile :: Int
 ssStateCompile = 1
+
+ssStateDebugging :: Int
+ssStateDebugging = 2
 
 ----------------------------------------------------------------
 -- Comp error
@@ -550,3 +572,43 @@ tmGetMenuFunction tw id = maybe (return ()) (\(MenuFunction _ mf _) -> mf)  $ fi
 
 tmGetMenuEnabled :: TextMenus -> Int -> IO Bool
 tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ find (\(MenuFunction mid _ _) -> mid == id) (twMenuFunctions tw)
+
+-----------------------------------------------------------------------
+-- Debug session
+-----------------------------------------------------------------------
+
+type TDebugOutput = TChan ByteString -- output from debugger
+type TDebugSession = TVar DebugSession
+data BreakPoint = BreakPoint { dsFilePath :: String, dsModule :: String, dsLine :: Int, dsColumn :: Int, dsNo :: Int }
+data DebugSession = DebugSession {dsBreakPoints :: [BreakPoint]}
+
+createDebugSession :: [BreakPoint] -> DebugSession 
+createDebugSession bps = (DebugSession bps)
+
+createBreakPoint :: String -> String -> Int -> Int -> BreakPoint
+createBreakPoint fp mod lin col = (BreakPoint fp mod lin col 0)
+
+dsAddBreakPoint :: Session -> BreakPoint -> IO ()
+dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
+    let bps = dsBreakPoints ds in
+    if dsBreakPointSet bp bps then 
+        createDebugSession bps 
+    else 
+        createDebugSession (bp:bps))
+        
+dsBreakPointSet :: BreakPoint -> [BreakPoint] -> Bool
+dsBreakPointSet bp bps = 
+    case find (\bp' -> dsEqualBreakPoint bp bp') bps of
+        Just _ ->  True
+        Nothing -> False
+
+dsEqualBreakPoint :: BreakPoint -> BreakPoint -> Bool
+dsEqualBreakPoint bp1 bp2 = 
+    (dsFilePath bp1 == dsFilePath bp2) &&
+    ( dsModule bp1 == dsModule bp2) &&
+    ( dsLine bp1 == dsLine bp2) &&
+    ( dsColumn bp1 == dsColumn bp2)
+
+
+
+

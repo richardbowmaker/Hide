@@ -131,7 +131,9 @@ onBuildGhci ss tw scn fileSave fileOpen = do
             Just hw -> do
                 mfp <- SS.hwFilePath hw
                 case mfp of
-                    Just fp -> GH.openWindowFile ss $ SS.hwWindow hw 
+                    Just fp -> do
+                        GH.openWindowFile ss $ SS.hwWindow hw 
+                        return ()
                     Nothing -> return ()
             Nothing -> do
                     SS.ssDebugError ss "onBuildGhci:: no file name set"

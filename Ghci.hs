@@ -36,7 +36,7 @@ import Data.Int (Int32)
 import Data.List (find, findIndex)
 import Data.Maybe (isJust)
 import Data.Word (Word64)
-import Foreign.C.String (CString, withCString)
+import Foreign.C.String (CString, withCString, peekCString)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
@@ -53,7 +53,7 @@ import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified Session as SS
 
-openWindowFile :: SS.Session -> SS.TextWindow -> IO ()
+openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe HWND)
 openWindowFile ss ftw = do
     mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (SS.twIsSameFile ftw tw)) 
     case mtw of
@@ -64,6 +64,7 @@ openWindowFile ss ftw = do
             -- reload the source file
             mfp <- SS.twFilePath tw
             sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id mfp)
+            return (Just $ SS.twPanelHwnd tw)
         Nothing -> do
             -- GHCI not open so open a new tab
             mfp <- SS.twFilePath ftw
@@ -77,11 +78,11 @@ openWindowFile ss ftw = do
                                 setEventHandler ss hw
                                 enableEvents hwnd
                                 setFocus hwnd
-                                return ()
-                        Nothing -> return ()
-                Nothing -> return ()
+                                return (Just hwnd)
+                        Nothing -> return Nothing
+                Nothing -> return Nothing
 
-openWindow :: SS.Session -> IO ()
+openWindow :: SS.Session -> IO (Maybe HWND)
 openWindow ss = do
     m <- open ss "" 
     case m of
@@ -91,8 +92,8 @@ openWindow ss = do
             setEventHandler ss hw
             enableEvents hwnd
             setFocus hwnd
-            return ()
-        Nothing -> return ()
+            return (Just hwnd)
+        Nothing -> return Nothing
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
 open ss fp = do
@@ -136,15 +137,15 @@ createHideWindow ss panel phwnd hwnd mfp = do
 
     where  tms tw = SS.createTextMenus 
                     [ 
-                        (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw)    (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)          (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)     (return True)),
-                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)             (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)            (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)           (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)       (return True)),
-                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)           (return True)),
-                        (SS.createMenuFunction CN.menuBuildGhci      (openWindowFile ss tw) (liftM (isJust) (SS.twFilePath tw)))
+                        (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw)                    (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)                          (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)                     (return True)),
+                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)                             (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)                            (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)                           (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)                       (return True)),
+                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)                           (return True)),
+                        (SS.createMenuFunction CN.menuBuildGhci      (openWindowFile ss tw >> return ())    (liftM (isJust) (SS.twFilePath tw)))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -230,8 +231,8 @@ enableEvents = SI.c_GhciEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = SI.c_GhciDisableEvents
     
-callback :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
-callback ss hw hwnd evt 
+callback :: SS.Session -> SS.HideWindow -> HWND -> Int -> CString -> IO ()
+callback ss hw hwnd evt str
     | evt == eventLostFocus = do
             setm' ss CN.menuFileClose         (return False) (return ())
             setm' ss CN.menuFileCloseAll      (return False) (return ())
@@ -269,6 +270,12 @@ callback ss hw hwnd evt
             setm ss tms CN.menuEditCut           
             setm ss tms CN.menuEditCopy          
             setm ss tms CN.menuEditPaste
+    | evt == eventOutput = do
+            s1 <- peekCString str
+            SS.ssDebugInfo ss $ "output = " ++ s1    
+    | evt == eventInput = do
+            s1 <- peekCString str
+            SS.ssDebugInfo ss $ "input = " ++ s1
     | otherwise = return ()
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
@@ -296,4 +303,9 @@ eventSelectionClear = 4
 eventClosed :: Int
 eventClosed = 5
 
+eventOutput :: Int
+eventOutput = 6
+  
+eventInput :: Int
+eventInput = 7
   
