@@ -40,6 +40,11 @@ module Scintilla
     getLineCount,
     getLineFromPosition,
     getLinesOnScreen,
+    getMarginMask,
+    getMarginSensitive,
+    getMarginType,
+    getMarginWidth,
+    getMargins,
     getPositionFromLine,
     getPositionInfo,
     getSelText,
@@ -53,6 +58,8 @@ module Scintilla
     grabFocus,
     isClean,
     linesOnScreen,
+    marginSetText,
+    markerDefine,
     paste,
     redo,
     searchInTarget,
@@ -67,6 +74,13 @@ module Scintilla
     setFocus,
     setIndentationGuides,
     setLexer,
+    setMarginLeft,
+    setMarginMask,
+    setMarginRight,
+    setMarginSensitive,
+    setMarginType,
+    setMarginWidth,
+    setMargins,
     setModEventMask,
     setReadOnly,
     setSavePoint,
@@ -88,7 +102,10 @@ module Scintilla
     styleClearAll,
     undo,
     usePopup,
-    white
+    white,
+    markerSetFore,
+    markerSetBack,
+    markerAdd
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -113,7 +130,7 @@ import Graphics.Win32.GDI.Types (COLORREF, HWND)
 
 -- project imports
 import ScintillaConstants
-import Misc
+import Misc as MI
 import qualified ScintillaProxyImports as SI
 
 --------------------------------------------------------------
@@ -198,7 +215,9 @@ ioInt i = return (fromIntegral i :: Int)
 createEditor :: HWND -> IO (Editor)
 createEditor parent = do
     hwnd <- SI.c_ScnNewEditor parent
-    return (Editor parent hwnd)
+    let e = (Editor parent hwnd) 
+    setBufferedDraw e False
+    return e
     
 ---------------------------------------------    
 -- Callback from ScintillaProxy dll    
@@ -326,6 +345,9 @@ rgb r g b = fromIntegral ((shift b 16) + (shift g 8) + r) :: COLORREF
 black :: COLORREF
 black = (rgb 0 0 0)
 
+red :: COLORREF
+red = (rgb 255 0 0)
+
 white :: COLORREF
 white = (rgb 0xff 0xff 0xff)
 
@@ -375,13 +397,32 @@ configureHaskell e = do
 
     -- popup menu handled by scintilla proxy dll
     usePopup e sC_POPUP_NEVER
-   
+
+    -- margins
+    setMarginLeft e 5
+    setMargins e 2
+    setMarginType e 0 sC_MARGIN_NUMBER
+    setMarginWidth e 0 40
+    setMarginType e 1 sC_MARGIN_SYMBOL
+    setMarginWidth e 1 20
+
+    -- margin markers
+    markerDefine e 1 sC_MARK_CIRCLE
+    markerDefine e 2 sC_MARK_ROUNDRECT 
+    markerDefine e 3 sC_MARK_ARROW
+    setMarginMask e 1 0xffffffff
+
+    markerSetForexx e 1 red
+    markerSetBack e 1 white
+    markerSetFore e 2 red
+    markerSetBack e 2 white
+    markerSetFore e 3 red
+    markerSetBack e 3 white
+ 
     return ()
     
 setLexer :: Editor -> Int -> IO ()
-setLexer e s = do               
-    SI.c_ScnSendEditorII (getHwnd e) sCI_SETLEXER (fromIntegral s :: Word64) 0
-    return ()
+setLexer e s = SI.c_ScnSendEditorII (getHwnd e) sCI_SETLEXER (fromIntegral s :: Word64) 0 >> ioNull
 
 setKeywords :: Editor -> Int -> [String] -> IO ()
 setKeywords e set ks = do
@@ -407,20 +448,14 @@ setStyleColour e st fc bc = do
     return ()
 
 styleClearAll :: Editor -> IO ()
-styleClearAll e = do
-    SI.c_ScnSendEditorII (getHwnd e) sCI_STYLECLEARALL 0 0
-    return ()
+styleClearAll e = SI.c_ScnSendEditorII (getHwnd e) sCI_STYLECLEARALL 0 0 >> ioNull
     
 setSavePoint :: Editor -> IO ()
-setSavePoint e = do
-    SI.c_ScnSendEditorII (getHwnd e) sCI_SETSAVEPOINT 0 0
-    return ()
+setSavePoint e = SI.c_ScnSendEditorII (getHwnd e) sCI_SETSAVEPOINT 0 0 >> ioNull
 
 setReadOnly :: Editor -> Bool -> IO ()
-setReadOnly e b = do
-    SI.c_ScnSendEditorII (getHwnd e) sCI_SETREADONLY (fromBool b :: Word64) 0
-    return ()
-      
+setReadOnly e b = SI.c_ScnSendEditorII (getHwnd e) sCI_SETREADONLY (fromBool b :: Word64) 0 >> ioNull
+     
 isClean :: Editor -> IO Bool
 isClean e = do
     x <- SI.c_ScnSendEditorII (getHwnd e) sCI_GETMODIFY  0 0
@@ -779,13 +814,11 @@ searchNext e text ops =
         (\ps -> SI.c_ScnSendEditorII (getHwnd e) sCI_SEARCHNEXT (fromIntegral ops :: Word64) (ptrToInt64 ps)) 
             >>= ioInt
 
-
 searchPrev :: Editor -> String -> Int -> IO Int
 searchPrev e text ops = 
     withCString text 
         (\ps -> SI.c_ScnSendEditorII (getHwnd e) sCI_SEARCHPREV (fromIntegral ops :: Word64) (ptrToInt64 ps))
             >>= ioInt
-
 
 ----------------------------------------------
 -- Keyboard mapping
@@ -818,5 +851,91 @@ addPopupMenuItem e id title handler enabled = do
     mf <- SI.c_ScnCreateHandlerCallback $ handler e
     eh <- SI.c_ScnCreateEnabledCallback $ enabled e
     withCString title (\cs -> SI.c_ScnAddPopupMenuItem (getHwnd e) (fromIntegral id :: Int32) cs mf eh)
-    
+  
+
+----------------------------------------------
+-- Margins
+-- margin numbers are 0..4
+----------------------------------------------
+  
+setMargins :: Editor -> Int -> IO ()
+setMargins e m = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINS (fromIntegral m :: Word64) 0 >> ioNull
+
+getMargins :: Editor -> IO Int
+getMargins e = SI.c_ScnSendEditorII (getHwnd e) sCI_GETMARGINS  0 0 >>= ioInt
+
+{-
+Valid types are 
+SC_MARGIN_SYMBOL
+SC_MARGIN_NUMBER
+SC_MARGIN_TEXT
+SC_MARGIN_RTEXT
+SC_MARGIN_BACK 
+SC_MARGIN_FORE
+SC_MARGIN_COLOUR   
+-} 
+
+setMarginType :: Editor -> Int -> Word32 -> IO ()
+setMarginType e m t = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINTYPEN (fromIntegral m :: Word64) (fromIntegral t :: Int64) >> ioNull
+
+getMarginType :: Editor -> Int -> IO Int
+getMarginType e m = SI.c_ScnSendEditorII (getHwnd e) sCI_GETMARGINTYPEN (fromIntegral m :: Word64) 0 >>= ioInt
+
+setMarginWidth :: Editor -> Int -> Word32 -> IO ()
+setMarginWidth e m t = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINWIDTHN (fromIntegral m :: Word64) (fromIntegral t :: Int64) >> ioNull
+
+getMarginWidth :: Editor -> Int -> IO Int
+getMarginWidth e m = SI.c_ScnSendEditorII (getHwnd e) sCI_GETMARGINWIDTHN (fromIntegral m :: Word64) 0 >>= ioInt
+
+setMarginMask :: Editor -> Int -> Int -> IO ()
+setMarginMask e m b = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINMASKN (fromIntegral m :: Word64) (fromIntegral b :: Int64) >> ioNull
+
+getMarginMask :: Editor -> Int -> IO Int
+getMarginMask e m = SI.c_ScnSendEditorII (getHwnd e) sCI_GETMARGINMASKN (fromIntegral m :: Word64) 0 >>= ioInt
+
+setMarginSensitive :: Editor -> Int -> Bool -> IO ()
+setMarginSensitive e m b = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINSENSITIVEN (fromIntegral m :: Word64) (fromBool b :: Int64) >> ioNull
+
+getMarginSensitive :: Editor -> Int -> IO Bool
+getMarginSensitive e m = SI.c_ScnSendEditorII (getHwnd e) sCI_GETMARGINSENSITIVEN (fromIntegral m :: Word64) 0 >>= ioBool
+
+marginSetText :: Editor -> Int -> String -> IO ()
+marginSetText e l s = withCString s (\cs -> SI.c_ScnSendEditorIS (getHwnd e) sCI_MARGINSETTEXT (fromIntegral l :: Word64) cs) >> ioNull
+
+marginSetStyle :: Editor -> Int -> Int -> IO ()
+marginSetStyle e l s = SI.c_ScnSendEditorII (getHwnd e) sCI_MARGINSETSTYLE (fromIntegral l :: Word64) (fromIntegral s :: Int64) >> ioNull
+
+setMarginLeft :: Editor -> Int -> IO Int
+setMarginLeft e m = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINLEFT 0 (fromIntegral m :: Int64) >>= ioInt
+
+setMarginRight :: Editor -> Int -> IO Int
+setMarginRight e m = SI.c_ScnSendEditorII (getHwnd e) sCI_SETMARGINRIGHT 0 (fromIntegral m :: Int64) >>= ioInt
+
+----------------------------------------------
+-- Markers
+----------------------------------------------
+
+markerDefine :: Editor -> Int -> Word32 -> IO ()
+markerDefine e m b = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERDEFINE (fromIntegral m :: Word64) (fromIntegral b :: Int64) >> ioNull
+
+markerSetFore :: Editor -> Int -> COLORREF -> IO ()
+markerSetFore e m c = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERSETFORE (fromIntegral m :: Word64) (fromIntegral c :: Int64) >> ioNull
+
+markerSetBack :: Editor -> Int -> COLORREF -> IO ()
+markerSetBack e m c = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERSETBACK (fromIntegral m :: Word64) (fromIntegral c :: Int64) >> ioNull
+
+markerAdd :: Editor -> Int -> Int -> IO Int
+markerAdd e m n = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERADD (fromIntegral m :: Word64) (fromIntegral n :: Int64) >>= ioInt
+
+----------------------------------------------
+-- Other settings
+----------------------------------------------
+
+setBufferedDraw :: Editor -> Bool -> IO ()
+setBufferedDraw e b = SI.c_ScnSendEditorII (getHwnd e) sCI_SETBUFFEREDDRAW (fromBool b :: Word64) 0 >> ioNull
+
+getBufferedDraw :: Editor -> IO Bool
+getBufferedDraw e = SI.c_ScnSendEditorII (getHwnd e) sCI_GETBUFFEREDDRAW 0 0 >>= ioBool
+
+
 
