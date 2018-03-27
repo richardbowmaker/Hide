@@ -7,6 +7,7 @@ module Misc
     createTree,
     doWhileTrueIO,
     findAndRemove,
+    findAndRemoveIO,
     findAndUpdate1,
     findAndUpdate2,
     findIO,
@@ -19,12 +20,13 @@ module Misc
     windowToString
 ) where
 
+import Control.Monad (liftM2)
+import Data.Int (Int64)
+import Data.Word (Word64)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
-import Numeric (showHex)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
-import Data.Word (Word64)
-import Data.Int (Int64)
+import Numeric (showHex)
 
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
@@ -76,6 +78,13 @@ findAndRemove _ [] = []
 findAndRemove f (x:xs) = if f x then rest else x : rest
     where rest = findAndRemove f xs
 
+findAndRemoveIO :: (a -> IO Bool) -> [a] -> IO [a]
+findAndRemoveIO _ [] =  return []
+findAndRemoveIO f (x:xs) = do
+    b <- f x
+    if b then rest else liftM2 (:) (return x) rest
+    where rest = findAndRemoveIO f xs
+
 doWhileTrueIO :: (a -> IO Bool) -> [a] -> IO Bool    
 doWhileTrueIO _ [] = return (True)
 doWhileTrueIO p (x:xs) = do
@@ -91,6 +100,7 @@ findIO p (x:xs) = do
      
 boolToInt :: Bool -> Int
 boolToInt b = if b then 1 else 0
+
 
 ------------------------------------------------------------    
 -- Tree Control

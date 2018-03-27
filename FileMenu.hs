@@ -62,6 +62,7 @@ openSourceFileEditor ss fp = do
     -- enable events
     SC.setEventHandler scn $ scnCallback ss hw scn
     SC.enableEvents scn
+    SC.setMarginSensitive scn CN.symbolMargin True
          
     -- set focus to new page
     ix <- auiNotebookGetPageIndex nb p
@@ -227,7 +228,7 @@ fileOpen ss fp = do
         Nothing -> do       
             -- existing file so add to list, create window and set focus
             (hw, scn) <- openSourceFileEditor ss fp
-            loadEditor ss hw scn 
+            loadEditor ss hw scn
             SC.grabFocus scn
 
 fileCloseAll :: SS.Session -> IO Bool
@@ -366,28 +367,22 @@ setSourceFileFocus ss fp = do
 -----------------------------------------------------------------
 
 scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
-scnCallback ss hw scn sn = do 
-    case (SI.notifyGetCode sn) of                   
-        2002 -> do -- sCN_SAVEPOINTREACHED
-            updateMenus ss hw scn
-        2003 -> do -- sCN_SAVEPOINTLEFT
-            updateMenus ss hw scn              
-        2007 -> do -- sCN_UPDATEUI
+scnCallback ss hw scn sn 
+    | evt ==  SC.sCN_UPDATEUI = do
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
             if  ( (.&.) (fromIntegral (SI.snUpdated sn) :: Int) 
                         (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
                 updateMenus ss hw scn
             else
                 return ()
-        2028 -> do -- sCN_FOCUSIN
-            updateMenus ss hw scn           
-        2029 -> do -- sCN_FOCUSOUT
-            updateMenus ss hw scn 
-        2013 -> return () -- sCN_PAINTED
-          
-        otherwise -> do
-            -- ssDebugInfo ss $ "Event: " ++ (show $ scnNotifyGetCode sn)
-            return ()
+    | evt == SC.sCN_SAVEPOINTREACHED    = updateMenus ss hw scn
+    | evt == SC.sCN_SAVEPOINTLEFT       = updateMenus ss hw scn              
+    | evt == SC.sCN_FOCUSIN             = updateMenus ss hw scn           
+    | evt == SC.sCN_FOCUSOUT            = updateMenus ss hw scn
+    | evt == SC.sCN_MARGINCLICK         = DR.toggleBreakPoint ss hw scn sn
+    | otherwise = return ()
+
+    where evt = SI.notifyGetCode sn
 
 updateMenus :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
 updateMenus ss hw scn = do

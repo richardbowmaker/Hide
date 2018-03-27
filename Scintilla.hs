@@ -11,7 +11,6 @@ module Scintilla
     appendText,
     appendTextS,
     beginUndoAction, 
-    black,
     braceBadLight,
     braceHighlight,
     braceMatch,
@@ -59,7 +58,14 @@ module Scintilla
     isClean,
     linesOnScreen,
     marginSetText,
+    markerAdd,
     markerDefine,
+    markerDelete,
+    markerDeleteHandle,
+    markerGet,
+    markerLineFromHandle,
+    markerSetBack,
+    markerSetFore,
     paste,
     redo,
     searchInTarget,
@@ -102,15 +108,11 @@ module Scintilla
     styleClearAll,
     undo,
     usePopup,
-    white,
-    markerSetFore,
-    markerSetBack,
-    markerAdd
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
 
-import Data.Bits (shift)
+import Data.Bits ((.|.), bit)
 import Data.Int (Int32, Int64)
 import Data.List (sort)
 import Data.String.Combinators (punctuate)
@@ -127,9 +129,9 @@ import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Foreign.Storable (Storable, alignment, sizeOf, peek, poke, pokeByteOff, peekByteOff)
 import Graphics.Win32.GDI.Types (COLORREF, HWND)
 
-
 -- project imports
 import ScintillaConstants
+import qualified Constants as CN
 import Misc as MI
 import qualified ScintillaProxyImports as SI
 
@@ -339,36 +341,6 @@ getTextRange e start end = do
 -- Scintilla commands
 ------------------------------------------------------------    
 
-rgb :: Int -> Int -> Int -> COLORREF
-rgb r g b = fromIntegral ((shift b 16) + (shift g 8) + r) :: COLORREF
-
-black :: COLORREF
-black = (rgb 0 0 0)
-
-red :: COLORREF
-red = (rgb 255 0 0)
-
-white :: COLORREF
-white = (rgb 0xff 0xff 0xff)
-
-darkGreen :: COLORREF
-darkGreen = (rgb 0 0x80 0)
-
-keyBlue :: COLORREF
-keyBlue = (rgb 0 0 230)
-
-braceGood :: COLORREF
-braceGood = (rgb 255 0 0)
-
-braceBad :: COLORREF
-braceBad = (rgb 150 0 150)
-
-stringBrown :: COLORREF
-stringBrown = (rgb 0xA0 0x10 0x20)
-
-indents :: COLORREF
-indents = (rgb 200 200 200)
-
 -- configure lexer for haskell
 configureHaskell :: Editor -> IO ()
 configureHaskell e = do
@@ -376,24 +348,24 @@ configureHaskell e = do
     setKeywords e 0 ["do", "if", "then", "else", "case", "qualified", "case", "module", "of", "instance", 
                         "ccall", "safe", "unsafe", "import", "data", "deriving", "where", "as", "let",
                         "newtype", "type", "class", "in"]
-    setAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) black white 9 "Courier New"
+    setAStyle e (fromIntegral sTYLE_DEFAULT :: Word64) CN.black CN.white 9 "Courier New"
     styleClearAll e
-    setAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) black white 9 "Courier New"
-    setStyleColour e sCE_HA_KEYWORD       keyBlue     white
-    setStyleColour e sCE_HA_STRING        stringBrown white
-    setStyleColour e sCE_HA_IMPORT        keyBlue     white
-    setStyleColour e sCE_HA_COMMENTLINE   darkGreen   white
-    setStyleColour e sCE_HA_COMMENTBLOCK  darkGreen   white    
-    setStyleColour e sCE_HA_COMMENTBLOCK2 darkGreen   white
-    setStyleColour e sCE_HA_COMMENTBLOCK3 darkGreen   white
-    setStyleColour e (fromIntegral sTYLE_BRACELIGHT :: Word64) braceGood white
-    setStyleColour e (fromIntegral sTYLE_BRACEBAD :: Word64)   braceBad  white
+    setAStyle e (fromIntegral sCE_H_DEFAULT :: Word64) CN.black CN.white 9 "Courier New"
+    setStyleColour e sCE_HA_KEYWORD       CN.keyBlue     CN.white
+    setStyleColour e sCE_HA_STRING        CN.stringBrown CN.white
+    setStyleColour e sCE_HA_IMPORT        CN.keyBlue     CN.white
+    setStyleColour e sCE_HA_COMMENTLINE   CN.darkGreen   CN.white
+    setStyleColour e sCE_HA_COMMENTBLOCK  CN.darkGreen   CN.white    
+    setStyleColour e sCE_HA_COMMENTBLOCK2 CN.darkGreen   CN.white
+    setStyleColour e sCE_HA_COMMENTBLOCK3 CN.darkGreen   CN.white
+    setStyleColour e (fromIntegral sTYLE_BRACELIGHT :: Word64) CN.braceGood CN.white
+    setStyleColour e (fromIntegral sTYLE_BRACEBAD :: Word64)   CN.braceBad  CN.white
 
     -- tabs and indents
     setTabWidth e 4
     setUseTabs e False
     setIndentationGuides e sC_IV_LOOKBOTH    
-    setStyleColour e (fromIntegral sTYLE_INDENTGUIDE :: Word64) indents  white
+    setStyleColour e (fromIntegral sTYLE_INDENTGUIDE :: Word64) CN.indents  CN.white
 
     -- popup menu handled by scintilla proxy dll
     usePopup e sC_POPUP_NEVER
@@ -401,24 +373,23 @@ configureHaskell e = do
     -- margins
     setMarginLeft e 5
     setMargins e 2
-    setMarginType e 0 sC_MARGIN_NUMBER
-    setMarginWidth e 0 40
-    setMarginType e 1 sC_MARGIN_SYMBOL
-    setMarginWidth e 1 20
+    setMarginType  e CN.lineMargin sC_MARGIN_NUMBER
+    setMarginWidth e CN.lineMargin 40
+    setMarginType  e CN.symbolMargin sC_MARGIN_SYMBOL
+    setMarginWidth e CN.symbolMargin 20
 
     -- margin markers
-    markerDefine e 1 sC_MARK_CIRCLE
-    markerDefine e 2 sC_MARK_ROUNDRECT 
-    markerDefine e 3 sC_MARK_ARROW
-    setMarginMask e 1 0xffffffff
+    markerDefine e CN.breakPointMarker sC_MARK_CIRCLE
+    markerDefine e CN.bookMarkMarker sC_MARK_BOOKMARK
+    setMarginMask e 1 $ (fromIntegral sC_MASK_FOLDERS :: Int) 
+        .|. (bit CN.breakPointMarker)
+        .|. (bit CN.bookMarkMarker)
 
-    markerSetForexx e 1 red
-    markerSetBack e 1 white
-    markerSetFore e 2 red
-    markerSetBack e 2 white
-    markerSetFore e 3 red
-    markerSetBack e 3 white
- 
+    markerSetFore e CN.breakPointMarker CN.red
+    markerSetBack e CN.breakPointMarker CN.red
+    markerSetFore e CN.bookMarkMarker   CN.blue
+    markerSetBack e CN.bookMarkMarker   CN.blue
+
     return ()
     
 setLexer :: Editor -> Int -> IO ()
@@ -926,6 +897,18 @@ markerSetBack e m c = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERSETBACK (fromIn
 
 markerAdd :: Editor -> Int -> Int -> IO Int
 markerAdd e m n = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERADD (fromIntegral m :: Word64) (fromIntegral n :: Int64) >>= ioInt
+
+markerGet :: Editor -> Int -> IO Int
+markerGet e l = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERGET (fromIntegral l :: Word64) 0 >>= ioInt
+ 
+markerDeleteHandle :: Editor -> Int -> IO ()
+markerDeleteHandle e h = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERDELETEHANDLE (fromIntegral h :: Word64) 0 >> ioNull
+
+markerDelete :: Editor -> Int -> Int -> IO ()
+markerDelete e l m = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERDELETE (fromIntegral l :: Word64) (fromIntegral m :: Int64) >> ioNull
+
+markerLineFromHandle :: Editor -> Int -> IO Int
+markerLineFromHandle e h = SI.c_ScnSendEditorII (getHwnd e) sCI_MARKERLINEFROMHANDLE (fromIntegral h :: Word64) 0 >>= ioInt
 
 ----------------------------------------------
 -- Other settings

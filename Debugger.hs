@@ -1,35 +1,18 @@
 
 module Debugger
 ( 
-    onDebugDebug
+    onDebugDebug,
+    toggleBreakPoint
 
 ) where 
  
 -- library imports
  
-import Control.Concurrent 
-import Control.Concurrent.STM
 import Control.Exception
-import Control.Monad (mapM_, liftM, liftM2) 
-import Data.Bits ((.|.))
-import qualified Data.ByteString as BS (init, replicate)
-import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
-import qualified Data.ByteString.Internal as BS (ByteString)
-import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
-import Data.Int (Int32)
-import Data.List (find, findIndex)
-import Data.Maybe (isJust)
-import Data.Word (Word64)
-import Foreign.C.String (CString, withCString, peekCString)
-import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
-import Graphics.UI.WX
-import Graphics.UI.WXCore
+import Data.Bits (testBit)
 import Graphics.Win32.GDI.Types (HWND)
-import System.Directory
-import System.FilePath.Windows (takeFileName, takeDirectory)
-import System.IO
-import System.Win32.Types (nullHANDLE)
-import qualified System.FilePath.Windows as Win (dropExtension, takeBaseName, takeDirectory)
+import System.Directory (removeFile)
+import qualified System.FilePath.Windows as Win (dropExtension)
 
 -- project imports
 
@@ -54,5 +37,42 @@ onDebugDebug ss tw = do
                     return ()
                 Nothing -> return ()
         Nothing -> return ()
+
+toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
+toggleBreakPoint ss hw scn sn = do
+    l <- SC.getLineFromPosition scn (fromIntegral (SI.snPosition sn) :: Int)
+    m <- SC.markerGet scn l
+    if testBit m CN.breakPointMarker then do
+        bps <- SS.dsGetBreakPoints ss
+        -- remove breakpoint from session
+        bps' <- MI.findAndRemoveIO (\bp -> do
+            l' <- SC.markerLineFromHandle scn (SS.dsHandle bp)
+            return $ l' == l) bps
+        SS.dsUpdateBreakPoints ss (\_ -> bps')
+        SC.markerDelete scn l CN.breakPointMarker
+        s <- SS.dsBreakPointsToString ss
+        SS.ssDebugInfo ss s 
+        return ()
+    else do
+        h <- SC.markerAdd scn l CN.breakPointMarker
+        mfp <- SS.hwFilePath hw
+        let bp = SS.createBreakPoint scn (maybe "" id mfp) h 0 
+        SS.dsAddBreakPoint ss bp
+        s <- SS.dsBreakPointsToString ss
+        SS.ssDebugInfo ss s 
+        return ()
+    
+        
+
+
+        
+        
+
+
+{-
+
+check if breakpoint already set
+
+-}
 
 

@@ -35,7 +35,6 @@ import qualified ScintillaConstants as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
   
- 
 --------------------------------------
 -- Main
 --------------------------------------   

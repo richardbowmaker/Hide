@@ -46,12 +46,16 @@ module Session
     createTextWindow,
     dsAddBreakPoint,
     dsBreakPointSet,
-    dsColumn,
+    dsBreakPointToString,
+    dsBreakPointsToString,
+    dsDeleteBreakPoint,
+    dsEditor,
     dsEqualBreakPoint,
     dsFilePath,
-    dsLine,
-    dsModule,
+    dsGetBreakPoints,
+    dsHandle,
     dsNo,
+    dsUpdateBreakPoints,
     ftCurrPos,
     ftFindText,
     ftStartPos, 
@@ -145,7 +149,7 @@ import Control.Monad (liftM, liftM2)
 import Data.Bits ((.&.), setBit, clearBit, testBit)
 import Data.ByteString.Internal (ByteString)
 import Data.String.Combinators (punctuate)
-import Data.List (find)
+import Data.List (find, intercalate)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.Char (toLower)
 import Data.Word (Word64)
@@ -579,14 +583,14 @@ tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ 
 
 type TDebugOutput = TChan ByteString -- output from debugger
 type TDebugSession = TVar DebugSession
-data BreakPoint = BreakPoint { dsFilePath :: String, dsModule :: String, dsLine :: Int, dsColumn :: Int, dsNo :: Int }
+data BreakPoint = BreakPoint { dsEditor :: SC.Editor, dsFilePath :: String, dsHandle :: Int, dsNo :: Int }
 data DebugSession = DebugSession {dsBreakPoints :: [BreakPoint]}
 
 createDebugSession :: [BreakPoint] -> DebugSession 
 createDebugSession bps = (DebugSession bps)
 
-createBreakPoint :: String -> String -> Int -> Int -> BreakPoint
-createBreakPoint fp mod lin col = (BreakPoint fp mod lin col 0)
+createBreakPoint :: SC.Editor -> String -> Int -> Int -> BreakPoint
+createBreakPoint scn fp handle no = (BreakPoint scn fp handle no)
 
 dsAddBreakPoint :: Session -> BreakPoint -> IO ()
 dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
@@ -595,7 +599,14 @@ dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds ->
         createDebugSession bps 
     else 
         createDebugSession (bp:bps))
-        
+
+dsDeleteBreakPoint :: Session -> String -> Int -> IO ()
+dsDeleteBreakPoint ss fp handle = 
+    atomically $ modifyTVar (ssDebugSession ss) (\ds ->
+        let bps = dsBreakPoints ds in
+        createDebugSession (
+            MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ))
+       
 dsBreakPointSet :: BreakPoint -> [BreakPoint] -> Bool
 dsBreakPointSet bp bps = 
     case find (\bp' -> dsEqualBreakPoint bp bp') bps of
@@ -605,10 +616,25 @@ dsBreakPointSet bp bps =
 dsEqualBreakPoint :: BreakPoint -> BreakPoint -> Bool
 dsEqualBreakPoint bp1 bp2 = 
     (dsFilePath bp1 == dsFilePath bp2) &&
-    ( dsModule bp1 == dsModule bp2) &&
-    ( dsLine bp1 == dsLine bp2) &&
-    ( dsColumn bp1 == dsColumn bp2)
+    (dsHandle   bp1 == dsHandle   bp2)
 
+dsUpdateBreakPoints :: Session -> ([BreakPoint] -> [BreakPoint]) -> IO ()
+dsUpdateBreakPoints ss f = atomically $ 
+    modifyTVar (ssDebugSession ss) (\ds -> createDebugSession (f $ dsBreakPoints ds))
 
+dsGetBreakPoints :: Session -> IO [BreakPoint]
+dsGetBreakPoints ss = do
+    ds <- atomically $ readTVar (ssDebugSession ss)
+    return $ dsBreakPoints ds
 
+dsBreakPointsToString :: Session -> IO String
+dsBreakPointsToString ss = do
+    bps <- dsGetBreakPoints ss
+    return $ "Breakpoints:\n" ++ (intercalate "\n" $ map dsBreakPointToString bps)
+
+dsBreakPointToString :: BreakPoint -> String
+dsBreakPointToString bp = (show $ dsEditor bp) ++ 
+    ", file = " ++ (dsFilePath bp) ++ 
+    ", handle = " ++ (show $ dsHandle bp) ++ 
+    ", no = " ++ (show $ dsNo bp)
 
