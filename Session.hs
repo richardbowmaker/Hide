@@ -13,7 +13,6 @@ module Session
     SsNameMenuPair,
     TErrors,
     THideWindows,
-    TOutput,
     TextMenus,
     TextWindow,
     ceErrLine,
@@ -86,7 +85,6 @@ module Session
     hwWindow,
     hwWindows,
     ssAuiMgr,
-    ssCFunc,
     ssClearStateBit,
     ssCompilerReport,
     ssCreate,
@@ -107,15 +105,15 @@ module Session
     ssMenus,
     ssOutput,
     ssOutputs,
+    ssRunFunctionQueue,
     ssSetCompilerReport,
     ssSetOutput,
     ssSetStateBit,
     ssStateCompile,
     ssStatus,
-    ssTOutput,
     ssTestState,
     ssToString,
-    ssWriteToOutputChan,
+    ssQueueFunction,
     tmGetMenuEnabled, 
     tmGetMenuFunction,
     twFilePath,
@@ -146,6 +144,7 @@ import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
 import Control.Monad (liftM, liftM2)
+import Control.Monad.Loops (whileM_)
 import Data.Bits ((.&.), setBit, clearBit, testBit)
 import Data.ByteString.Internal (ByteString)
 import Data.String.Combinators (punctuate)
@@ -174,7 +173,6 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssEditors           :: AuiNotebook (),      -- Notebook of source file editors
                             ssMenus             :: SsMenuList,
                             ssStatus            :: StatusField,
-                            ssTOutput           :: TOutput,             -- TCHan for output pane, e.g. compiler output
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
                             ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
                             ssTMOutput          :: TMHideWindow,        -- The output pane, maybe
@@ -191,8 +189,6 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
--- compiler output channel
-type TOutput = TChan ByteString
 
 -- compiler errors
 type TErrors = TVar CompReport
@@ -217,7 +213,6 @@ type TState = TVar Int
 ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> IO Session
 ssCreate mf am nb ms sf ots db = do
     mtid <- myThreadId
-    tot  <- atomically $ newTChan
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar (crCreateCompReport Nothing [])
     tfnd <- atomically $ newTVar (FindText "" 0 0)
@@ -229,7 +224,7 @@ ssCreate mf am nb ms sf ots db = do
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession []
     dbout  <- atomically $ newTChan
-    return (Session mf am nb ms sf tot cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
+    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -276,8 +271,6 @@ ssGetCompilerReport ss = atomically $ readTVar $ ssCompilerReport ss
 ssSetCompilerReport :: Session -> CompReport -> IO ()
 ssSetCompilerReport ss cr = atomically $ writeTVar (ssCompilerReport ss) cr
 
-ssWriteToOutputChan :: Session -> String -> IO ()
-ssWriteToOutputChan ss s = atomically $ writeTChan (ssTOutput ss) $ BS.pack s
 
 -- state management
 
@@ -638,3 +631,17 @@ dsBreakPointToString bp = (show $ dsEditor bp) ++
     ", handle = " ++ (show $ dsHandle bp) ++ 
     ", no = " ++ (show $ dsNo bp)
 
+--------------------------------------------
+-- Function queue
+--------------------------------------------
+
+ssQueueFunction :: Session -> IO () -> IO ()
+ssQueueFunction ss f = atomically $ writeTChan (ssCFunc ss) f
+
+ssRunFunctionQueue :: Session -> IO ()
+ssRunFunctionQueue ss = 
+    whileM_ (liftM not $ atomically $ isEmptyTChan chan)
+        (atomically (tryReadTChan chan) >>= maybe (return ()) id)
+    where chan = ssCFunc ss
+
+ 

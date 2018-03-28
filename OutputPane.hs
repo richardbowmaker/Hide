@@ -1,8 +1,10 @@
 
 module OutputPane
 ( 
-    addLine,
-    addText,
+    addLineBS,
+    addLineS,
+    addTextBS,
+    addTextS,
     clear,
     closeOutputWindow,
     createOutputWindow,
@@ -15,7 +17,7 @@ module OutputPane
     
 import Control.Concurrent.STM (atomically, readTVar)
 import Control.Monad (liftM)
-import qualified Data.ByteString.Char8 as BS (ByteString, writeFile)
+import qualified Data.ByteString.Char8 as BS (ByteString, writeFile, pack)
 import Data.Bits ((.|.), (.&.))
 import Data.List (find, findIndex)
 import Data.Word (Word64)
@@ -404,11 +406,17 @@ addLine' ss bs scn = do
 clear :: SS.Session -> IO ()
 clear ss = withEditor ss $ clear' ss 
 
-addText :: SS.Session -> BS.ByteString -> IO ()
-addText ss bs = withEditor ss $ addText' ss bs 
+addTextBS :: SS.Session -> BS.ByteString -> IO ()
+addTextBS ss bs = withEditor ss $ addText' ss bs 
 
-addLine :: SS.Session -> BS.ByteString -> IO ()
-addLine ss bs = withEditor ss $ addLine' ss bs 
+addTextS :: SS.Session -> String -> IO ()
+addTextS ss s = withEditor ss $ addText' ss $ BS.pack s 
+
+addLineBS :: SS.Session -> BS.ByteString -> IO ()
+addLineBS ss bs = withEditor ss $ addLine' ss bs 
+
+addLineS :: SS.Session -> String -> IO ()
+addLineS ss s = withEditor ss $ addLine' ss $ BS.pack s 
 
 withEditor :: SS.Session -> (SC.Editor -> IO ()) -> IO ()
 withEditor ss f = do    

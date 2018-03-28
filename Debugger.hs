@@ -25,16 +25,12 @@ import qualified Session as SS
 
 onDebugDebug :: SS.Session -> SS.TextWindow -> IO ()
 onDebugDebug ss tw = do
-    mhwnd <- GH.openWindow ss
-    case mhwnd of
-        Just hwnd -> do
-            mfp <- SS.twFilePath tw
-            case mfp of
-                Just fp -> do
-                    --  delete object file, to force GHCi to run in interpretative mode
-                    result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-                    GH.sendCommand hwnd $ ":load " ++ fp
-                    return ()
+    mfp <- SS.twFilePath tw
+    case mfp of
+        Just fp -> do
+            mtw <- GH.openWindow ss
+            case mtw of
+                Just tw -> startDebug ss tw fp
                 Nothing -> return ()
         Nothing -> return ()
 
@@ -62,8 +58,13 @@ toggleBreakPoint ss hw scn sn = do
         SS.ssDebugInfo ss s 
         return ()
     
-        
-
+ 
+startDebug :: SS.Session -> SS.TextWindow -> String -> IO ()
+startDebug ss fp = do
+    --  delete object file, to force GHCi to run in interpretative mode
+    result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
+    GH.sendCommand hwnd $ ":load " ++ fp
+    return ()
 
         
         

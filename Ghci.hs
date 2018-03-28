@@ -22,7 +22,6 @@ module Ghci
     eventSelectionSet,
     eventSelectionClear
 ) where 
-  
 
 import qualified Data.ByteString as BS (init, replicate)
 import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
@@ -53,7 +52,7 @@ import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified Session as SS
 
-openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe HWND)
+openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
     mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (SS.twIsSameFile ftw tw)) 
     case mtw of
@@ -64,7 +63,7 @@ openWindowFile ss ftw = do
             -- reload the source file
             mfp <- SS.twFilePath tw
             sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id mfp)
-            return (Just $ SS.twPanelHwnd tw)
+            return (Just tw)
         Nothing -> do
             -- GHCI not open so open a new tab
             mfp <- SS.twFilePath ftw
@@ -78,11 +77,11 @@ openWindowFile ss ftw = do
                                 setEventHandler ss hw
                                 enableEvents hwnd
                                 setFocus hwnd
-                                return (Just hwnd)
+                                return (Just $ SS.hwWindow hw)
                         Nothing -> return Nothing
                 Nothing -> return Nothing
 
-openWindow :: SS.Session -> IO (Maybe HWND)
+openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
     m <- open ss "" 
     case m of
@@ -92,7 +91,7 @@ openWindow ss = do
             setEventHandler ss hw
             enableEvents hwnd
             setFocus hwnd
-            return (Just hwnd)
+            return (Just $ SS.hwWindow hw)
         Nothing -> return Nothing
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
@@ -271,11 +270,11 @@ callback ss hw hwnd evt str
             setm ss tms CN.menuEditCopy          
             setm ss tms CN.menuEditPaste
     | evt == eventOutput = do
-            s1 <- peekCString str
-            SS.ssDebugInfo ss $ "output = " ++ s1    
+            s <- peekCString str
+            SS.ssDebugInfo ss $ "output = " ++ s    
     | evt == eventInput = do
-            s1 <- peekCString str
-            SS.ssDebugInfo ss $ "input = " ++ s1
+            s <- peekCString str
+            SS.ssDebugInfo ss $ "input = " ++ s
     | otherwise = return ()
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()

@@ -64,7 +64,7 @@ mainGUI = do
         set mf [on closing := onClosing ss]
         
         -- create a timer that updates the display
-        t <- timer mf [interval := 100, on command := onTimer ss] 
+        t <- timer mf [interval := 100, on command := SS.ssRunFunctionQueue ss] 
            
         return ()
         
@@ -326,21 +326,4 @@ onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
     return ()
 
-------------------------------------------------------------    
--- Timer handler
-------------------------------------------------------------    
-    
-onTimer :: SS.Session -> IO ()
-onTimer ss = do
-    -- update output pane
-    withTChan (SS.ssTOutput ss) (OT.addText ss)   
-    -- run any scheduled functions
-    withTChan (SS.ssCFunc ss) (\f -> f)   
-    where
-        -- calls supplied function whilst there is still data in the channel
-        withTChan :: TChan a -> (a -> IO ()) -> IO ()
-        withTChan chan f =  
-            whileM_ (liftM not $ atomically $ isEmptyTChan chan)
-                (atomically (tryReadTChan chan) >>= maybe (return ()) (\a -> f a))             
-            
 

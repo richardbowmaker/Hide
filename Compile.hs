@@ -74,7 +74,9 @@ onBuildBuild ss tw scn fileSave fileOpen = do
             Just hw -> do
                 mfp <- SS.hwFilePath hw
                 case mfp of
-                    Just fp -> cpBuildProject ss fp (Just $ compileComplete ss)
+                    Just fp -> do
+                        SS.ssSetStateBit ss SS.ssStateCompile
+                        cpBuildProject ss fp (Just $ compileComplete ss)
                     Nothing -> return ()
             Nothing -> do
                     SS.ssDebugError ss "onBuildBuild:: no file name set"
@@ -116,7 +118,7 @@ compileComplete ss = do
     set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
     set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
     SS.ssClearStateBit ss SS.ssStateCompile
-    OT.addText ss $ BS.pack "Compile complete\n"
+    OT.addTextS ss $ "Compile complete\n"
     return ()
 
 onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
@@ -146,12 +148,10 @@ cpBuildProject ::   SS.Session          -- ^ The HIDE session
                     -> IO ()            
 cpBuildProject ss fp mfinally = do  
    
--- ghc -fasm -L. -lScintillaProxy -threaded -o %1 %1.hs
-
     SS.ssDebugInfo ss $ "Start build: " ++ fp
 
     OT.clear ss
-    OT.addLine ss $ BS.pack "Build started ..."
+    OT.addLineS ss "Build started ..."
 
     --  delete old object file
     result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
@@ -160,7 +160,6 @@ cpBuildProject ss fp mfinally = do
         ss
         ["-fasm", "-L.", "-lScintillaProxy", "-threaded", "-o", Win.dropExtension fp, fp] 
         "D:\\_Rick's\\haskell\\Hide"
-        (SS.ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()
@@ -173,7 +172,7 @@ cpCompileFile ss fp mfinally = do
     SS.ssDebugInfo ss $ "Start compile: " ++ fp
 
     OT.clear ss
-    OT.addLine ss $ BS.pack "Compile started ..."
+    OT.addLineS ss "Compile started ..."
 
     --  delete old object file
     result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
@@ -182,7 +181,6 @@ cpCompileFile ss fp mfinally = do
         ss
         ["-c", fp] 
         "D:\\_Rick's\\haskell\\Hide"
-        (SS.ssTOutput ss) -- stdout goes to TOutput
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()
@@ -191,11 +189,11 @@ cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> SS.CompReport -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
     if SS.crErrorCount ces == 0 then do
-        SS.ssWriteToOutputChan ss "\nNo errors\n"
+        SS.ssQueueFunction ss (OT.addTextS ss "\nNo errors\n")
         set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
         set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
     else do
-        SS.ssWriteToOutputChan ss $ "\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"
+        SS.ssQueueFunction ss (OT.addTextS ss ("\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"))
         set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
         set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
 
@@ -204,7 +202,7 @@ cpCompileFileDone ss mfinally ces = do
     SS.ssClearStateBit ss SS.ssStateCompile
 
     -- schedule GUI finally function
-    maybe (return ()) (\f-> atomically $ writeTChan (SS.ssCFunc ss) f) mfinally
+    maybe (return ()) (SS.ssQueueFunction ss) mfinally
 
     return ()
 
@@ -227,8 +225,8 @@ cpDebugRun ss tw = do
 
 -- run command and redirect std out to the output pane
 -- session -> arguments -> working directory -> stdout TChan -> completion function
-runGHC :: SS.Session -> [String] -> String -> SS.TOutput -> Maybe (SS.CompReport -> IO ()) -> IO ()
-runGHC ss args dir cerr mfinally = do
+runGHC :: SS.Session -> [String] -> String -> Maybe (SS.CompReport -> IO ()) -> IO ()
+runGHC ss args dir mfinally = do
     
     SS.ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
@@ -238,7 +236,7 @@ runGHC ss args dir cerr mfinally = do
         {cwd = Just dir, std_out = UseHandle hw, std_err = UseHandle hw}
 
     -- stream compiler output to output pane
-    s <- captureOutput ss hr (SS.ssTOutput ss) ""
+    s <- captureOutput ss hr ""
 
     waitForProcess ph
 
@@ -250,14 +248,14 @@ runGHC ss args dir cerr mfinally = do
 
 -- captures output from handle, wrtes to the output pane and returns
 -- the captured data
-captureOutput :: SS.Session -> Handle -> TChan BS.ByteString -> String -> IO String
-captureOutput ss h tot str = do
+captureOutput :: SS.Session -> Handle -> String -> IO String
+captureOutput ss h str = do
     eof <- hIsEOF h
     if eof then do
         return str
     else do
         bs <- BS.hGetLine h -- NB hGetLine is appending a CR on the end of the line !!
-        atomically $ writeTChan tot bs  -- write to output pane
+        SS.ssQueueFunction ss (OT.addTextBS ss bs)
         -- remove CR and append new line, required by parser
-        captureOutput ss h tot $ str ++ (init (BS.unpack bs)) ++ "\n"
+        captureOutput ss h $ str ++ (init (BS.unpack bs)) ++ "\n"
 
