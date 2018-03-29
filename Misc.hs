@@ -5,6 +5,7 @@ module Misc
     comparePtrs,
     createGrid, 
     createTree,
+    doUntilFalseIO,
     doWhileTrueIO,
     findAndRemove,
     findAndRemoveIO,
@@ -17,14 +18,20 @@ module Misc
     ptrToInt64,
     ptrToString,
     ptrToWord64,
+    readInt,
+    scanInt,
+    stringEndsWith,
+    stringStartsWith,
     windowToString
 ) where
 
 import Control.Monad (liftM2)
+import Data.Char (isDigit)
 import Data.Int (Int64)
+import Data.List (findIndex)
 import Data.Word (Word64)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
-import Graphics.UI.WX
+import Graphics.UI.WX 
 import Graphics.UI.WXCore
 import Numeric (showHex)
 
@@ -100,6 +107,34 @@ findIO p (x:xs) = do
      
 boolToInt :: Bool -> Int
 boolToInt b = if b then 1 else 0
+
+-- stringStartsWith str end returns true if str ends with end
+stringStartsWith :: String -> String -> Bool
+stringStartsWith [] _ = False
+stringStartsWith _ [] = False
+stringStartsWith s e = take (length e) s == e
+
+stringEndsWith :: String -> String -> Bool
+stringEndsWith [] _ = False
+stringEndsWith _ [] = False
+stringEndsWith s e = take (length e) (reverse s) == reverse e
+
+doUntilFalseIO :: [(IO Bool)] -> IO Bool
+doUntilFalseIO [] = return True
+doUntilFalseIO (f:fs) = f >>= (\b -> if b then doUntilFalseIO fs else return False)
+
+scanInt :: String -> Maybe Int
+scanInt s = 
+    case findIndex isDigit s of
+        Just ix -> Just $ readInt s ix 0
+        Nothing -> Nothing
+        
+readInt :: String -> Int -> Int -> Int
+readInt s ix n 
+    | ix >= length s = n
+    | (not . isDigit) c = n
+    | otherwise = readInt s (ix+1) (n*10 + read [c])
+    where c = s !! ix
 
 
 ------------------------------------------------------------    

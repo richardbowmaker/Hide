@@ -1,5 +1,8 @@
 module Main where
 
+import Control.Concurrent
+import Data.Char
+import Data.List
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import qualified Scintilla as SC
@@ -55,4 +58,47 @@ mainGUI = do
     return ()
 
 onTimer = return ()
+
+
+f1 = Just "123"
+eos s = True
+eos1 s = False
+
+-- doTimeout attempts delay gets eos, returns nothing if timedout
+accumulateStringTimed :: Int -> Int -> (Maybe String) -> (String -> Bool) -> IO (Maybe String)
+accumulateStringTimed n delay gets eos = accumulateStringTimed' "" n (delay * 1000) gets eos
+
+accumulateStringTimed' :: String -> Int -> Int -> (Maybe String) -> (String -> Bool) -> IO (Maybe String)
+accumulateStringTimed' _ 0 _ _ _ = return Nothing
+accumulateStringTimed' str n delay gets eos = do
+    case gets of
+        Just s  -> do 
+            let str' = str ++ s
+            if eos str' then return $ Just str'
+            else repeat str' 
+        Nothing -> repeat str
+            
+    where repeat s = threadDelay delay >> accumulateStringTimed' s (n-1) delay gets eos
+
    
+-- stringEndsWith str end returns true if str ends with end
+stringEndsWith :: String -> String -> Bool
+stringEndsWith [] _ = False
+stringEndsWith _ [] = False
+stringEndsWith s e = take (length e) (reverse s) == reverse e
+
+scanInt :: String -> Maybe Int
+scanInt s = 
+    case findIndex isDigit s of
+        Just ix -> Just $ readInt s ix 0
+        Nothing -> Nothing
+        
+readInt :: String -> Int -> Int -> Int
+readInt s ix n 
+    | ix >= length s = n
+    | (not . isDigit) c = n
+    | otherwise = readInt s (ix+1) (n*10 + read [c])
+    where c = s !! ix
+
+
+

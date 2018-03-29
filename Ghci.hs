@@ -2,6 +2,7 @@
 module Ghci
 ( 
     openWindow,
+    openDebugWindow,
     openWindowFile,
     closeWindow,
     closeAll,
@@ -30,7 +31,7 @@ import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
 import Control.Concurrent 
 import Control.Concurrent.STM
 import Control.Monad (mapM_, liftM, liftM2) 
-import Data.Bits ((.|.))
+import Data.Bits ((.&.), (.|.))
 import Data.Int (Int32)
 import Data.List (find, findIndex)
 import Data.Maybe (isJust)
@@ -74,7 +75,7 @@ openWindowFile ss ftw = do
                         Just (panel, hwndp, hwnd) -> do
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
-                                setEventHandler ss hw
+                                setEventHandler ss hw eventMaskGhci
                                 enableEvents hwnd
                                 setFocus hwnd
                                 return (Just $ SS.hwWindow hw)
@@ -88,7 +89,20 @@ openWindow ss = do
         Just (panel, hwndp, hwnd) -> do
             hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
-            setEventHandler ss hw
+            setEventHandler ss hw eventMaskGhci
+            enableEvents hwnd
+            setFocus hwnd
+            return (Just $ SS.hwWindow hw)
+        Nothing -> return Nothing
+
+openDebugWindow :: SS.Session -> IO (Maybe SS.TextWindow)
+openDebugWindow ss = do
+    m <- open ss "" 
+    case m of
+        Just (panel, hwndp, hwnd) -> do
+            hw <- createHideWindow ss panel hwndp hwnd Nothing
+            SS.hwUpdate ss (\hws -> hw : hws)
+            setEventHandler ss hw eventMaskDebug
             enableEvents hwnd
             setFocus hwnd
             return (Just $ SS.hwWindow hw)
@@ -218,9 +232,9 @@ fileSaveAs ss tw = do
             return ()  
         otherwise -> return ()
    
-setEventHandler :: SS.Session -> SS.HideWindow -> IO ()
-setEventHandler ss hw = do
-    cb <- SI.c_GhciCreateCallback (callback ss hw)
+setEventHandler :: SS.Session -> SS.HideWindow -> Int -> IO ()
+setEventHandler ss hw mask = do
+    cb <- SI.c_GhciCreateCallback (callback ss hw mask)
     SI.c_GhciSetEventHandler (SS.hwPanelHwnd hw) cb    
     return ()
 
@@ -230,9 +244,9 @@ enableEvents = SI.c_GhciEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = SI.c_GhciDisableEvents
     
-callback :: SS.Session -> SS.HideWindow -> HWND -> Int -> CString -> IO ()
-callback ss hw hwnd evt str
-    | evt == eventLostFocus = do
+callback :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> CString -> IO ()
+callback ss hw mask hwnd evt str
+    | evt' == eventLostFocus = do
             setm' ss CN.menuFileClose         (return False) (return ())
             setm' ss CN.menuFileCloseAll      (return False) (return ())
             setm' ss CN.menuFileSave          (return False) (return ())
@@ -248,7 +262,7 @@ callback ss hw hwnd evt str
             setm' ss CN.menuEditFindBackward  (return False) (return ())
             setm' ss CN.menuEditClear         (return False) (return ())
             setm' ss CN.menuBuildGhci         (return False) (return ())
-    | evt == eventGotFocus  = do
+    | evt' == eventGotFocus  = do
             setm ss tms CN.menuFileClose        
             setm ss tms CN.menuFileCloseAll        
             setm ss tms CN.menuFileSave        
@@ -265,14 +279,14 @@ callback ss hw hwnd evt str
             setm ss tms CN.menuEditFindBackward            
             setm ss tms CN.menuEditClear          
             setm ss tms CN.menuBuildGhci         
-    | evt == eventSelectionSet || evt == eventSelectionClear = do
+    | evt' == eventSelectionSet || evt == eventSelectionClear = do
             setm ss tms CN.menuEditCut           
             setm ss tms CN.menuEditCopy          
             setm ss tms CN.menuEditPaste
-    | evt == eventOutput = do
+    | evt' == eventOutput = do
             s <- peekCString str
             SS.ssDebugInfo ss $ "output = " ++ s    
-    | evt == eventInput = do
+    | evt' == eventInput = do
             s <- peekCString str
             SS.ssDebugInfo ss $ "input = " ++ s
     | otherwise = return ()
@@ -286,25 +300,31 @@ callback ss hw hwnd evt str
                     set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
 
                 tms = SS.hwMenus hw
+                evt' = evt .&. mask
 
 eventGotFocus :: Int
-eventGotFocus = 1
+eventGotFocus = 0x01
 
 eventLostFocus :: Int
-eventLostFocus = 2
+eventLostFocus = 0x02
 
 eventSelectionSet :: Int
-eventSelectionSet = 3
+eventSelectionSet = 0x04
 
 eventSelectionClear :: Int
-eventSelectionClear = 4
+eventSelectionClear = 0x08
 
 eventClosed :: Int
-eventClosed = 5
+eventClosed = 0x10
 
 eventOutput :: Int
-eventOutput = 6
+eventOutput = 0x20
   
 eventInput :: Int
-eventInput = 7
-  
+eventInput = 0x40
+
+eventMaskGhci :: Int
+eventMaskGhci = 0x1f
+
+eventMaskDebug :: Int
+eventMaskDebug = 0x7f

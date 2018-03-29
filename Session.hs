@@ -44,16 +44,21 @@ module Session
     createTextMenus,
     createTextWindow,
     dsAddBreakPoint,
+    dsAddDebugOutput,
     dsBreakPointSet,
     dsBreakPointToString,
     dsBreakPointsToString,
+    dsClearDebugOutput,
     dsDeleteBreakPoint,
     dsEditor,
     dsEqualBreakPoint,
     dsFilePath,
     dsGetBreakPoints,
+    dsGetDebugOutput,
     dsHandle,
     dsNo,
+    dsSetBreakPointNo,
+    dsSetBreakPoints,
     dsUpdateBreakPoints,
     ftCurrPos,
     ftFindText,
@@ -105,15 +110,16 @@ module Session
     ssMenus,
     ssOutput,
     ssOutputs,
+    ssQueueFunction,
     ssRunFunctionQueue,
     ssSetCompilerReport,
     ssSetOutput,
     ssSetStateBit,
     ssStateCompile,
+    ssStateDebugging,
     ssStatus,
     ssTestState,
     ssToString,
-    ssQueueFunction,
     tmGetMenuEnabled, 
     tmGetMenuFunction,
     twFilePath,
@@ -223,7 +229,7 @@ ssCreate mf am nb ms sf ots db = do
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession []
-    dbout  <- atomically $ newTChan
+    dbout <- atomically $ newTVar ""
     return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
 
 -- creates a new menu item lookup list
@@ -574,7 +580,7 @@ tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ 
 -- Debug session
 -----------------------------------------------------------------------
 
-type TDebugOutput = TChan ByteString -- output from debugger
+type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 data BreakPoint = BreakPoint { dsEditor :: SC.Editor, dsFilePath :: String, dsHandle :: Int, dsNo :: Int }
 data DebugSession = DebugSession {dsBreakPoints :: [BreakPoint]}
@@ -620,6 +626,9 @@ dsGetBreakPoints ss = do
     ds <- atomically $ readTVar (ssDebugSession ss)
     return $ dsBreakPoints ds
 
+dsSetBreakPoints :: Session -> [BreakPoint] -> IO ()
+dsSetBreakPoints ss bps = atomically $ writeTVar (ssDebugSession ss) (createDebugSession bps)
+
 dsBreakPointsToString :: Session -> IO String
 dsBreakPointsToString ss = do
     bps <- dsGetBreakPoints ss
@@ -630,6 +639,18 @@ dsBreakPointToString bp = (show $ dsEditor bp) ++
     ", file = " ++ (dsFilePath bp) ++ 
     ", handle = " ++ (show $ dsHandle bp) ++ 
     ", no = " ++ (show $ dsNo bp)
+
+dsAddDebugOutput :: Session -> String -> IO ()
+dsAddDebugOutput ss s = atomically $ modifyTVar (ssDebugOutput ss) (++ s)
+
+dsGetDebugOutput :: Session -> IO String
+dsGetDebugOutput ss = atomically $ readTVar $ ssDebugOutput ss
+
+dsClearDebugOutput :: Session -> IO ()
+dsClearDebugOutput ss =  atomically $ writeTVar (ssDebugOutput ss) ("")
+
+dsSetBreakPointNo :: BreakPoint -> Int -> BreakPoint
+dsSetBreakPointNo bp no = createBreakPoint (dsEditor bp) (dsFilePath bp ) (dsHandle bp) no
 
 --------------------------------------------
 -- Function queue
