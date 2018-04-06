@@ -15,23 +15,23 @@ module ScintillaProxyImports
     c_ScnCreateCallback,
     c_ScnCreateHandlerCallback,
     c_ScnCreateEnabledCallback,
-    c_GhciNew,
-    c_GhciSetEventHandler,
-    c_GhciEnableEvents,
-    c_GhciDisableEvents,
-    c_GhciClose,
-    c_GhciPaste,
-    c_GhciCut,
-    c_GhciCopy,
-    c_GhciSelectAll,
-    c_GhciHasFocus,
-    c_GhciSetFocus,
-    c_GhciSendCommand,
-    c_GhciIsTextSelected,
-    c_GhciGetTextLength,
-    c_GhciGetText,
-    c_GhciClear,
-    c_GhciCreateCallback,
+    c_GhciTerminalNew,
+    c_GhciTerminalSetEventHandler,
+    c_GhciTerminalEnableEvents,
+    c_GhciTerminalDisableEvents,
+    c_GhciTerminalClose,
+    c_GhciTerminalPaste,
+    c_GhciTerminalCut,
+    c_GhciTerminalCopy,
+    c_GhciTerminalSelectAll,
+    c_GhciTerminalHasFocus,
+    c_GhciTerminalSetFocus,
+    c_GhciTerminalSendCommand,
+    c_GhciTerminalIsTextSelected,
+    c_GhciTerminalGetTextLength,
+    c_GhciTerminalGetText,
+    c_GhciTerminalClear,
+    c_GhciTerminalCreateCallback,
     notifyGetHwnd,
     notifyGetCode,
     notifyGetPosition,
@@ -81,28 +81,35 @@ foreign import ccall safe "wrapper" c_ScnCreateHandlerCallback ::
 foreign import ccall safe "wrapper" c_ScnCreateEnabledCallback ::
     (Int -> IO Int) -> IO (FunPtr (Int -> IO Int))
   
+foreign import ccall safe "GhciTerminalNew"             c_GhciTerminalNew               :: HWND -> CString -> CString -> IO HWND 
+foreign import ccall safe "GhciTerminalSetEventHandler" c_GhciTerminalSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> CString -> IO ()) -> IO ()
+foreign import ccall safe "GhciTerminalEnableEvents"    c_GhciTerminalEnableEvents      :: HWND -> IO ()
+foreign import ccall safe "GhciTerminalDisableEvents"   c_GhciTerminalDisableEvents     :: HWND -> IO ()
+foreign import ccall safe "GhciTerminalClose"           c_GhciTerminalClose             :: HWND -> IO ()
+foreign import ccall safe "GhciTerminalPaste"           c_GhciTerminalPaste             :: HWND -> IO ()
+foreign import ccall safe "GhciTerminalCut"             c_GhciTerminalCut               :: HWND -> IO () 
+foreign import ccall safe "GhciTerminalCopy"            c_GhciTerminalCopy              :: HWND -> IO ()
+foreign import ccall safe "GhciTerminalSelectAll"       c_GhciTerminalSelectAll         :: HWND -> IO () 
+foreign import ccall safe "GhciTerminalHasFocus"        c_GhciTerminalHasFocus          :: HWND -> IO Int32 
+foreign import ccall safe "GhciTerminalSetFocus"        c_GhciTerminalSetFocus          :: HWND -> IO () 
+foreign import ccall safe "GhciTerminalSendCommand"     c_GhciTerminalSendCommand       :: HWND -> CString -> IO HWND 
+foreign import ccall safe "GhciTerminalIsTextSelected"  c_GhciTerminalIsTextSelected    :: HWND -> IO Int32
+foreign import ccall safe "GhciTerminalGetTextLength"   c_GhciTerminalGetTextLength     :: HWND -> IO Int32 
+foreign import ccall safe "GhciTerminalGetText"         c_GhciTerminalGetText           :: HWND -> CString -> Int32 -> IO Int32 
+foreign import ccall safe "GhciTerminalClear"           c_GhciTerminalClear             :: HWND -> IO ()
 
-foreign import ccall safe "GhciNew"             c_GhciNew               :: HWND -> CString -> CString -> IO HWND 
-foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> CString -> IO ()) -> IO ()
-foreign import ccall safe "GhciEnableEvents"    c_GhciEnableEvents      :: HWND -> IO ()
-foreign import ccall safe "GhciDisableEvents"   c_GhciDisableEvents     :: HWND -> IO ()
-foreign import ccall safe "GhciClose"           c_GhciClose             :: HWND -> IO ()
-foreign import ccall safe "GhciPaste"           c_GhciPaste             :: HWND -> IO ()
-foreign import ccall safe "GhciCut"             c_GhciCut               :: HWND -> IO () 
-foreign import ccall safe "GhciCopy"            c_GhciCopy              :: HWND -> IO ()
-foreign import ccall safe "GhciSelectAll"       c_GhciSelectAll         :: HWND -> IO () 
-foreign import ccall safe "GhciHasFocus"        c_GhciHasFocus          :: HWND -> IO Int32 
-foreign import ccall safe "GhciSetFocus"        c_GhciSetFocus          :: HWND -> IO () 
-foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
-foreign import ccall safe "GhciIsTextSelected"  c_GhciIsTextSelected    :: HWND -> IO Int32
-foreign import ccall safe "GhciGetTextLength"   c_GhciGetTextLength     :: HWND -> IO Int32 
-foreign import ccall safe "GhciGetText"         c_GhciGetText           :: HWND -> CString -> Int32 -> IO Int32 
-foreign import ccall safe "GhciClear"           c_GhciClear             :: HWND -> IO ()
 
 -- callback wrapper
-foreign import ccall safe "wrapper" c_GhciCreateCallback ::
+foreign import ccall safe "wrapper" c_GhciTerminalCreateCallback ::
     (HWND -> Int -> CString -> IO ()) -> IO (FunPtr (HWND -> Int -> CString -> IO ()))
 
+{-    
+foreign import ccall safe "GhciNew"             c_GhciNew               :: CString -> CString -> IO Int32
+foreign import ccall safe "GhciClose"           c_GhciClose             :: Int32 -> IO ()
+foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: Int32 -> FunPtr (HWND -> Int -> CString -> IO ()) -> data -> IO ()
+foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
+-}
+    
 -- Structure for Scintilla Notification (64 bit version)
 -- See Scintilla.h SCNotification for original       
 data  SCNotification = SCNotification {

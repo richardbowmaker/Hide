@@ -116,7 +116,7 @@ open ss fp = do
     p <- panel nb []
     hp <- windowGetHandle p
     hwnd <- withCString fp (\cfp -> 
-        withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> SI.c_GhciNew hp cop cfp))
+        withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> SI.c_GhciTerminalNew hp cop cfp))
 
     case (MI.ptrToWord64 hwnd) of
 
@@ -136,7 +136,7 @@ closeWindow :: SS.Session -> SS.TextWindow -> IO ()
 closeWindow ss tw = do
     let nb = SS.ssOutputs ss
     p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
-    windowGetHandle p >>= SI.c_GhciClose
+    windowGetHandle p >>= SI.c_GhciTerminalClose
     SS.twRemoveWindow ss tw
     return ()
 
@@ -165,48 +165,48 @@ createHideWindow ss panel phwnd hwnd mfp = do
                     (return "")
 
 sendCommand :: HWND -> String -> IO ()
-sendCommand hwnd cmd = withCString cmd (\cs -> SI.c_GhciSendCommand hwnd cs) >> return ()
+sendCommand hwnd cmd = withCString cmd (\cs -> SI.c_GhciTerminalSendCommand hwnd cs) >> return ()
 
 paste :: HWND -> IO ()
-paste = SI.c_GhciPaste
+paste = SI.c_GhciTerminalPaste
 
 cut :: HWND -> IO ()
-cut = SI.c_GhciCut
+cut = SI.c_GhciTerminalCut
 
 copy :: HWND -> IO ()
-copy = SI.c_GhciCopy
+copy = SI.c_GhciTerminalCopy
 
 selectAll :: HWND -> IO ()
-selectAll = SI.c_GhciSelectAll
+selectAll = SI.c_GhciTerminalSelectAll
 
 isTextSelected :: HWND -> IO Bool
 isTextSelected hwnd = do
-    n <- SI.c_GhciIsTextSelected hwnd
+    n <- SI.c_GhciTerminalIsTextSelected hwnd
     return (n /= 0)
 
 hasFocus :: HWND -> IO Bool
 hasFocus h = do 
-        b <- SI.c_GhciHasFocus h
+        b <- SI.c_GhciTerminalHasFocus h
         return (b /= 0)
 
 setFocus :: HWND -> IO ()
-setFocus = SI.c_GhciSetFocus
+setFocus = SI.c_GhciTerminalSetFocus
 
 getTextLength :: HWND -> IO Int
 getTextLength hwnd = do 
-    n <- SI.c_GhciGetTextLength hwnd
+    n <- SI.c_GhciTerminalGetTextLength hwnd
     return (fromIntegral n :: Int)
 
 getAllText :: HWND -> IO BS.ByteString
 getAllText hwnd = do            
     len <- getTextLength hwnd
     let bs = (BS.replicate len 0)   -- allocate buffer
-    len' <- BS.unsafeUseAsCString bs (\cs -> do SI.c_GhciGetText hwnd cs (fromIntegral len :: Int32))
+    len' <- BS.unsafeUseAsCString bs (\cs -> do SI.c_GhciTerminalGetText hwnd cs (fromIntegral len :: Int32))
     if len == (fromIntegral len' :: Int) then return bs
     else return $ BS.take (fromIntegral len' :: Int) bs
 
 clear :: HWND -> IO ()
-clear = SI.c_GhciClear
+clear = SI.c_GhciTerminalClear
 
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
@@ -234,15 +234,15 @@ fileSaveAs ss tw = do
    
 setEventHandler :: SS.Session -> SS.HideWindow -> Int -> IO ()
 setEventHandler ss hw mask = do
-    cb <- SI.c_GhciCreateCallback (callback ss hw mask)
-    SI.c_GhciSetEventHandler (SS.hwPanelHwnd hw) cb    
+    cb <- SI.c_GhciTerminalCreateCallback (callback ss hw mask)
+    SI.c_GhciTerminalSetEventHandler (SS.hwPanelHwnd hw) cb    
     return ()
 
 enableEvents :: HWND -> IO ()
-enableEvents = SI.c_GhciEnableEvents
+enableEvents = SI.c_GhciTerminalEnableEvents
 
 disableEvents :: HWND -> IO ()
-disableEvents = SI.c_GhciDisableEvents
+disableEvents = SI.c_GhciTerminalDisableEvents
     
 callback :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> CString -> IO ()
 callback ss hw mask hwnd evt str
@@ -285,7 +285,8 @@ callback ss hw mask hwnd evt str
             setm ss tms CN.menuEditPaste
     | evt' == eventOutput = do
             s <- peekCString str
-            SS.ssDebugInfo ss $ "output = " ++ s    
+            SS.ssDebugInfo ss $ "output = " ++ s 
+            SS.dsAddDebugOutput ss s
     | evt' == eventInput = do
             s <- peekCString str
             SS.ssDebugInfo ss $ "input = " ++ s

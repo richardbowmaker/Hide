@@ -35,7 +35,7 @@ onDebugDebug ss tw = do
         Just fp -> do
             mtw <- GH.openDebugWindow ss
             case mtw of
-                Just tw -> startDebug ss tw fp
+                Just tw -> SS.ssQueueFunction ss $ startDebug ss tw fp
                 Nothing -> return ()
         Nothing -> return ()
 
@@ -139,9 +139,13 @@ sendCommand ss tw cmd = do
 waitForResponse :: SS.Session -> Int -> Int -> IO (Maybe String)
 waitForResponse _ 0 _  = return Nothing
 waitForResponse ss n delay = do
+    threadDelay (2000 * 1000)
     s <- SS.dsGetDebugOutput ss
+    return (Just s)
+{-
     if MI.stringEndsWith s "Main> " then return $ Just s
     else threadDelay (delay * 1000) >> waitForResponse ss (n-1) delay
+-}
 
 
 
