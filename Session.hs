@@ -60,6 +60,9 @@ module Session
     dsSetBreakPointNo,
     dsSetBreakPoints,
     dsUpdateBreakPoints,
+    dsUpdateDebugSession,
+    dsSetSessionId,
+    dsGetSessionId,
     ftCurrPos,
     ftFindText,
     ftStartPos, 
@@ -228,7 +231,7 @@ ssCreate mf am nb ms sf ots db = do
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
-    debug <- atomically $ newTVar $ createDebugSession []
+    debug <- atomically $ newTVar $ createDebugSession 0 []
     dbout <- atomically $ newTVar ""
     return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
 
@@ -583,27 +586,42 @@ tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ 
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 data BreakPoint = BreakPoint { dsEditor :: SC.Editor, dsFilePath :: String, dsHandle :: Int, dsNo :: Int }
-data DebugSession = DebugSession {dsBreakPoints :: [BreakPoint]}
+data DebugSession = DebugSession { dsId :: Int, dsBreakPoints :: [BreakPoint]}
 
-createDebugSession :: [BreakPoint] -> DebugSession 
-createDebugSession bps = (DebugSession bps)
+createDebugSession :: Int -> [BreakPoint] -> DebugSession 
+createDebugSession id bps = (DebugSession id bps)
+
+dsUpdateDebugSession :: Session -> (DebugSession -> DebugSession) -> IO ()
+dsUpdateDebugSession ss f = atomically $ 
+    modifyTVar (ssDebugSession ss) (\ds -> f ds)
+
+dsSetSessionId :: Session -> Int -> IO ()
+dsSetSessionId ss id = dsUpdateDebugSession ss (\ds -> 
+        createDebugSession id (dsBreakPoints ds))
+
+dsGetSessionId :: Session -> IO Int
+dsGetSessionId ss = do
+    ds <- atomically $ readTVar (ssDebugSession ss)
+    return $ dsId ds
 
 createBreakPoint :: SC.Editor -> String -> Int -> Int -> BreakPoint
 createBreakPoint scn fp handle no = (BreakPoint scn fp handle no)
 
 dsAddBreakPoint :: Session -> BreakPoint -> IO ()
 dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
-    let bps = dsBreakPoints ds in
+    let bps = dsBreakPoints ds 
+        id  = dsId ds in
     if dsBreakPointSet bp bps then 
-        createDebugSession bps 
+        createDebugSession id bps 
     else 
-        createDebugSession (bp:bps))
+        createDebugSession id (bp:bps))
 
 dsDeleteBreakPoint :: Session -> String -> Int -> IO ()
 dsDeleteBreakPoint ss fp handle = 
     atomically $ modifyTVar (ssDebugSession ss) (\ds ->
-        let bps = dsBreakPoints ds in
-        createDebugSession (
+        let bps = dsBreakPoints ds 
+            id  = dsId ds in
+        createDebugSession id (
             MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ))
        
 dsBreakPointSet :: BreakPoint -> [BreakPoint] -> Bool
@@ -618,8 +636,13 @@ dsEqualBreakPoint bp1 bp2 =
     (dsHandle   bp1 == dsHandle   bp2)
 
 dsUpdateBreakPoints :: Session -> ([BreakPoint] -> [BreakPoint]) -> IO ()
-dsUpdateBreakPoints ss f = atomically $ 
-    modifyTVar (ssDebugSession ss) (\ds -> createDebugSession (f $ dsBreakPoints ds))
+dsUpdateBreakPoints ss f = do
+    atomically ( 
+        modifyTVar (ssDebugSession ss) (\ds -> 
+                let bps = dsBreakPoints ds 
+                    id  = dsId ds in
+                createDebugSession id (f bps)))
+    return ()
 
 dsGetBreakPoints :: Session -> IO [BreakPoint]
 dsGetBreakPoints ss = do
@@ -627,7 +650,7 @@ dsGetBreakPoints ss = do
     return $ dsBreakPoints ds
 
 dsSetBreakPoints :: Session -> [BreakPoint] -> IO ()
-dsSetBreakPoints ss bps = atomically $ writeTVar (ssDebugSession ss) (createDebugSession bps)
+dsSetBreakPoints ss bps = dsUpdateBreakPoints ss (\_ -> bps)
 
 dsBreakPointsToString :: Session -> IO String
 dsBreakPointsToString ss = do

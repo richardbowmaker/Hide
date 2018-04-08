@@ -8,8 +8,6 @@ module ScintillaProxyImports
     c_ScnEnableEvents,
     c_ScnDisableEvents,
     c_ScnAddPopupMenuItem,
-    c_ScnSendEditorII,
-    c_ScnSendEditorIS,
     c_ScnCreateCallback,
     c_ScnCreateHandlerCallback,
     c_ScnCreateEnabledCallback,
@@ -47,7 +45,12 @@ module ScintillaProxyImports
     snLinesAdded,
     snModificationType,
     snPosition,
-    snUpdated
+    snUpdated,
+    sciSendEditorII,
+    sciSendEditorIO,
+    sciSendEditorSI,
+    sciSendEditorSO,
+    sciSendEditorIB
 ) where 
   
 import Control.Monad (liftM)
@@ -73,8 +76,8 @@ foreign import ccall safe "ScnAddPopupMenuItem" c_ScnAddPopupMenuItem   ::
     HWND -> Int32 -> CString -> FunPtr (Int -> IO ()) -> FunPtr (Int -> IO Int) -> IO ()      
 
 -- direct call to Scintilla, different aliases simplify conversion to WPARAM and LPARAM types 
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO Int64
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO Int64
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorI :: HWND -> Word32 -> Word64 -> Int64 -> IO Int64
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorS :: HWND -> Word32 -> Word64 -> CString -> IO Int64
 
 -- callback wrappers
 foreign import ccall safe "wrapper" c_ScnCreateCallback ::
@@ -129,22 +132,31 @@ uninitialise :: IO ()
 uninitialise = c_ScintillaProxyUninitialise
 
 -----------------------------------------------
-{-
-SI.c_ScnSendEditorIS (getHwnd e) sCI_SETTEXT 0 cs)
-SI.c_ScnSendEditorII
 
-
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
--}
 sciSendEditorII :: HWND -> Int -> Int -> Int -> IO Int
 sciSendEditorII h code wp lp = do
-    res <- c_ScnSendEditorII h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) (fromIntegral lp :: Int64)
+    res <- c_ScnSendEditorI h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) (fromIntegral lp :: Int64)
     return (fromIntegral res :: Int)
 
+sciSendEditorIO :: HWND -> Int -> Int -> Int -> IO ()
+sciSendEditorIO h code wp lp = do
+    c_ScnSendEditorI h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) (fromIntegral lp :: Int64)
+    return ()
 
+sciSendEditorSI :: HWND -> Int -> Int -> CString -> IO Int
+sciSendEditorSI h code wp lp = do
+    res <- c_ScnSendEditorS h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) lp
+    return (fromIntegral res :: Int)
 
--- sciSendEditorIS :: HWND -> Int -> Int -> CString -> IO Int
+sciSendEditorSO :: HWND -> Int -> Int -> CString -> IO ()
+sciSendEditorSO h code wp lp = do
+    res <- c_ScnSendEditorS h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) lp
+    return ()
+
+sciSendEditorIB :: HWND -> Int -> Int -> Int -> IO Bool
+sciSendEditorIB h code wp lp = do
+    res <- c_ScnSendEditorI h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) (fromIntegral lp :: Int64)
+    return (res /= 0)
 
 -----------------------------------------------
 

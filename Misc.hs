@@ -15,6 +15,7 @@ module Misc
     frameToString,
     isSameWindow,
     panelToString,
+    ptrToInt,
     ptrToInt64,
     ptrToString,
     ptrToWord64,
@@ -43,6 +44,9 @@ ptrToWord64 p = fromIntegral  (minusPtr p nullPtr) :: Word64
 
 ptrToInt64 :: Ptr a -> Int64
 ptrToInt64 p = fromIntegral  (minusPtr p nullPtr) :: Int64
+
+ptrToInt :: Ptr a -> Int
+ptrToInt p = fromIntegral  (minusPtr p nullPtr) :: Int
 
 panelToString :: Panel () -> IO String
 panelToString p = do

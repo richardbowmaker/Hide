@@ -382,7 +382,7 @@ scnCallback ss hw scn sn
     | evt == SC.sCN_MARGINCLICK         = DR.toggleBreakPoint ss hw scn sn
     | otherwise = return ()
 
-    where evt = SI.notifyGetCode sn
+    where evt = (fromIntegral (SI.notifyGetCode sn) :: Int)
 
 updateMenus :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
 updateMenus ss hw scn = do

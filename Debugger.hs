@@ -33,10 +33,14 @@ onDebugDebug ss tw = do
     mfp <- SS.twFilePath tw
     case mfp of
         Just fp -> do
-            mtw <- GH.openDebugWindow ss
-            case mtw of
-                Just tw -> SS.ssQueueFunction ss $ startDebug ss tw fp
-                Nothing -> return ()
+            id <- SI.ghciNew "" ""
+            ms <- SI.ghciWaitForResponse id "Prelude> " 10000
+            case ms of 
+                Just s -> do
+                    SS.ssDebugInfo ss s
+                    SS.dsSetSessionId ss id
+                    startDebug ss fp
+                Nothing -> SS.ssDebugError ss "GHCI didn't start"
         Nothing -> return ()
 
 toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
@@ -63,32 +67,32 @@ toggleBreakPoint ss hw scn sn = do
         SS.ssDebugInfo ss s 
         return ()
     
-startDebug :: SS.Session -> SS.TextWindow -> String -> IO ()
-startDebug ss tw fp = do
+startDebug :: SS.Session -> String -> IO ()
+startDebug ss fp = do
     --  delete object file, to force GHCi to run in interpretative mode
     result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-    let seq = [(load ss tw fp), (getModulesLookup ss tw >>= setBreakPoints ss tw)]
+    let seq = [(load ss fp), (getModulesLookup ss >>= setBreakPoints ss)]
     ok <- MI.doUntilFalseIO seq
     if ok then SS.ssSetStateBit ss SS.ssStateDebugging
     else infoDialog (SS.ssFrame ss) CN.programTitle "Debug startup failed" 
 
-load :: SS.Session -> SS.TextWindow -> String -> IO Bool
-load ss tw fp = do
-    ms <- sendCommand ss tw $ ":load " ++ fp
+load :: SS.Session -> String -> IO Bool
+load ss fp = do
+    ms <- sendCommand ss (":load " ++ fp) "Main> " 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
-deleteBreakPoints :: SS.Session -> SS.TextWindow -> IO Bool
-deleteBreakPoints ss tw = do
-    ms <- sendCommand ss tw ":delete *" 
+deleteBreakPoints :: SS.Session -> IO Bool
+deleteBreakPoints ss = do
+    ms <- sendCommand ss ":delete *" "Main> " 1000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
-getModulesLookup :: SS.Session -> SS.TextWindow -> IO ([(String, String)])
-getModulesLookup ss tw = do
-    ms <- sendCommand ss tw $ ":show modules" 
+getModulesLookup :: SS.Session -> IO ([(String, String)])
+getModulesLookup ss = do
+    ms <- sendCommand ss ":show modules" "Main> " 1000 
     case ms of
         Just s -> return $ map getModuleLookup (lines s)           
         Nothing -> return [] 
@@ -101,11 +105,11 @@ getModuleLookup s =
     else
         ("", "")
 
-setBreakPoints :: SS.Session -> SS.TextWindow -> [(String, String)] -> IO Bool
-setBreakPoints ss tw modules = do
+setBreakPoints :: SS.Session -> [(String, String)] -> IO Bool
+setBreakPoints ss modules = do
     bps <- SS.dsGetBreakPoints ss
     bps' <- foldM (\bps' bp -> do
-        mno <- setBreakPoint ss tw bp modules
+        mno <- setBreakPoint ss bp modules
         case mno of
             Just no -> return $ (SS.dsSetBreakPointNo bp no) : bps'
             Nothing -> return $ bp : bps') [] bps
@@ -115,37 +119,35 @@ setBreakPoints ss tw modules = do
     else
         return False
   
-setBreakPoint :: SS.Session -> SS.TextWindow -> SS.BreakPoint -> [(String, String)] -> IO (Maybe Int)
-setBreakPoint ss tw bp modules = do
+setBreakPoint :: SS.Session -> SS.BreakPoint -> [(String, String)] -> IO (Maybe Int)
+setBreakPoint ss bp modules = do
     l <- SC.markerLineFromHandle (SS.dsEditor bp) (SS.dsHandle bp)
     let mod = maybe "" id $ lookup (takeFileName $ SS.dsFilePath bp) modules
-    ms <- sendCommand ss tw $ ":break " ++ mod ++ " " ++ (show l)
+    ms <- sendCommand ss  (":break " ++ mod ++ " " ++ (show l))  "Main> " 1000
     case ms of
         Just s -> do
-            if MI.stringStartsWith s "Breakpoint" then
-                return $ MI.scanInt s
+            let ws = words s
+            if ws !! 0 == "Breakpoint" then
+                return $ Just (read (ws !! 1) :: Int)
             else 
                 return Nothing
         Nothing -> return Nothing 
 
-sendCommand :: SS.Session -> SS.TextWindow -> String -> IO (Maybe String)
-sendCommand ss tw cmd = do
-    let hwnd = SS.twHwnd tw
-    SS.dsClearDebugOutput ss
-    GH.sendCommand hwnd cmd
-    waitForResponse ss 100 100
+sendCommand :: SS.Session -> String -> String -> Int -> IO (Maybe String)
+sendCommand ss cmd eod timeout= do
+    id <- SS.dsGetSessionId ss
+    ms <- SI.ghciSendCommandSynch id cmd eod timeout
+    case ms of 
+        Just s -> do
+            SS.ssDebugInfo ss $ "response to command: " ++ cmd
+            SS.ssDebugInfo ss s
+            return ms
+        Nothing -> do
+            SS.ssDebugError ss $ "bad response to command: " ++ cmd
+            return Nothing
 
--- wait for response from GHCI, try n times with delay ms inbetween
-waitForResponse :: SS.Session -> Int -> Int -> IO (Maybe String)
-waitForResponse _ 0 _  = return Nothing
-waitForResponse ss n delay = do
-    threadDelay (2000 * 1000)
-    s <- SS.dsGetDebugOutput ss
-    return (Just s)
-{-
-    if MI.stringEndsWith s "Main> " then return $ Just s
-    else threadDelay (delay * 1000) >> waitForResponse ss (n-1) delay
--}
+    
+   
 
 
 

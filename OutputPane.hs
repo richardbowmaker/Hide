@@ -106,9 +106,9 @@ addOutputTab ss fileOpen = do
     
     -- configure editor
     SC.setLexer scn (fromIntegral SC.sCLEX_CONTAINER :: Int)
-    SC.setAStyle scn (fromIntegral SC.sTYLE_DEFAULT :: Word64) CN.black CN.white 9 "Courier New"
+    SC.setAStyle scn SC.sTYLE_DEFAULT CN.black CN.white 9 "Courier New"
     SC.styleClearAll scn
-    SC.setAStyle scn (fromIntegral SC.sCE_H_DEFAULT :: Word64) CN.black CN.white 9 "Courier New"
+    SC.setAStyle scn SC.sCE_H_DEFAULT CN.black CN.white 9 "Courier New"
     SC.setReadOnly scn True
 
     SC.setSelectionMode scn SC.sC_SEL_LINES

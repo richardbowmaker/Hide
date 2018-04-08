@@ -279,6 +279,7 @@ onClosing ss previous = do
     (auiManagerUnInit . SS.ssAuiMgr) ss
     (windowDestroy . SS.ssFrame) ss
     SI.uninitialise
+    propagateEvent
     previous
     return ()
 
