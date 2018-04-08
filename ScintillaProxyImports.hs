@@ -2,8 +2,6 @@
 module ScintillaProxyImports
 (
     SCNotification,
-    c_ScintillaProxyInitialise,
-    c_ScintillaProxyUninitialise,
     c_ScnNewEditor,
     c_ScnDestroyEditor,
     c_ScnSetEventHandler,
@@ -32,6 +30,14 @@ module ScintillaProxyImports
     c_GhciTerminalGetText,
     c_GhciTerminalClear,
     c_GhciTerminalCreateCallback,
+    ghciNew,
+    ghciClose,
+    ghciSetEventHandler,
+    ghciSendCommand,
+    ghciSendCommandSynch,
+    ghciWaitForResponse,
+    initialise,
+    uninitialise,
     notifyGetHwnd,
     notifyGetCode,
     notifyGetPosition,
@@ -44,18 +50,17 @@ module ScintillaProxyImports
     snUpdated
 ) where 
   
-import Graphics.Win32.GDI.Types (HWND)
+import Control.Monad (liftM)
+import Data.Int (Int32, Int64)
+import Data.Word (Word32, Word64)
 import Foreign.C.String (CString, peekCString, withCString, withCStringLen)
 import Foreign.Marshal.Alloc (alloca)
 import Foreign.Marshal.Utils (fromBool)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Foreign.Storable (Storable, alignment, sizeOf, peek, poke, pokeByteOff, peekByteOff)
+import Graphics.Win32.GDI.Types (HWND)
 
-import Data.Int (Int32, Int64)
-import Data.Word (Word32, Word64)
-
-
-foreign import ccall safe "ScintillaProxyInitialise"   c_ScintillaProxyInitialise :: IO Bool      
+foreign import ccall safe "ScintillaProxyInitialise"   c_ScintillaProxyInitialise :: IO Bool     
 foreign import ccall safe "ScintillaProxyUninitialise" c_ScintillaProxyUninitialise :: IO ()   
 
 -- imports from ScintillaProxy.dll
@@ -68,8 +73,8 @@ foreign import ccall safe "ScnAddPopupMenuItem" c_ScnAddPopupMenuItem   ::
     HWND -> Int32 -> CString -> FunPtr (Int -> IO ()) -> FunPtr (Int -> IO Int) -> IO ()      
 
 -- direct call to Scintilla, different aliases simplify conversion to WPARAM and LPARAM types 
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
-foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO Int64
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO Int64
 
 -- callback wrappers
 foreign import ccall safe "wrapper" c_ScnCreateCallback ::
@@ -98,19 +103,105 @@ foreign import ccall safe "GhciTerminalGetTextLength"   c_GhciTerminalGetTextLen
 foreign import ccall safe "GhciTerminalGetText"         c_GhciTerminalGetText           :: HWND -> CString -> Int32 -> IO Int32 
 foreign import ccall safe "GhciTerminalClear"           c_GhciTerminalClear             :: HWND -> IO ()
 
-
 -- callback wrapper
 foreign import ccall safe "wrapper" c_GhciTerminalCreateCallback ::
     (HWND -> Int -> CString -> IO ()) -> IO (FunPtr (HWND -> Int -> CString -> IO ()))
-
-{-    
-foreign import ccall safe "GhciNew"             c_GhciNew               :: CString -> CString -> IO Int32
-foreign import ccall safe "GhciClose"           c_GhciClose             :: Int32 -> IO ()
-foreign import ccall safe "GhciSetEventHandler" c_GhciSetEventHandler   :: Int32 -> FunPtr (HWND -> Int -> CString -> IO ()) -> data -> IO ()
-foreign import ccall safe "GhciSendCommand"     c_GhciSendCommand       :: HWND -> CString -> IO HWND 
--}
     
--- Structure for Scintilla Notification (64 bit version)
+foreign import ccall safe "GhciNew"                 c_GhciNew               :: CString -> CString -> IO Int32
+foreign import ccall safe "GhciClose"               c_GhciClose             :: Int32 -> IO ()
+foreign import ccall safe "GhciSetEventHandler"     c_GhciSetEventHandler   :: Int32 -> FunPtr (Int32 -> CString -> Word64 -> IO ()) -> Word64 -> IO ()
+foreign import ccall safe "GhciSendCommand"         c_GhciSendCommand       :: Int32 -> CString -> IO () 
+foreign import ccall safe "GhciSendCommandSynch"    c_GhciSendCommandSynch  :: Int32 -> CString -> CString -> Word64 -> Ptr CString -> IO Int32
+foreign import ccall safe "GhciWaitForResponse"     c_GhciWaitForResponse   :: Int32 -> CString -> Word64 -> Ptr CString -> IO Int32
+  
+-- callback wrapper
+foreign import ccall safe "wrapper" c_GhciCreateCallback ::
+    (Int32 -> CString -> Word64 -> IO ()) -> IO (FunPtr (Int32 -> CString -> Word64 -> IO ()))
+
+-----------------------------------------------
+
+initialise :: IO Bool
+initialise = do
+    b <- c_ScintillaProxyInitialise
+    return b -- $ b /= 0
+
+uninitialise :: IO ()
+uninitialise = c_ScintillaProxyUninitialise
+
+-----------------------------------------------
+{-
+SI.c_ScnSendEditorIS (getHwnd e) sCI_SETTEXT 0 cs)
+SI.c_ScnSendEditorII
+
+
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorII :: HWND -> Word32 -> Word64 -> Int64 -> IO (Int64)
+foreign import ccall safe "ScnSendEditor" c_ScnSendEditorIS :: HWND -> Word32 -> Word64 -> CString -> IO (Int64)
+-}
+sciSendEditorII :: HWND -> Int -> Int -> Int -> IO Int
+sciSendEditorII h code wp lp = do
+    res <- c_ScnSendEditorII h (fromIntegral code :: Word32) (fromIntegral wp :: Word64) (fromIntegral lp :: Int64)
+    return (fromIntegral res :: Int)
+
+
+
+-- sciSendEditorIS :: HWND -> Int -> Int -> CString -> IO Int
+
+-----------------------------------------------
+
+ghciNew :: String -> String -> IO Int
+ghciNew options file = do
+    id <- withCString options (\o ->
+            withCString file (\f -> do
+                c_GhciNew o f))
+    return (fromIntegral id :: Int)
+
+ghciClose :: Int -> IO ()
+ghciClose id = c_GhciClose (fromIntegral id :: Int32)
+
+ghciSetEventHandler :: Int -> (Int -> String -> IO()) -> IO ()
+ghciSetEventHandler id fn = do
+    cb <- c_GhciCreateCallback $ ghciEventHandler fn
+    c_GhciSetEventHandler (fromIntegral id :: Int32) cb 0
+
+ghciEventHandler :: (Int -> String -> IO()) -> Int32 -> CString -> Word64 -> IO ()
+ghciEventHandler handler id cstr _ = 
+    peekCString cstr >>= handler (fromIntegral id :: Int)
+
+ghciSendCommand :: Int -> String -> IO ()
+ghciSendCommand id cmd = 
+    withCString cmd (\cs -> c_GhciSendCommand (fromIntegral id :: Int32) cs)
+
+ghciSendCommandSynch :: Int -> String -> String -> Int -> IO (Maybe String)
+ghciSendCommandSynch id cmd eod timeout = 
+    alloca (\pr ->
+        withCString cmd (\ccmd -> 
+            withCString eod (\ceod -> do
+                res <- c_GhciSendCommandSynch 
+                        (fromIntegral id :: Int32) 
+                        ccmd 
+                        ceod
+                        (fromIntegral timeout :: Word64)
+                        pr            
+                if (res /= 0) then 
+                    liftM Just $ peekCString =<< peek pr
+                else 
+                    return Nothing)))
+               
+ghciWaitForResponse :: Int -> String -> Int -> IO (Maybe String)
+ghciWaitForResponse id eod timeout = 
+    alloca (\pr ->
+        withCString eod (\ceod -> do
+            res <- c_GhciWaitForResponse 
+                    (fromIntegral id :: Int32) 
+                    ceod
+                    (fromIntegral timeout :: Word64)
+                    pr            
+            if (res /= 0) then 
+                liftM Just $ peekCString =<< peek pr
+            else 
+                return Nothing))
+
+    -- Structure for Scintilla Notification (64 bit version)
 -- See Scintilla.h SCNotification for original       
 data  SCNotification = SCNotification {
                 snPtrHwndFrom     :: Word64,

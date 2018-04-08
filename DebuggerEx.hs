@@ -26,6 +26,8 @@ import System.Process
 import System.Process.Common
 import System.Timeout (timeout)
 
+import qualified ScintillaProxyImports as SI
+
 type TString = TVar String
 
 main = start mainGUI
@@ -33,31 +35,39 @@ main = start mainGUI
 mainGUI :: IO ()
 mainGUI = do
 
-    ts <- atomically $ newTVar ""
-  
-    -- main window
-    mf <- frame []    
-    set mf [text := "Starter"]  
-     
-     -- create statusbar field
-    sf <- statusField []
+    ok <- SI.initialise
 
-    -- set the statusbar and menubar
-    set mf [statusBar := [sf]]
+    if ok then do
 
-    tc <- textCtrl mf [size := (Size 800 800)]
-    b1 <- button mf [text:= "Click 1", size := (Size 100 50), on command := onB1 tc ts]
-    b2 <- button mf [text:= "GHCI", size := (Size 100 50), on command := runGhci ts]
+        ts <- atomically $ newTVar ""
+      
+        -- main window
+        mf <- frame []    
+        set mf [text := "Starter"]  
+         
+         -- create statusbar field
+        sf <- statusField []
 
-    set mf [layout:= column 10 [(row 10 [fill $ widget b1, fill $ widget b2]), fill $ widget tc]]
-    set mf [size := (Size 800 800)]
+        -- set the statusbar and menubar
+        set mf [statusBar := [sf]]
+        set mf [on closing :~ onClosing mf]
 
-    -- create a timer that updates the display
-    t <- timer mf [interval := 100, on command := onTimer ts tc] 
 
-    set sf [text:= "my status"]
-       
-    return ()
+        tc <- textCtrl mf [size := (Size 800 800)]
+        b1 <- button mf [text:= "Click 1", size := (Size 100 50), on command := onB1 tc]
+        b2 <- button mf [text:= "GHCI", size := (Size 100 50), on command := onB2 tc]
+
+        set mf [layout:= column 10 [(row 10 [fill $ widget b1, fill $ widget b2]), fill $ widget tc]]
+        set mf [size := (Size 800 800)]
+
+        -- create a timer that updates the display
+        t <- timer mf [interval := 100, on command := onTimer ts tc] 
+
+        set sf [text:= "my status"]
+           
+        return ()
+
+    else return ()
 
 onTimer :: TString -> TextCtrl () -> IO ()
 onTimer ts tc = do
@@ -68,8 +78,31 @@ onTimer ts tc = do
     if length s > 0 then addText tc s
     else return ()
 
+{-
 onB1 :: TextCtrl () -> TString -> IO ()
 onB1 tc ts = (forkIO $ addLineTS ts "button 1") >> return ()
+-}
+
+onB1 :: TextCtrl () -> IO ()
+onB1 tc = do
+    id <- SI.ghciNew "" ""
+    ms <- SI.ghciWaitForResponse id "Prelude> " 10000
+    case ms of
+        Just s -> addLine tc s
+        Nothing -> addLine tc "No response"
+
+onB2 :: TextCtrl () -> IO ()
+onB2 tc = do
+    ms <- SI.ghciSendCommandSynch 1 ":browse" "Prelude> " 10000
+    case ms of
+        Just s -> addLine tc s
+        Nothing -> addLine tc "No response"
+
+onClosing :: Frame () -> (IO ()) -> IO ()
+onClosing mf previous = do 
+    SI.uninitialise
+    propagateEvent
+    return ()
 
 addTextTS :: TString -> String -> IO ()
 addTextTS ts s = atomically $ modifyTVar' ts (\s' -> (s' ++ s))

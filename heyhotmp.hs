@@ -61,7 +61,7 @@ mainGUI = do
         -- set the statusbar and menubar
         set mf [statusBar := [sf]]
 
-        set mf [on closing :~ onClosing ss]
+        set mf [on closing := onClosing ss]
         
         -- create a timer that updates the display
         t <- timer mf [interval := 100, on command := SS.ssRunFunctionQueue ss] 
@@ -78,7 +78,7 @@ setUpMainWindow :: Frame () -> StatusField -> IO SS.Session
 setUpMainWindow mf sf = do 
 
     am <- auiManagerCreate mf wxAUI_MGR_DEFAULT
-      
+     
     -- add dockable tree
     tree <- MI.createTree mf
     api <- auiPaneInfoCreateDefault
@@ -143,6 +143,8 @@ setUpMainWindow mf sf = do
 
     -- update the manager display
     auiManagerUpdate am
+
+
     
     -- setup the menus
     menus <- setupMenus mf
@@ -271,15 +273,14 @@ setupMenus mf  = do
 -- Event handlers
 ------------------------------------------------------------    
 
-onClosing :: SS.Session -> (IO ()) -> IO ()
-onClosing ss previous = do
+onClosing :: SS.Session -> IO ()
+onClosing ss = do
     OT.closeOutputWindow ss
     GH.closeAll ss
     FM.fileCloseAll ss
     (auiManagerUnInit . SS.ssAuiMgr) ss
     (windowDestroy . SS.ssFrame) ss
     SI.uninitialise
-    previous
     return ()
 
 onTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
