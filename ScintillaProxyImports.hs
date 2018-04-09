@@ -32,6 +32,7 @@ module ScintillaProxyImports
     ghciClose,
     ghciSetEventHandler,
     ghciSendCommand,
+    ghciSendCommandAsynch,
     ghciSendCommandSynch,
     ghciWaitForResponse,
     initialise,
@@ -114,6 +115,7 @@ foreign import ccall safe "GhciNew"                 c_GhciNew               :: C
 foreign import ccall safe "GhciClose"               c_GhciClose             :: Int32 -> IO ()
 foreign import ccall safe "GhciSetEventHandler"     c_GhciSetEventHandler   :: Int32 -> FunPtr (Int32 -> CString -> Word64 -> IO ()) -> Word64 -> IO ()
 foreign import ccall safe "GhciSendCommand"         c_GhciSendCommand       :: Int32 -> CString -> IO () 
+foreign import ccall safe "GhciSendCommandAsynch"   c_GhciSendCommandAsynch :: Int32 -> CString -> CString -> IO ()
 foreign import ccall safe "GhciSendCommandSynch"    c_GhciSendCommandSynch  :: Int32 -> CString -> CString -> Word64 -> Ptr CString -> IO Int32
 foreign import ccall safe "GhciWaitForResponse"     c_GhciWaitForResponse   :: Int32 -> CString -> Word64 -> Ptr CString -> IO Int32
   
@@ -183,6 +185,12 @@ ghciSendCommand :: Int -> String -> IO ()
 ghciSendCommand id cmd = 
     withCString cmd (\cs -> c_GhciSendCommand (fromIntegral id :: Int32) cs)
 
+ghciSendCommandAsynch :: Int -> String -> String -> IO ()
+ghciSendCommandAsynch id cmd eod = 
+    withCString cmd (\ccmd -> 
+        withCString eod (\ceod -> do
+            c_GhciSendCommandAsynch (fromIntegral id :: Int32) ccmd ceod))
+               
 ghciSendCommandSynch :: Int -> String -> String -> Int -> IO (Maybe String)
 ghciSendCommandSynch id cmd eod timeout = 
     alloca (\pr ->

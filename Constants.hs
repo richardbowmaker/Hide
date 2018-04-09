@@ -32,6 +32,9 @@ module Constants
     menuBuildGhci,
     menuDebugRun,
     menuDebugDebug,
+    menuDebugStop,
+    menuDebugContinue,
+    menuDebugStep,
     menuDebugNextError,
     menuDebugPreviousError,
     menuWindowGhci,
@@ -153,23 +156,32 @@ menuDebugRun = 25
 menuDebugDebug :: Int
 menuDebugDebug = 26
 
+menuDebugStop :: Int
+menuDebugStop = 27
+
+menuDebugContinue :: Int
+menuDebugContinue = 28
+
+menuDebugStep :: Int
+menuDebugStep = 29
+
 menuDebugNextError :: Int
-menuDebugNextError = 27
+menuDebugNextError = 30
 
 menuDebugPreviousError :: Int
-menuDebugPreviousError = 28
+menuDebugPreviousError = 31
 
 menuWindowGhci :: Int
-menuWindowGhci = 29
+menuWindowGhci = 32
 
 menuWindowOutput :: Int
-menuWindowOutput = 30
+menuWindowOutput = 33
 
 menuTestTest :: Int
-menuTestTest = 31
+menuTestTest = 34
 
 menuHelpAbout :: Int
-menuHelpAbout = 32
+menuHelpAbout = 35
 
 -----------------------------
 -- menu names
@@ -204,6 +216,9 @@ menuNames = [   (Menu menuFileOpen           "Open"             "Ctrl-O"        
                 (Menu menuBuildGhci          "Open GHCI"        "Alt-F11"       "Open file in GHCI"),
                 (Menu menuDebugRun           "Run"              "F5"            "Run program"),
                 (Menu menuDebugDebug         "Debug"            ""              "Run program in debugger"),
+                (Menu menuDebugStop          "Debug Stop"       "Shift-F5"      "Stop debugging"),
+                (Menu menuDebugContinue      "Debug Continue"   "Shift-F10"     "Continue in debugger"),
+                (Menu menuDebugStep          "Debug Step"       "F10"           "Single step debugger"),
                 (Menu menuDebugNextError     "Next error"       "F4"            "Goto next compile error"),
                 (Menu menuDebugPreviousError "Previous error"   "Shift-F4"      "Goto previous compile error"),
                 (Menu menuWindowGhci         "GHCI"             "F11"           "Start GHCI"),

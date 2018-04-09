@@ -212,6 +212,9 @@ setupMenus mf  = do
     menuDebug               <- menuPane             [text := "Debug"]
     menuDebugRun            <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugRun),            help := (CN.menuHelp' CN.menuDebugRun)]
     menuDebugDebug          <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugDebug),          help := (CN.menuHelp' CN.menuDebugDebug)]
+    menuDebugStop           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStop),           help := (CN.menuHelp' CN.menuDebugStop)]
+    menuDebugContinue       <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugContinue),       help := (CN.menuHelp' CN.menuDebugContinue)]
+    menuDebugStep           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStep),           help := (CN.menuHelp' CN.menuDebugStep)]
     menuAppendSeparator menuDebug
     menuDebugNextError      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugNextError),      help := (CN.menuHelp' CN.menuDebugNextError)]
     menuDebugPreviousError  <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugPreviousError),  help := (CN.menuHelp' CN.menuDebugPreviousError)]
@@ -253,12 +256,14 @@ setupMenus mf  = do
                                     (CN.menuBuildGhci,           menuBuildGhci),
                                     (CN.menuDebugRun,            menuDebugRun),
                                     (CN.menuDebugDebug,          menuDebugDebug),
+                                    (CN.menuDebugStop,           menuDebugStop),
+                                    (CN.menuDebugContinue,       menuDebugContinue),
+                                    (CN.menuDebugStep,           menuDebugStep),
                                     (CN.menuDebugNextError,      menuDebugNextError),
                                     (CN.menuDebugPreviousError,  menuDebugPreviousError),
                                     (CN.menuWindowGhci,          menuWindowGhci),
                                     (CN.menuWindowOutput,        menuWindowOutput),
                                     (CN.menuTestTest,            menuTestTest)]
-
     
     -- create Toolbar
     tbar   <- toolBar mf []

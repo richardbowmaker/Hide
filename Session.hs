@@ -120,6 +120,7 @@ module Session
     ssSetStateBit,
     ssStateCompile,
     ssStateDebugging,
+    ssStateRunning,
     ssStatus,
     ssTestState,
     ssToString,
@@ -300,6 +301,9 @@ ssStateCompile = 1
 
 ssStateDebugging :: Int
 ssStateDebugging = 2
+
+ssStateRunning :: Int
+ssStateRunning = 3
 
 ----------------------------------------------------------------
 -- Comp error

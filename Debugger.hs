@@ -2,6 +2,9 @@
 module Debugger
 ( 
     onDebugDebug,
+    onDebugStop,
+    onDebugContinue,
+    onDebugStep,
     toggleBreakPoint
 
 ) where 
@@ -39,9 +42,19 @@ onDebugDebug ss tw = do
                 Just s -> do
                     SS.ssDebugInfo ss s
                     SS.dsSetSessionId ss id
-                    startDebug ss fp
+                    startDebug ss id fp
+                    return ()
                 Nothing -> SS.ssDebugError ss "GHCI didn't start"
         Nothing -> return ()
+
+onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStop ss tw = stopDebug ss
+
+onDebugContinue :: SS.Session -> SS.TextWindow -> IO ()
+onDebugContinue ss tw = continue ss >> return ()
+
+onDebugStep :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStep ss tw = step ss >> return ()
 
 toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 toggleBreakPoint ss hw scn sn = do
@@ -67,41 +80,73 @@ toggleBreakPoint ss hw scn sn = do
         SS.ssDebugInfo ss s 
         return ()
     
-startDebug :: SS.Session -> String -> IO ()
-startDebug ss fp = do
-    --  delete object file, to force GHCi to run in interpretative mode
-    result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-    let seq = [(load ss fp), (getModulesLookup ss >>= setBreakPoints ss)]
+startDebug :: SS.Session -> Int -> String -> IO Bool
+startDebug ss id fp = do
+    -- delete object file, to force GHCi to run in interpretative mode
+    -- result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
+    SI.ghciSetEventHandler id $ eventHandler ss
+    let seq = [(load ss fp), (getModulesLookup ss >>= setBreakPoints ss), (run ss)]
     ok <- MI.doUntilFalseIO seq
-    if ok then SS.ssSetStateBit ss SS.ssStateDebugging
-    else infoDialog (SS.ssFrame ss) CN.programTitle "Debug startup failed" 
+    if ok then do
+        SS.ssSetStateBit ss SS.ssStateDebugging
+        return True
+    else do
+        SS.ssDebugError ss $ "Debug startup failed" 
+        return False
+
+stopDebug :: SS.Session -> IO ()
+stopDebug ss = do
+    sendCommand ss ":quit\n"
+    SS.ssClearStateBit ss SS.ssStateDebugging
+    SS.ssClearStateBit ss SS.ssStateRunning
+    id <- SS.dsGetSessionId ss
+    SI.ghciClose id
+    SS.dsSetSessionId ss 0
 
 load :: SS.Session -> String -> IO Bool
 load ss fp = do
-    ms <- sendCommand ss (":load " ++ fp) "Main> " 30000
+    ms <- sendCommandSynch ss (":load *" ++ fp) "Main> " 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
+run :: SS.Session -> IO Bool
+run ss = do
+    SS.ssSetStateBit ss SS.ssStateRunning
+    sendCommandAsynch ss "main\n" "Main> "
+    return True
+
+continue :: SS.Session -> IO Bool
+continue ss = do
+    SS.ssSetStateBit ss SS.ssStateRunning    
+    sendCommandAsynch ss ":continue\n" "Main> "
+    return True
+
+step :: SS.Session -> IO Bool
+step ss = do
+    SS.ssSetStateBit ss SS.ssStateRunning
+    sendCommandAsynch ss ":step\n" "Main> "
+    return True
+
 deleteBreakPoints :: SS.Session -> IO Bool
 deleteBreakPoints ss = do
-    ms <- sendCommand ss ":delete *" "Main> " 1000
+    ms <- sendCommandSynch ss ":delete *" "Main> " 1000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
 getModulesLookup :: SS.Session -> IO ([(String, String)])
 getModulesLookup ss = do
-    ms <- sendCommand ss ":show modules" "Main> " 1000 
+    ms <- sendCommandSynch ss ":show modules" "Main> " 1000 
     case ms of
-        Just s -> return $ map getModuleLookup (lines s)           
+        Just s -> return $ map getModuleLookup (lines s) 
         Nothing -> return [] 
 
 getModuleLookup :: String -> (String, String)
 getModuleLookup s = 
     let ts = words s in
     if (length ts > 2) then
-        (takeFileName $ ts !! 2, ts !! 0)
+        ((init . takeFileName) $ ts !! 2, ts !! 0)
     else
         ("", "")
 
@@ -123,7 +168,7 @@ setBreakPoint :: SS.Session -> SS.BreakPoint -> [(String, String)] -> IO (Maybe 
 setBreakPoint ss bp modules = do
     l <- SC.markerLineFromHandle (SS.dsEditor bp) (SS.dsHandle bp)
     let mod = maybe "" id $ lookup (takeFileName $ SS.dsFilePath bp) modules
-    ms <- sendCommand ss  (":break " ++ mod ++ " " ++ (show l))  "Main> " 1000
+    ms <- sendCommandSynch ss  (":break " ++ mod ++ " " ++ (show (l+1)))  "Main> " 1000
     case ms of
         Just s -> do
             let ws = words s
@@ -133,8 +178,18 @@ setBreakPoint ss bp modules = do
                 return Nothing
         Nothing -> return Nothing 
 
-sendCommand :: SS.Session -> String -> String -> Int -> IO (Maybe String)
-sendCommand ss cmd eod timeout= do
+sendCommand :: SS.Session -> String -> IO ()
+sendCommand ss cmd = do
+    id <- SS.dsGetSessionId ss
+    SI.ghciSendCommand id cmd 
+
+sendCommandAsynch :: SS.Session -> String -> String -> IO ()
+sendCommandAsynch ss cmd eod = do
+    id <- SS.dsGetSessionId ss
+    SI.ghciSendCommandAsynch id cmd eod
+    
+sendCommandSynch :: SS.Session -> String -> String -> Int -> IO (Maybe String)
+sendCommandSynch ss cmd eod timeout = do
     id <- SS.dsGetSessionId ss
     ms <- SI.ghciSendCommandSynch id cmd eod timeout
     case ms of 
@@ -145,8 +200,18 @@ sendCommand ss cmd eod timeout= do
         Nothing -> do
             SS.ssDebugError ss $ "bad response to command: " ++ cmd
             return Nothing
+ 
+eventHandler :: SS.Session -> Int -> String -> IO ()
+eventHandler ss id str = do
+    SS.ssDebugInfo ss $ "event handler: " ++ str
+    b <- SS.ssTestState ss SS.ssStateRunning
+    SS.ssClearStateBit ss SS.ssStateRunning
+    return ()
 
     
+    
+
+
    
 
 
