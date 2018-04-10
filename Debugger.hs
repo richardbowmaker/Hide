@@ -27,6 +27,7 @@ import qualified System.FilePath.Windows as Win (dropExtension)
 import qualified Constants as CN
 import qualified Ghci as GH
 import qualified Misc as MI
+import qualified Parsers as PR
 import qualified Scintilla as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
@@ -205,8 +206,12 @@ eventHandler :: SS.Session -> Int -> String -> IO ()
 eventHandler ss id str = do
     SS.ssDebugInfo ss $ "event handler: " ++ str
     b <- SS.ssTestState ss SS.ssStateRunning
-    SS.ssClearStateBit ss SS.ssStateRunning
-    return ()
+    if b then do
+        case PR.parseDebuggerOutput str of
+            Just dg -> SS.ssDebugInfo ss $ "Debugger output parsed OK\n" ++ show dg
+            Nothing -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
+        SS.ssClearStateBit ss SS.ssStateRunning
+    else return () -- should send this to the output pane
 
     
     

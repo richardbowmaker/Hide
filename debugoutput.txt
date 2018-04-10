@@ -1,0 +1,19 @@
+GHCi, version 8.0.1: http://www.haskell.org/ghc/  :? for help
+[1 of 1] Compiling Main             ( D:\_Rick's\haskell\simple.hs, interpreted )
+Ok, modules loaded: Main.
+*Main> 
+
+*Main> 
+*Main> :break Main 22
+Breakpoint 0 activated at D:\_Rick's\haskell\simple.hs:22:11-38
+*Main> main
+Stopped in Main.mainGUI, D:\_Rick's\haskell\simple.hs:22:11-38
+_result :: IO (Button ()) = _
+mf :: Frame () = Graphics.UI.WXCore.WxcObject.Object
+                   0x000000000836e700
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main> 

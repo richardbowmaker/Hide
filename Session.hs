@@ -3,6 +3,9 @@ module Session
     BreakPoint,
     CompError,
     CompReport,
+    DebuggerOutput,
+    DebuggerRange,
+    DebuggerValue,
     DebugSession,
     FindText,
     FunctionChannel,
@@ -35,6 +38,9 @@ module Session
     createBreakPoint,
     createDebugSession,
     createDebugWindowType,
+    createDebuggerOutput,
+    createDebuggerRange,
+    createDebuggerValue,
     createGhciWindowType,
     createHideWindow,
     createHideWindows,
@@ -43,6 +49,18 @@ module Session
     createSourceWindowType,
     createTextMenus,
     createTextWindow,
+    doColE,
+    doColS,
+    doFilePath,
+    doFunction,
+    doLineE,
+    doLineS,
+    doModule,
+    doRange,
+    doType,
+    doValue,
+    doValues,
+    doVariable,
     dsAddBreakPoint,
     dsAddDebugOutput,
     dsBreakPointSet,
@@ -55,14 +73,14 @@ module Session
     dsFilePath,
     dsGetBreakPoints,
     dsGetDebugOutput,
+    dsGetSessionId,
     dsHandle,
     dsNo,
     dsSetBreakPointNo,
     dsSetBreakPoints,
+    dsSetSessionId,
     dsUpdateBreakPoints,
     dsUpdateDebugSession,
-    dsSetSessionId,
-    dsGetSessionId,
     ftCurrPos,
     ftFindText,
     ftStartPos, 
@@ -678,6 +696,62 @@ dsClearDebugOutput ss =  atomically $ writeTVar (ssDebugOutput ss) ("")
 
 dsSetBreakPointNo :: BreakPoint -> Int -> BreakPoint
 dsSetBreakPointNo bp no = createBreakPoint (dsEditor bp) (dsFilePath bp ) (dsHandle bp) no
+
+--------------------------------------------
+-- Debugger output
+--------------------------------------------
+
+data DebuggerOutput = DebuggerOutput 
+    { 
+        doModule    :: String, 
+        doFunction  :: String, 
+        doFilePath  :: String,
+        doRange     :: DebuggerRange,
+        doValues    :: [DebuggerValue]
+    }
+
+data DebuggerRange = DebuggerRange
+    {
+        doLineS :: Int,
+        doLineE :: Int,
+        doColS  :: Int,
+        doColE  :: Int
+    }
+
+data DebuggerValue = DebuggerValue 
+    {
+        doVariable  :: String,
+        doType      :: String,
+        doValue     :: String 
+    }
+
+instance Show DebuggerOutput where
+    show (DebuggerOutput mod fn fp dr drs) = 
+        "DebuggerOutput: module = " ++ mod ++ 
+        ", Function = " ++ fn ++
+        ", Filepath = " ++ fp ++
+        "\n  Range = " ++ show dr ++ 
+        (concat $ map (\dr -> "\n" ++ show dr) drs)
+
+instance Show DebuggerValue where
+    show (DebuggerValue var ty val) = 
+        "DebuggerValue: Variable = " ++ var ++ 
+        ", Type = " ++ ty ++
+        ", Value = " ++ val 
+
+instance Show DebuggerRange where
+    show (DebuggerRange ls le cs ce) = 
+        "DebuggerRange: Lines = " ++ show ls ++ " - " ++ show le ++
+        ", Columns = " ++ show cs ++ " - " ++ show ce 
+
+createDebuggerOutput :: String -> String -> String -> DebuggerRange -> [DebuggerValue] -> DebuggerOutput
+createDebuggerOutput mod fn fp dr dvs = (DebuggerOutput mod fn fp dr dvs)
+
+createDebuggerValue :: String -> String -> String -> DebuggerValue
+createDebuggerValue var ty val = (DebuggerValue var ty val)
+  
+createDebuggerRange :: Int -> Int -> Int -> Int -> DebuggerRange
+createDebuggerRange ls le cs ce = (DebuggerRange ls le cs ce)
 
 --------------------------------------------
 -- Function queue
