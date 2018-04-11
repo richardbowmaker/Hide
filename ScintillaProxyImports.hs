@@ -90,7 +90,7 @@ foreign import ccall safe "wrapper" c_ScnCreateHandlerCallback ::
 foreign import ccall safe "wrapper" c_ScnCreateEnabledCallback ::
     (Int -> IO Int) -> IO (FunPtr (Int -> IO Int))
   
-foreign import ccall safe "GhciTerminalNew"             c_GhciTerminalNew               :: HWND -> CString -> CString -> IO HWND 
+foreign import ccall safe "GhciTerminalNew"             c_GhciTerminalNew               :: HWND -> CString -> CString -> CString -> IO HWND 
 foreign import ccall safe "GhciTerminalSetEventHandler" c_GhciTerminalSetEventHandler   :: HWND -> FunPtr (HWND -> Int -> CString -> IO ()) -> IO ()
 foreign import ccall safe "GhciTerminalEnableEvents"    c_GhciTerminalEnableEvents      :: HWND -> IO ()
 foreign import ccall safe "GhciTerminalDisableEvents"   c_GhciTerminalDisableEvents     :: HWND -> IO ()
@@ -111,7 +111,7 @@ foreign import ccall safe "GhciTerminalClear"           c_GhciTerminalClear     
 foreign import ccall safe "wrapper" c_GhciTerminalCreateCallback ::
     (HWND -> Int -> CString -> IO ()) -> IO (FunPtr (HWND -> Int -> CString -> IO ()))
     
-foreign import ccall safe "GhciNew"                 c_GhciNew               :: CString -> CString -> IO Int32
+foreign import ccall safe "GhciNew"                 c_GhciNew               :: CString -> CString -> CString -> IO Int32
 foreign import ccall safe "GhciClose"               c_GhciClose             :: Int32 -> IO ()
 foreign import ccall safe "GhciSetEventHandler"     c_GhciSetEventHandler   :: Int32 -> FunPtr (Int32 -> CString -> Word64 -> IO ()) -> Word64 -> IO ()
 foreign import ccall safe "GhciSendCommand"         c_GhciSendCommand       :: Int32 -> CString -> IO () 
@@ -162,11 +162,12 @@ sciSendEditorIB h code wp lp = do
 
 -----------------------------------------------
 
-ghciNew :: String -> String -> IO Int
-ghciNew options file = do
+ghciNew :: String -> String -> String -> IO Int
+ghciNew options file dir = do
     id <- withCString options (\o ->
-            withCString file (\f -> do
-                c_GhciNew o f))
+            withCString file (\f -> 
+                withCString dir (\d -> do
+                    c_GhciNew o f d)))
     return (fromIntegral id :: Int)
 
 ghciClose :: Int -> IO ()

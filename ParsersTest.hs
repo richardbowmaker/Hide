@@ -123,15 +123,21 @@ instance Show DebuggerRange where
         "DebuggerRange: Lines = " ++ show ls ++ " - " ++ show le ++
         ", Columns = " ++ show cs ++ " - " ++ show ce 
 
-parseDebuggerOutput :: String -> (Maybe DebuggerOutput)
+parseDebuggerOutput :: String -> Maybe DebuggerOutput
 parseDebuggerOutput s = 
     case parse debuggerOutput "" s of
         Left _ -> Nothing
         Right r -> (Just r)
 
+parseDebuggerValue :: String -> Maybe DebuggerValue
+parseDebuggerValue s = 
+    case parse debuggerValue "" s of
+        Left _ -> Nothing
+        Right r -> r
+
 debuggerOutput :: GenParser Char () DebuggerOutput
 debuggerOutput = do
-    string "Stopped in "
+    manyTill anyChar $ string "Stopped in "
     mod <- many1 (noneOf ".")
     char '.'
     fn  <- many1 (noneOf ",")

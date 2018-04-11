@@ -9,8 +9,7 @@ module Debugger
 
 ) where 
  
--- library imports
- 
+-- library imports 
 import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad (foldM)
@@ -19,11 +18,10 @@ import Data.List (lines, lookup, words)
 import Graphics.Win32.GDI.Types (HWND)
 import Graphics.UI.WXCore.Dialogs (infoDialog)
 import System.Directory (removeFile)
-import System.FilePath.Windows (takeFileName)
+import System.FilePath.Windows (takeFileName, takeDirectory)
 import qualified System.FilePath.Windows as Win (dropExtension)
 
 -- project imports
-
 import qualified Constants as CN
 import qualified Ghci as GH
 import qualified Misc as MI
@@ -32,18 +30,18 @@ import qualified Scintilla as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
-onDebugDebug :: SS.Session -> SS.TextWindow -> IO ()
-onDebugDebug ss tw = do
+onDebugDebug :: SS.Session -> SS.TextWindow -> (String -> IO ()) -> IO ()
+onDebugDebug ss tw fileopen = do
     mfp <- SS.twFilePath tw
     case mfp of
         Just fp -> do
-            id <- SI.ghciNew "" ""
+            id <- SI.ghciNew "" "" (takeDirectory fp)
             ms <- SI.ghciWaitForResponse id "Prelude> " 10000
             case ms of 
                 Just s -> do
                     SS.ssDebugInfo ss s
                     SS.dsSetSessionId ss id
-                    startDebug ss id fp
+                    startDebug ss id fp fileopen
                     return ()
                 Nothing -> SS.ssDebugError ss "GHCI didn't start"
         Nothing -> return ()
@@ -60,8 +58,8 @@ onDebugStep ss tw = step ss >> return ()
 toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 toggleBreakPoint ss hw scn sn = do
     l <- SC.getLineFromPosition scn (fromIntegral (SI.snPosition sn) :: Int)
-    m <- SC.markerGet scn l
-    if testBit m CN.breakPointMarker then do
+    markers <- SC.markerGet scn l
+    if testBit markers CN.breakPointMarker then do
         bps <- SS.dsGetBreakPoints ss
         -- remove breakpoint from session
         bps' <- MI.findAndRemoveIO (\bp -> do
@@ -69,31 +67,26 @@ toggleBreakPoint ss hw scn sn = do
             return $ l' == l) bps
         SS.dsUpdateBreakPoints ss (\_ -> bps')
         SC.markerDelete scn l CN.breakPointMarker
-        s <- SS.dsBreakPointsToString ss
-        SS.ssDebugInfo ss s 
-        return ()
+        SS.ssDebugInfo ss =<< SS.dsBreakPointsToString ss 
     else do
         h <- SC.markerAdd scn l CN.breakPointMarker
         mfp <- SS.hwFilePath hw
         let bp = SS.createBreakPoint scn (maybe "" id mfp) h 0 
         SS.dsAddBreakPoint ss bp
-        s <- SS.dsBreakPointsToString ss
-        SS.ssDebugInfo ss s 
-        return ()
+        SS.ssDebugInfo ss =<< SS.dsBreakPointsToString ss
     
-startDebug :: SS.Session -> Int -> String -> IO Bool
-startDebug ss id fp = do
+startDebug :: SS.Session -> Int -> String -> (String -> IO ()) -> IO Bool
+startDebug ss id fp fileopen = do
     -- delete object file, to force GHCi to run in interpretative mode
     -- result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-    SI.ghciSetEventHandler id $ eventHandler ss
-    let seq = [(load ss fp), (getModulesLookup ss >>= setBreakPoints ss), (run ss)]
-    ok <- MI.doUntilFalseIO seq
-    if ok then do
-        SS.ssSetStateBit ss SS.ssStateDebugging
-        return True
-    else do
-        SS.ssDebugError ss $ "Debug startup failed" 
-        return False
+    SI.ghciSetEventHandler id $ eventHandler ss fileopen
+    load ss fp
+    modules <- getModulesLookup ss
+    -- mapM_ (addModule ss) modules
+    setBreakPoints ss modules
+    run ss
+    SS.ssSetStateBit ss SS.ssStateDebugging
+    return True
 
 stopDebug :: SS.Session -> IO ()
 stopDebug ss = do
@@ -107,6 +100,13 @@ stopDebug ss = do
 load :: SS.Session -> String -> IO Bool
 load ss fp = do
     ms <- sendCommandSynch ss (":load *" ++ fp) "Main> " 30000
+    case ms of
+        Just _  -> return True
+        Nothing -> return False
+
+addModule :: SS.Session -> (String, String) -> IO Bool
+addModule ss (_, mod) = do
+    ms <- sendCommandSynch ss (":add *" ++ mod) "Main> " 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
@@ -202,16 +202,36 @@ sendCommandSynch ss cmd eod timeout = do
             SS.ssDebugError ss $ "bad response to command: " ++ cmd
             return Nothing
  
-eventHandler :: SS.Session -> Int -> String -> IO ()
-eventHandler ss id str = do
+eventHandler :: SS.Session -> (String -> IO ()) -> Int -> String -> IO ()
+eventHandler ss fileopen id str = do
     SS.ssDebugInfo ss $ "event handler: " ++ str
     b <- SS.ssTestState ss SS.ssStateRunning
     if b then do
         case PR.parseDebuggerOutput str of
-            Just dg -> SS.ssDebugInfo ss $ "Debugger output parsed OK\n" ++ show dg
-            Nothing -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
+            Just dout -> SS.ssQueueFunction ss $ handleDebuggerOutput ss dout fileopen
+            Nothing   -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
         SS.ssClearStateBit ss SS.ssStateRunning
     else return () -- should send this to the output pane
+
+handleDebuggerOutput :: SS.Session -> SS.DebuggerOutput -> (String -> IO ()) -> IO ()
+handleDebuggerOutput ss dout fileopen = do
+    let fp = SS.doFilePath dout
+        (ls, le, cs, ce) = SS.doGetDebuggerRange dout
+    SS.ssDebugInfo ss $ "Debugger output parsed OK\n" ++ show dout
+    fileopen fp
+    mhw <- SS.hwFindSourceFileWindow ss fp
+    case mhw of 
+        Just hw -> do
+            case SS.hwGetEditor hw of
+                Just scn -> do
+                    SC.markerDeleteAll scn CN.debugMarker
+                    SC.markerAdd scn (ls-1) CN.debugMarker
+                    SC.selectLinesCols scn (ls-1) (cs-1) (le-1) ce
+                    SC.grabFocus scn
+                Nothing  -> return ()
+        Nothing -> return ()   
+    return ()
+
 
     
     

@@ -5,6 +5,7 @@ module Constants
     breakPointMarker,
     bookMarkMarker,
     debug,
+    debugMarker,
     programTitle,
     menuFileOpen,
     menuFileNew,
@@ -60,7 +61,8 @@ module Constants
     braceGood,
     braceBad,
     stringBrown,
-    indents
+    indents,
+    yellow
 )
 where
 
@@ -258,6 +260,9 @@ blue = (rgb 0 0 255)
 green :: COLORREF
 green = (rgb 0 255 0)
 
+yellow :: COLORREF
+yellow = (rgb 255 255 0)
+
 white :: COLORREF
 white = (rgb 0xff 0xff 0xff)
 
@@ -295,5 +300,6 @@ breakPointMarker = 0
 bookMarkMarker :: Int
 bookMarkMarker = 1
 
-
+debugMarker :: Int
+debugMarker = 2
  

@@ -103,7 +103,7 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuBuildClean        (return ())                                                             (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
                         (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn)  (fileOpen ss))          (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
                         (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                                   (liftM not $ SS.ssTestState ss SS.ssStateDebugging)),
-                        (SS.createMenuFunction CN.menuDebugDebug        (DR.onDebugDebug ss tw)                                                 (liftM not $ debugging)),
+                        (SS.createMenuFunction CN.menuDebugDebug        (DR.onDebugDebug ss tw (fileOpen ss))                                   (liftM not $ debugging)),
                         (SS.createMenuFunction CN.menuDebugStop         (DR.onDebugStop ss tw)                                                  (debugging)),
                         (SS.createMenuFunction CN.menuDebugContinue     (DR.onDebugContinue ss tw)                                              (debuggerPaused)),
                         (SS.createMenuFunction CN.menuDebugStep         (DR.onDebugStep ss tw)                                                  (debuggerPaused))
@@ -366,9 +366,8 @@ setSourceFileFocus ss fp = do
             return ()
         Nothing -> return ()
 
-    where   nb = SS.ssEditors ss
+    where nb = SS.ssEditors ss
             
-
 -----------------------------------------------------------------
 -- Scintilla callback
 -----------------------------------------------------------------

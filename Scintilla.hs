@@ -56,11 +56,13 @@ module Scintilla
     gotoPosWithScroll,
     grabFocus,
     isClean,
+    isLineVisible,
     linesOnScreen,
     marginSetText,
     markerAdd,
     markerDefine,
     markerDelete,
+    markerDeleteAll,
     markerDeleteHandle,
     markerGet,
     markerLineFromHandle,
@@ -72,6 +74,7 @@ module Scintilla
     searchNext,
     searchPrev,
     selectAll,
+    selectLinesCols,
     selectWord,
     selectionIsEmpty,
     setAStyle,
@@ -107,7 +110,7 @@ module Scintilla
     sortSelectedText,
     styleClearAll,
     undo,
-    usePopup,
+    usePopup
 ) where 
     
 import Control.Applicative ((<$>), (<*>))
@@ -367,16 +370,22 @@ configureHaskell e = do
 
     -- margin markers
     markerDefine e CN.breakPointMarker sC_MARK_CIRCLE
+    markerSetFore e CN.breakPointMarker CN.red
+    markerSetBack e CN.breakPointMarker CN.red
     markerDefine e CN.bookMarkMarker sC_MARK_BOOKMARK
+    markerSetFore e CN.bookMarkMarker CN.blue
+    markerSetBack e CN.bookMarkMarker CN.blue
+
     setMarginMask e 1 $ sC_MASK_FOLDERS
         .|. (bit CN.breakPointMarker)
         .|. (bit CN.bookMarkMarker)
 
-    markerSetFore e CN.breakPointMarker CN.red
-    markerSetBack e CN.breakPointMarker CN.red
-    markerSetFore e CN.bookMarkMarker   CN.blue
-    markerSetBack e CN.bookMarkMarker   CN.blue
-
+    -- marker with no associated marging
+    -- scintilla will set background colour of whole line, used for debugging
+    markerDefine e CN.debugMarker sC_MARK_ARROW
+    markerSetFore e CN.debugMarker CN.yellow
+    markerSetBack e CN.debugMarker CN.yellow
+    
     return ()
     
 setLexer :: Editor -> Int -> IO ()
@@ -674,6 +683,23 @@ getFirstVisibleLine e = SI.sciSendEditorII (getHwnd e) sCI_GETFIRSTVISIBLELINE  
 linesOnScreen :: Editor -> IO Int
 linesOnScreen e = SI.sciSendEditorII (getHwnd e) sCI_LINESONSCREEN  0 0
 
+-- selectLinesCols e 10 1 12 5, selects text from line 10 col 1 to line 12 col 5
+selectLinesCols :: Editor -> Int -> Int -> Int -> Int -> IO ()
+selectLinesCols e ls cs le ce = do
+    ps <- getPositionFromLine e ls
+    pe <- getPositionFromLine e le
+    nl <- linesOnScreen e
+    setSelectionRange e (ps+cs) (pe+ce)
+    b <- isLineVisible e ls
+    if b then return ()
+    else setFirstVisibleLine e (ls-(nl `div` 2))
+
+isLineVisible :: Editor -> Int -> IO Bool
+isLineVisible e l = do
+    fl <- getFirstVisibleLine e
+    nl <- linesOnScreen e
+    return (l >= fl && l <= (fl+nl-1))
+
 ----------------------------------------------
 -- Tabs 
 ----------------------------------------------
@@ -884,6 +910,9 @@ markerDeleteHandle e h = SI.sciSendEditorIO (getHwnd e) sCI_MARKERDELETEHANDLE h
 
 markerDelete :: Editor -> Int -> Int -> IO ()
 markerDelete e l m = SI.sciSendEditorIO (getHwnd e) sCI_MARKERDELETE l m
+
+markerDeleteAll :: Editor -> Int -> IO ()
+markerDeleteAll e m = SI.sciSendEditorIO (getHwnd e) sCI_MARKERDELETEALL m 0
 
 markerLineFromHandle :: Editor -> Int -> IO Int
 markerLineFromHandle e h = SI.sciSendEditorII (getHwnd e) sCI_MARKERLINEFROMHANDLE h 0

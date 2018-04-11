@@ -53,6 +53,7 @@ module Session
     doColS,
     doFilePath,
     doFunction,
+    doGetDebuggerRange,
     doLineE,
     doLineS,
     doModule,
@@ -752,6 +753,9 @@ createDebuggerValue var ty val = (DebuggerValue var ty val)
   
 createDebuggerRange :: Int -> Int -> Int -> Int -> DebuggerRange
 createDebuggerRange ls le cs ce = (DebuggerRange ls le cs ce)
+
+doGetDebuggerRange :: DebuggerOutput -> (Int, Int, Int, Int)
+doGetDebuggerRange dout = let r = doRange dout in ((doLineS r), (doLineE r), (doColS r), (doColE r))
 
 --------------------------------------------
 -- Function queue

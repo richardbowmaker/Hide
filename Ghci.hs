@@ -114,9 +114,10 @@ open ss fp = do
     -- create panel and embed GHCI window
     let nb = SS.ssOutputs ss
     p <- panel nb []
-    hp <- windowGetHandle p
+    hp <- windowGetHandle p    
     hwnd <- withCString fp (\cfp -> 
-        withCString "-fasm -L. -lScintillaProxy -threaded" (\cop -> SI.c_GhciTerminalNew hp cop cfp))
+                withCString "-fasm -L. -lScintillaProxy -threaded" (\cop ->
+                    withCString (takeDirectory fp) (\cdr -> SI.c_GhciTerminalNew hp cop cfp cdr)))
 
     case (MI.ptrToWord64 hwnd) of
 

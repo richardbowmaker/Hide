@@ -93,7 +93,7 @@ parseDebuggerOutput s =
 
 debuggerOutput :: GenParser Char () SS.DebuggerOutput
 debuggerOutput = do
-    string "Stopped in "
+    manyTill anyChar $ string "Stopped in "
     mod <- many1 (noneOf ".")
     char '.'
     fn  <- many1 (noneOf ",")
@@ -142,12 +142,12 @@ columnRange = do
 debuggerValue :: GenParser Char () (Maybe SS.DebuggerValue)
 debuggerValue = do
     try ( do
-            char '\n'
+            string "\r\n"
             var <- many1 (noneOf " ")
             string " :: "
             ty <- many1 (noneOf "=")
             string "= "
-            val <- many1 (noneOf "\n")
+            val <- many1 (noneOf "\r")
             return $ Just $ SS.createDebuggerValue var (init ty) val)
         <|> 
             (many1 anyChar >> return Nothing)
