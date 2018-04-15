@@ -36,6 +36,8 @@ module Constants
     menuDebugStop,
     menuDebugContinue,
     menuDebugStep,
+    menuDebugStepModule,
+    menuDebugStepLocal,
     menuDebugNextError,
     menuDebugPreviousError,
     menuWindowGhci,
@@ -167,23 +169,29 @@ menuDebugContinue = 28
 menuDebugStep :: Int
 menuDebugStep = 29
 
+menuDebugStepLocal:: Int
+menuDebugStepLocal = 30
+
+menuDebugStepModule :: Int
+menuDebugStepModule = 31
+
 menuDebugNextError :: Int
-menuDebugNextError = 30
+menuDebugNextError = 32
 
 menuDebugPreviousError :: Int
-menuDebugPreviousError = 31
+menuDebugPreviousError = 33
 
 menuWindowGhci :: Int
-menuWindowGhci = 32
+menuWindowGhci = 34
 
 menuWindowOutput :: Int
-menuWindowOutput = 33
+menuWindowOutput = 35
 
 menuTestTest :: Int
-menuTestTest = 34
+menuTestTest = 36
 
 menuHelpAbout :: Int
-menuHelpAbout = 35
+menuHelpAbout = 37
 
 -----------------------------
 -- menu names
@@ -192,41 +200,43 @@ menuHelpAbout = 35
 data Menu = Menu { menuId :: Int, menuTitle :: String, menuKey :: String, menuHelp :: String }
 
 menuNames :: [Menu]
-menuNames = [   (Menu menuFileOpen           "Open"             "Ctrl-O"        "Opens a file"),
-                (Menu menuFileNew            "New"              "Ctrl-N"        "Starts a new file"),
-                (Menu menuFileClose          "Close"            ""              "Closes the current file"),
-                (Menu menuFileCloseAll       "Close All"        ""              "Closes all files"),
-                (Menu menuFileSave           "Save"             "Ctrl-S"        "Saves a file"),
-                (Menu menuFileSaveAs         "Save As ..."      ""              "Saves a file"),
-                (Menu menuFileSaveAll        "Save All"         "Ctrl-Shift-S"  "Saves all files"),
-                (Menu menuFileQuit           "Quit"             "Ctrl-Q"        "Quits HIDE"),
-                (Menu menuEditUndo           "Undo"             "Ctrl-Z"        "Undoes last edit"),
-                (Menu menuEditRedo           "Redo"             "Ctrl-Y"        "Redoes an edit"),
-                (Menu menuEditCut            "Cut"              "Ctrl-X"        "Cut selected text"),
-                (Menu menuEditCopy           "Copy"             "Ctrl-C"        "Copy select text"),
-                (Menu menuEditPaste          "Paste"            "Ctrl-V"        "Paste contents of clipboard"),
-                (Menu menuEditSelectAll      "Select All"       "Ctrl-A"        "Selects all text"),
-                (Menu menuEditFind           "Find"             "Ctrl-F"        "Find text"),
-                (Menu menuEditFindForward    "Find Forward"     "F3"            "Find next occurrence"),
-                (Menu menuEditFindBackward   "Find Backward"    "Shift-F3"      "Find previous occurrence"),
-                (Menu menuEditSort           "Sort"             ""              "Sort selected text"),
-                (Menu menuEditClear          "Clear"            ""              "Clear all text"),
-                (Menu menuBuildCompile       "Compile"          "Ctrl-F7"       "Compiles current file"),
-                (Menu menuBuildBuild         "Build"            "Ctrl-Shift-B"  "Builds the project"),
-                (Menu menuBuildRebuild       "Rebuild"          ""              "Rebuilds the project"),
-                (Menu menuBuildClean         "Clean"            ""              "Cleans the project files"),
-                (Menu menuBuildGhci          "Open GHCI"        "Alt-F11"       "Open file in GHCI"),
-                (Menu menuDebugRun           "Run"              "F5"            "Run program"),
-                (Menu menuDebugDebug         "Debug"            ""              "Run program in debugger"),
-                (Menu menuDebugStop          "Debug Stop"       "Shift-F5"      "Stop debugging"),
-                (Menu menuDebugContinue      "Debug Continue"   "Shift-F10"     "Continue in debugger"),
-                (Menu menuDebugStep          "Debug Step"       "F10"           "Single step debugger"),
-                (Menu menuDebugNextError     "Next error"       "F4"            "Goto next compile error"),
-                (Menu menuDebugPreviousError "Previous error"   "Shift-F4"      "Goto previous compile error"),
-                (Menu menuWindowGhci         "GHCI"             "F11"           "Start GHCI"),
-                (Menu menuWindowOutput       "Output"           "F12"           "Open output window"),
-                (Menu menuTestTest           "Test"             "Ctrl-T"        ""),
-                (Menu menuHelpAbout          "About"            ""              "About HIDE")]
+menuNames = [   (Menu menuFileOpen           "Open"               "Ctrl-O"        "Opens a file"),
+                (Menu menuFileNew            "New"                "Ctrl-N"        "Starts a new file"),
+                (Menu menuFileClose          "Close"              ""              "Closes the current file"),
+                (Menu menuFileCloseAll       "Close All"          ""              "Closes all files"),
+                (Menu menuFileSave           "Save"               "Ctrl-S"        "Saves a file"),
+                (Menu menuFileSaveAs         "Save As ..."        ""              "Saves a file"),
+                (Menu menuFileSaveAll        "Save All"           "Ctrl-Shift-S"  "Saves all files"),
+                (Menu menuFileQuit           "Quit"               "Ctrl-Q"        "Quits HIDE"),
+                (Menu menuEditUndo           "Undo"               "Ctrl-Z"        "Undoes last edit"),
+                (Menu menuEditRedo           "Redo"               "Ctrl-Y"        "Redoes an edit"),
+                (Menu menuEditCut            "Cut"                "Ctrl-X"        "Cut selected text"),
+                (Menu menuEditCopy           "Copy"               "Ctrl-C"        "Copy select text"),
+                (Menu menuEditPaste          "Paste"              "Ctrl-V"        "Paste contents of clipboard"),
+                (Menu menuEditSelectAll      "Select All"         "Ctrl-A"        "Selects all text"),
+                (Menu menuEditFind           "Find"               "Ctrl-F"        "Find text"),
+                (Menu menuEditFindForward    "Find Forward"       "F3"            "Find next occurrence"),
+                (Menu menuEditFindBackward   "Find Backward"      "Shift-F3"      "Find previous occurrence"),
+                (Menu menuEditSort           "Sort"               ""              "Sort selected text"),
+                (Menu menuEditClear          "Clear"              ""              "Clear all text"),
+                (Menu menuBuildCompile       "Compile"            "Ctrl-F7"       "Compiles current file"),
+                (Menu menuBuildBuild         "Build"              "Ctrl-Shift-B"  "Builds the project"),
+                (Menu menuBuildRebuild       "Rebuild"            ""              "Rebuilds the project"),
+                (Menu menuBuildClean         "Clean"              ""              "Cleans the project files"),
+                (Menu menuBuildGhci          "Open GHCI"          "F9"            "Open file in GHCI"),
+                (Menu menuDebugRun           "Run"                "F5"            "Run program"),
+                (Menu menuDebugDebug         "Debug"              ""              "Run program in debugger"),
+                (Menu menuDebugStop          "Debug Stop"         "Shift-F5"      "Stop debugging"),
+                (Menu menuDebugContinue      "Debug Continue"     "Shift-F11"     "Continue in debugger"),
+                (Menu menuDebugStep          "Single step"        "F11"           "Single step debugger"),
+                (Menu menuDebugStepModule    "Single step local"  "F10"           "Single step debugger within current binding"),
+                (Menu menuDebugStepLocal     "Single step module" "F12"           "Single step debugger within module"),
+                (Menu menuDebugNextError     "Next error"         "F4"            "Goto next compile error"),
+                (Menu menuDebugPreviousError "Previous error"     "Shift-F4"      "Goto previous compile error"),
+                (Menu menuWindowGhci         "GHCI"               "Alt-F9"        "Start GHCI"),
+                (Menu menuWindowOutput       "Output"             "F8"            "Open output window"),
+                (Menu menuTestTest           "Test"               "Ctrl-T"        ""),
+                (Menu menuHelpAbout          "About"              ""              "About HIDE")]
                             
 menuText' :: Int -> String
 menuText' id = maybe "" (\m -> (menuTitle m) ++ "\t" ++ (menuKey m)) 

@@ -106,7 +106,9 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuDebugDebug        (DR.onDebugDebug ss tw (fileOpen ss))                                   (liftM not $ debugging)),
                         (SS.createMenuFunction CN.menuDebugStop         (DR.onDebugStop ss tw)                                                  (debugging)),
                         (SS.createMenuFunction CN.menuDebugContinue     (DR.onDebugContinue ss tw)                                              (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStep         (DR.onDebugStep ss tw)                                                  (debuggerPaused))
+                        (SS.createMenuFunction CN.menuDebugStep         (DR.onDebugStep ss tw)                                                  (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepLocal    (DR.onDebugStepLocal ss tw)                                             (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepModule   (DR.onDebugStepModule ss tw)                                            (debuggerPaused))
                     ]
                     (SC.getFocus scn)
                     (SC.isClean scn)
@@ -420,6 +422,8 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuDebugStop
         setm ss tms CN.menuDebugContinue
         setm ss tms CN.menuDebugStep
+        setm ss tms CN.menuDebugStepLocal
+        setm ss tms CN.menuDebugStepModule
     else do
         setm' ss CN.menuFileClose         (return False) (return ())
         setm' ss CN.menuFileCloseAll      (return False) (return ())
@@ -446,6 +450,8 @@ updateMenus ss hw scn = do
         setm' ss CN.menuDebugStop         (return False) (return ())
         setm' ss CN.menuDebugContinue     (return False) (return ())
         setm' ss CN.menuDebugStep         (return False) (return ())
+        setm' ss CN.menuDebugStepLocal    (return False) (return ())
+        setm' ss CN.menuDebugStepModule   (return False) (return ())
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
                 setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)

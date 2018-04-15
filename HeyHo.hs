@@ -215,6 +215,8 @@ setupMenus mf  = do
     menuDebugStop           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStop),           help := (CN.menuHelp' CN.menuDebugStop)]
     menuDebugContinue       <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugContinue),       help := (CN.menuHelp' CN.menuDebugContinue)]
     menuDebugStep           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStep),           help := (CN.menuHelp' CN.menuDebugStep)]
+    menuDebugStepLocal      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStepLocal),      help := (CN.menuHelp' CN.menuDebugStepLocal)]
+    menuDebugStepModule     <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStepModule),     help := (CN.menuHelp' CN.menuDebugStepModule)]
     menuAppendSeparator menuDebug
     menuDebugNextError      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugNextError),      help := (CN.menuHelp' CN.menuDebugNextError)]
     menuDebugPreviousError  <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugPreviousError),  help := (CN.menuHelp' CN.menuDebugPreviousError)]
@@ -259,6 +261,8 @@ setupMenus mf  = do
                                     (CN.menuDebugStop,           menuDebugStop),
                                     (CN.menuDebugContinue,       menuDebugContinue),
                                     (CN.menuDebugStep,           menuDebugStep),
+                                    (CN.menuDebugStepLocal,      menuDebugStepLocal),
+                                    (CN.menuDebugStepModule,     menuDebugStepModule),
                                     (CN.menuDebugNextError,      menuDebugNextError),
                                     (CN.menuDebugPreviousError,  menuDebugPreviousError),
                                     (CN.menuWindowGhci,          menuWindowGhci),

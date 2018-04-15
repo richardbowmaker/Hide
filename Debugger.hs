@@ -5,6 +5,8 @@ module Debugger
     onDebugStop,
     onDebugContinue,
     onDebugStep,
+    onDebugStepLocal,
+    onDebugStepModule,
     toggleBreakPoint
 
 ) where 
@@ -54,6 +56,12 @@ onDebugContinue ss tw = continue ss >> return ()
 
 onDebugStep :: SS.Session -> SS.TextWindow -> IO ()
 onDebugStep ss tw = step ss >> return ()
+
+onDebugStepLocal :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStepLocal ss tw = stepLocal ss >> return ()
+
+onDebugStepModule :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStepModule ss tw = stepModule ss >> return ()
 
 toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 toggleBreakPoint ss hw scn sn = do
@@ -127,6 +135,18 @@ step :: SS.Session -> IO Bool
 step ss = do
     SS.ssSetStateBit ss SS.ssStateRunning
     sendCommandAsynch ss ":step\n" "Main> "
+    return True
+
+stepLocal :: SS.Session -> IO Bool
+stepLocal ss = do
+    SS.ssSetStateBit ss SS.ssStateRunning
+    sendCommandAsynch ss ":steplocal\n" "Main> "
+    return True
+
+stepModule :: SS.Session -> IO Bool
+stepModule ss = do
+    SS.ssSetStateBit ss SS.ssStateRunning
+    sendCommandAsynch ss ":stepmodule\n" "Main> "
     return True
 
 deleteBreakPoints :: SS.Session -> IO Bool
