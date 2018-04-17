@@ -231,6 +231,7 @@ closeTab ss tw scn = do
 
 fileOpen :: SS.Session -> String -> IO ()
 fileOpen ss fp = do
+    SS.ssDebugInfo ss $ "FileMenu.fileOpen: " ++ fp
     mhw <- SS.hwFindSourceFileWindow ss fp
     case mhw of
         Just hw -> setSourceFileFocus ss fp -- just set focus to editor

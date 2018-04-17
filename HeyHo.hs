@@ -25,6 +25,7 @@ import System.Process.Common
 
 -- project imports
 import qualified Constants as CN
+import qualified Debugger as DR
 import qualified EditorNotebook as EN
 import qualified FileMenu as FM
 import qualified Ghci as GH
@@ -90,16 +91,15 @@ setUpMainWindow mf sf = do
    
     auiManagerAddPaneByPaneInfo am tree api
     
-{-
     -- add dockable grid
-    grid <- createGrid mf
+    grid <- DR.createGrid mf
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Grid Control"
     auiPaneInfoBottom api
     auiPaneInfoCloseButton api True
    
     auiManagerAddPaneByPaneInfo am grid api
--}    
+    
     -- add editor notebook
     enb <- EN.enbCreate mf
    
@@ -147,7 +147,7 @@ setUpMainWindow mf sf = do
     -- setup the menus
     menus <- setupMenus mf
     -- create the session data
-    ss <- SS.ssCreate mf am enb menus sf onb scn 
+    ss <- SS.ssCreate mf am enb menus sf onb scn grid 
     
     -- setup static menu handlers
     set (SS.ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen        ss]

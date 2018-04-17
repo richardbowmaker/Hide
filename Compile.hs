@@ -159,7 +159,7 @@ cpBuildProject ss fp mfinally = do
     forkIO $ runGHC 
         ss
         ["-fasm", "-L.", "-lScintillaProxy", "-threaded", "-o", Win.dropExtension fp, fp] 
-        "D:\\_Rick's\\haskell\\Hide"
+        (Win.takeDirectory fp)
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()
@@ -180,7 +180,7 @@ cpCompileFile ss fp mfinally = do
     forkIO $ runGHC 
         ss
         ["-c", fp] 
-        "D:\\_Rick's\\haskell\\Hide"
+        (Win.takeDirectory fp)
         (Just $ cpCompileFileDone ss mfinally)
 
     return ()

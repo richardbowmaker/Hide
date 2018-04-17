@@ -64,16 +64,19 @@ module Session
     doVariable,
     dsAddBreakPoint,
     dsAddDebugOutput,
+    dsBreakPoints,
     dsBreakPointSet,
     dsBreakPointToString,
     dsBreakPointsToString,
     dsClearDebugOutput,
     dsDeleteBreakPoint,
+    dsDirectory,
     dsEditor,
     dsEqualBreakPoint,
     dsFilePath,
     dsGetBreakPoints,
     dsGetDebugOutput,
+    dsGetDebugSession,
     dsGetSessionId,
     dsHandle,
     dsNo,
@@ -116,6 +119,7 @@ module Session
     ssCompilerReport,
     ssCreate,
     ssDebugError,
+    ssDebugGrid,
     ssDebugInfo,
     ssDebugOutput,
     ssDebugSession,
@@ -187,7 +191,6 @@ import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
 import System.FilePath.Windows (takeFileName)
 
-
 import qualified Constants as CN
 import Debug as DG
 import qualified Misc as MI
@@ -214,7 +217,8 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssHideWindows       :: THideWindows,
                             ssState             :: TState,
                             ssDebugSession      :: TDebugSession,
-                            ssDebugOutput       :: TDebugOutput}
+                            ssDebugOutput       :: TDebugOutput,
+                            ssDebugGrid         :: Grid () }
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
@@ -239,8 +243,8 @@ type TState = TVar Int
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> IO Session
-ssCreate mf am nb ms sf ots db = do
+ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> Grid () -> IO Session
+ssCreate mf am nb ms sf ots db dbgr = do
     mtid <- myThreadId
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar (crCreateCompReport Nothing [])
@@ -251,9 +255,9 @@ ssCreate mf am nb ms sf ots db = do
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
-    debug <- atomically $ newTVar $ createDebugSession 0 []
+    debug <- atomically $ newTVar $ createDebugSession 0 "" []
     dbout <- atomically $ newTVar ""
-    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout)
+    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout dbgr)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -609,10 +613,13 @@ tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ 
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 data BreakPoint = BreakPoint { dsEditor :: SC.Editor, dsFilePath :: String, dsHandle :: Int, dsNo :: Int }
-data DebugSession = DebugSession { dsId :: Int, dsBreakPoints :: [BreakPoint]}
+data DebugSession = DebugSession { dsId :: Int, dsDirectory :: String, dsBreakPoints :: [BreakPoint]}
 
-createDebugSession :: Int -> [BreakPoint] -> DebugSession 
-createDebugSession id bps = (DebugSession id bps)
+createDebugSession :: Int -> String -> [BreakPoint] -> DebugSession 
+createDebugSession id dir bps = (DebugSession id dir bps)
+
+dsGetDebugSession :: Session -> IO DebugSession
+dsGetDebugSession ss = atomically $ readTVar (ssDebugSession ss)
 
 dsUpdateDebugSession :: Session -> (DebugSession -> DebugSession) -> IO ()
 dsUpdateDebugSession ss f = atomically $ 
@@ -620,7 +627,7 @@ dsUpdateDebugSession ss f = atomically $
 
 dsSetSessionId :: Session -> Int -> IO ()
 dsSetSessionId ss id = dsUpdateDebugSession ss (\ds -> 
-        createDebugSession id (dsBreakPoints ds))
+        createDebugSession id (dsDirectory ds) (dsBreakPoints ds))
 
 dsGetSessionId :: Session -> IO Int
 dsGetSessionId ss = do
@@ -635,16 +642,16 @@ dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds ->
     let bps = dsBreakPoints ds 
         id  = dsId ds in
     if dsBreakPointSet bp bps then 
-        createDebugSession id bps 
+        createDebugSession id (dsDirectory ds) bps 
     else 
-        createDebugSession id (bp:bps))
+        createDebugSession id (dsDirectory ds) (bp:bps))
 
 dsDeleteBreakPoint :: Session -> String -> Int -> IO ()
 dsDeleteBreakPoint ss fp handle = 
     atomically $ modifyTVar (ssDebugSession ss) (\ds ->
         let bps = dsBreakPoints ds 
             id  = dsId ds in
-        createDebugSession id (
+        createDebugSession id (dsDirectory ds) (
             MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ))
        
 dsBreakPointSet :: BreakPoint -> [BreakPoint] -> Bool
@@ -664,7 +671,7 @@ dsUpdateBreakPoints ss f = do
         modifyTVar (ssDebugSession ss) (\ds -> 
                 let bps = dsBreakPoints ds 
                     id  = dsId ds in
-                createDebugSession id (f bps)))
+                createDebugSession id (dsDirectory ds) (f bps)))
     return ()
 
 dsGetBreakPoints :: Session -> IO [BreakPoint]

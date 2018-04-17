@@ -1,14 +1,16 @@
 
 module Debugger
 ( 
-    onDebugDebug,
-    onDebugStop,
+    appendColumns,
+    appendRows,
+    createGrid, 
     onDebugContinue,
+    onDebugDebug,
     onDebugStep,
     onDebugStepLocal,
     onDebugStepModule,
+    onDebugStop,
     toggleBreakPoint
-
 ) where 
  
 -- library imports 
@@ -16,11 +18,13 @@ import Control.Concurrent (threadDelay)
 import Control.Exception
 import Control.Monad (foldM)
 import Data.Bits (testBit)
-import Data.List (lines, lookup, words)
+import Data.List (findIndex, lines, lookup, words)
 import Graphics.Win32.GDI.Types (HWND)
+import Graphics.UI.WX 
+import Graphics.UI.WXCore
 import Graphics.UI.WXCore.Dialogs (infoDialog)
 import System.Directory (removeFile)
-import System.FilePath.Windows (takeFileName, takeDirectory)
+import System.FilePath.Windows ((</>), takeFileName, takeDirectory)
 import qualified System.FilePath.Windows as Win (dropExtension)
 
 -- project imports
@@ -42,7 +46,8 @@ onDebugDebug ss tw fileopen = do
             case ms of 
                 Just s -> do
                     SS.ssDebugInfo ss s
-                    SS.dsSetSessionId ss id
+                    SS.dsUpdateDebugSession ss (\ds -> 
+                        SS.createDebugSession id (takeDirectory fp) (SS.dsBreakPoints ds))
                     startDebug ss id fp fileopen
                     return ()
                 Nothing -> SS.ssDebugError ss "GHCI didn't start"
@@ -92,7 +97,7 @@ startDebug ss id fp fileopen = do
     modules <- getModulesLookup ss
     -- mapM_ (addModule ss) modules
     setBreakPoints ss modules
-    run ss
+    runMain ss
     SS.ssSetStateBit ss SS.ssStateDebugging
     return True
 
@@ -112,6 +117,16 @@ load ss fp = do
         Just _  -> return True
         Nothing -> return False
 
+printVar :: SS.Session -> String -> IO String
+printVar ss var = do
+    ms <- sendCommandSynch ss (":print " ++ var) "Main> " 30000
+    case ms of
+        Just s  -> do
+            let is = maybe 0 id (findIndex (== '=') s)
+            let ie = maybe (length s) id (findIndex (== '\n') s)
+            return $ take (ie - is) $ drop is s
+        Nothing -> return "<variable not found>"
+
 addModule :: SS.Session -> (String, String) -> IO Bool
 addModule ss (_, mod) = do
     ms <- sendCommandSynch ss (":add *" ++ mod) "Main> " 30000
@@ -119,8 +134,8 @@ addModule ss (_, mod) = do
         Just _  -> return True
         Nothing -> return False
 
-run :: SS.Session -> IO Bool
-run ss = do
+runMain :: SS.Session -> IO Bool
+runMain ss = do
     SS.ssSetStateBit ss SS.ssStateRunning
     sendCommandAsynch ss "main\n" "Main> "
     return True
@@ -235,11 +250,14 @@ eventHandler ss fileopen id str = do
 
 handleDebuggerOutput :: SS.Session -> SS.DebuggerOutput -> (String -> IO ()) -> IO ()
 handleDebuggerOutput ss dout fileopen = do
-    let fp = SS.doFilePath dout
-        (ls, le, cs, ce) = SS.doGetDebuggerRange dout
-    SS.ssDebugInfo ss $ "Debugger output parsed OK\n" ++ show dout
-    fileopen fp
-    mhw <- SS.hwFindSourceFileWindow ss fp
+
+    -- open source file editor  
+    ds <- SS.dsGetDebugSession ss
+    let filePath = (SS.dsDirectory ds) </> (takeFileName $ SS.doFilePath dout)
+    fileopen filePath
+
+    -- goto to debug stopped line
+    mhw <- SS.hwFindSourceFileWindow ss filePath
     case mhw of 
         Just hw -> do
             case SS.hwGetEditor hw of
@@ -249,8 +267,75 @@ handleDebuggerOutput ss dout fileopen = do
                     SC.selectLinesCols scn (ls-1) (cs-1) (le-1) ce
                     SC.grabFocus scn
                 Nothing  -> return ()
-        Nothing -> return ()   
+        Nothing -> return ()
+
+    -- display free variables in grid 
+    nr <- gridGetNumberRows grid
+    gridDeleteRows grid 0 nr True
+    appendRows grid $ replicate (length variables) ""
+    prints <- mapM (\var -> printVar ss (SS.doVariable var)) variables
+    mapM_ (\(row, var, print) -> 
+        setRow grid (row, [(SS.doVariable var), (SS.doType var), print])) (zip3 [0..] variables prints)
+    gridAutoSize grid
     return ()
+
+    where
+        (ls, le, cs, ce) = SS.doGetDebuggerRange dout
+        grid = SS.ssDebugGrid ss
+        variables = SS.doValues dout
+        
+------------------------------------------------------------    
+-- Grid Control
+------------------------------------------------------------    
+
+createGrid :: Frame () -> IO (Grid ())
+createGrid f = do
+    -- grids
+    g <- gridCtrl f []
+    gridSetGridLineColour g (colorSystem Color3DFace)
+    gridSetCellHighlightColour g black
+    appendColumns g ["Variable", "Type", "Value"]
+    appendRows    g (map show [1..length (tail names)])
+    mapM_ (setRow g) (zip [0..] (tail names))
+    gridSetRowLabelSize g 0
+    gridAutoSize g  
+    return g
+    
+gridCtrl :: Window a -> [Prop (Grid ())] -> IO (Grid ())
+gridCtrl parent_ props_
+  = feed2 props_ 0 $
+    initialWindow $ \id_ rect' -> \props' flags ->
+    do g <- gridCreate parent_ id_ rect' flags
+       gridCreateGrid g 0 0 0
+       set g props'
+       return g
+
+appendColumns :: Grid a -> [String] -> IO ()
+appendColumns _g []
+  = return ()
+appendColumns g labels
+  = do n <- gridGetNumberCols g
+       _ <- gridAppendCols g (length labels) True
+       mapM_ (\(i, label_) -> gridSetColLabelValue g i label_) (zip [n..] labels)
+
+appendRows :: Grid a -> [String] -> IO ()
+appendRows _g []
+  = return ()
+appendRows g labels
+  = do n <- gridGetNumberRows g
+       _ <- gridAppendRows g (length labels) True
+       mapM_ (\(i, label_) -> gridSetRowLabelValue g i label_) (zip [n..] labels)
+
+setRow :: Grid a -> (Int, [String]) -> IO ()
+setRow g (row_, values)
+  = mapM_ (\(col,value_) -> gridSetCellValue g row_ col value_) (zip [0..] values)
+
+names :: [[String]]
+names
+  = [["First Name", "Last Name"]
+    ,["Daan","Leijen"],["Arjan","van IJzendoorn"]
+    ,["Martijn","Schrage"],["Andres","Loh"]]
+    
 
 
     
