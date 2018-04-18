@@ -96,7 +96,8 @@ setUpMainWindow mf sf = do
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Grid Control"
     auiPaneInfoBottom api
-    auiPaneInfoCloseButton api True
+    auiPaneInfoIsFloatable api
+    auiPaneInfoIsDockable api
    
     auiManagerAddPaneByPaneInfo am grid api
     

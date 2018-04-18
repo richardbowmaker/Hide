@@ -1,12 +1,12 @@
 module Session 
 (
-    BreakPoint,
     CompError,
     CompReport,
-    DebuggerOutput,
-    DebuggerRange,
-    DebuggerValue,
+    DebugBreakPoint,
+    DebugOutput,
+    DebugRange,
     DebugSession,
+    DebugVariable,
     FindText,
     FunctionChannel,
     HideWindow,
@@ -36,11 +36,11 @@ module Session
     crUpdateCurrentError,
     crUpdateReport,
     createBreakPoint,
+    createDebugOutput,
+    createDebugRange,
     createDebugSession,
+    createDebugVariable,
     createDebugWindowType,
-    createDebuggerOutput,
-    createDebuggerRange,
-    createDebuggerValue,
     createGhciWindowType,
     createHideWindow,
     createHideWindows,
@@ -53,21 +53,18 @@ module Session
     doColS,
     doFilePath,
     doFunction,
-    doGetDebuggerRange,
+    doGetDebugRange,
     doLineE,
     doLineS,
     doModule,
     doRange,
     doType,
     doValue,
-    doValues,
     doVariable,
+    doVariables,
     dsAddBreakPoint,
-    dsAddDebugOutput,
-    dsBreakPoints,
     dsBreakPointSet,
-    dsBreakPointToString,
-    dsBreakPointsToString,
+    dsBreakPoints,
     dsClearDebugOutput,
     dsDeleteBreakPoint,
     dsDirectory,
@@ -80,8 +77,10 @@ module Session
     dsGetSessionId,
     dsHandle,
     dsNo,
+    dsOutput,
     dsSetBreakPointNo,
     dsSetBreakPoints,
+    dsSetDebugOutput,
     dsSetSessionId,
     dsUpdateBreakPoints,
     dsUpdateDebugSession,
@@ -121,7 +120,6 @@ module Session
     ssDebugError,
     ssDebugGrid,
     ssDebugInfo,
-    ssDebugOutput,
     ssDebugSession,
     ssDebugWarn,
     ssEditors,
@@ -217,11 +215,9 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssHideWindows       :: THideWindows,
                             ssState             :: TState,
                             ssDebugSession      :: TDebugSession,
-                            ssDebugOutput       :: TDebugOutput,
                             ssDebugGrid         :: Grid () }
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
-
 
 -- compiler errors
 type TErrors = TVar CompReport
@@ -255,9 +251,8 @@ ssCreate mf am nb ms sf ots db dbgr = do
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
-    debug <- atomically $ newTVar $ createDebugSession 0 "" []
-    dbout <- atomically $ newTVar ""
-    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbout dbgr)
+    debug <- atomically $ newTVar $ createNewDebugSession
+    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
@@ -612,11 +607,94 @@ tmGetMenuEnabled tw id = maybe (return False) (\(MenuFunction _ _ me) -> me)  $ 
 
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
-data BreakPoint = BreakPoint { dsEditor :: SC.Editor, dsFilePath :: String, dsHandle :: Int, dsNo :: Int }
-data DebugSession = DebugSession { dsId :: Int, dsDirectory :: String, dsBreakPoints :: [BreakPoint]}
 
-createDebugSession :: Int -> String -> [BreakPoint] -> DebugSession 
-createDebugSession id dir bps = (DebugSession id dir bps)
+data DebugSession = DebugSession 
+    { 
+        dsId            :: Int,                     -- GHCI ident
+        dsDirectory     :: String,                  -- working directory for GHCI
+        dsBreakPoints   :: [DebugBreakPoint],             
+        dsOutput        :: Maybe DebugOutput       -- after single step the free variables are asved
+    }
+
+data DebugBreakPoint = DebugBreakPoint 
+    { 
+        dsEditor    :: SC.Editor, 
+        dsFilePath  :: String, 
+        dsHandle    :: Int,     -- the scintilla marker handle
+        dsNo        :: Int      -- the GHCI breakpoint no.
+    }
+
+-- the parsed output from GHCI after single
+-- step has occurred.
+data DebugOutput = DebugOutput 
+    { 
+        doModule    :: String, 
+        doFunction  :: String, 
+        doFilePath  :: String,
+        doRange     :: DebugRange,
+        doVariables :: [DebugVariable]
+    }
+
+-- the row and column range provided by GHCI
+-- after single step has completed.
+data DebugRange = DebugRange
+    {
+        doLineS :: Int, -- line start
+        doLineE :: Int, -- line end
+        doColS  :: Int,
+        doColE  :: Int
+    }
+
+-- the value of a free variable as returned by GHCI after single step
+data DebugVariable = DebugVariable 
+    {
+        doVariable  :: String,
+        doType      :: String,
+        doValue     :: String 
+    }
+
+----------------------------------------
+-- show functions for debugger types
+----------------------------------------
+
+instance Show DebugSession where
+    show (DebugSession id dir bps mdout) = 
+        "DebugSession: id = " ++ show id ++ 
+        ", directory = " ++ dir ++
+        (intercalate "\n" (map show bps)) ++ 
+        maybe "" (\dout -> "\n" ++ show dout) mdout
+
+instance Show DebugBreakPoint where
+    show (DebugBreakPoint scn fp h no) = 
+        "DebugBreakPoint: editor = " ++ show scn ++ 
+        ", filepath = " ++ fp ++
+        ", editor handle = " ++ show h ++
+        ", GHCI no. = " ++ show no 
+
+instance Show DebugOutput where
+    show (DebugOutput mod fn fp dr drs) = 
+        "DebugOutput: module = " ++ mod ++ 
+        ", Function = " ++ fn ++
+        ", Filepath = " ++ fp ++
+        "\n  Range = " ++ show dr ++ 
+        (concat $ map (\dr -> "\n" ++ show dr) drs)
+
+instance Show DebugVariable where
+    show (DebugVariable var ty val) = 
+        "DebugValue: Variable = " ++ var ++ 
+        ", Type = " ++ ty ++
+        ", Value = " ++ val 
+
+instance Show DebugRange where
+    show (DebugRange ls le cs ce) = 
+        "DebugRange: Lines = " ++ show ls ++ " - " ++ show le ++
+        ", Columns = " ++ show cs ++ " - " ++ show ce 
+
+createNewDebugSession :: DebugSession
+createNewDebugSession = (DebugSession 0 "" [] Nothing)
+
+createDebugSession :: Int -> String -> [DebugBreakPoint] -> Maybe DebugOutput -> DebugSession 
+createDebugSession id dir bps mdout = (DebugSession id dir bps mdout)
 
 dsGetDebugSession :: Session -> IO DebugSession
 dsGetDebugSession ss = atomically $ readTVar (ssDebugSession ss)
@@ -627,142 +705,94 @@ dsUpdateDebugSession ss f = atomically $
 
 dsSetSessionId :: Session -> Int -> IO ()
 dsSetSessionId ss id = dsUpdateDebugSession ss (\ds -> 
-        createDebugSession id (dsDirectory ds) (dsBreakPoints ds))
+        createDebugSession id (dsDirectory ds) (dsBreakPoints ds) (dsOutput ds))
 
 dsGetSessionId :: Session -> IO Int
 dsGetSessionId ss = do
     ds <- atomically $ readTVar (ssDebugSession ss)
     return $ dsId ds
 
-createBreakPoint :: SC.Editor -> String -> Int -> Int -> BreakPoint
-createBreakPoint scn fp handle no = (BreakPoint scn fp handle no)
+createBreakPoint :: SC.Editor -> String -> Int -> Int -> DebugBreakPoint
+createBreakPoint scn fp handle no = (DebugBreakPoint scn fp handle no)
 
-dsAddBreakPoint :: Session -> BreakPoint -> IO ()
-dsAddBreakPoint ss bp = atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
-    let bps = dsBreakPoints ds 
-        id  = dsId ds in
-    if dsBreakPointSet bp bps then 
-        createDebugSession id (dsDirectory ds) bps 
-    else 
-        createDebugSession id (dsDirectory ds) (bp:bps))
+dsAddBreakPoint :: Session -> DebugBreakPoint -> IO ()
+dsAddBreakPoint ss bp = 
+    atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
+        let bps = dsBreakPoints ds 
+            id  = dsId ds
+            dout = dsOutput ds in
+        if dsBreakPointSet bp bps then 
+            createDebugSession id (dsDirectory ds) bps dout
+        else 
+            createDebugSession id (dsDirectory ds) (bp:bps) dout)
 
 dsDeleteBreakPoint :: Session -> String -> Int -> IO ()
 dsDeleteBreakPoint ss fp handle = 
     atomically $ modifyTVar (ssDebugSession ss) (\ds ->
         let bps = dsBreakPoints ds 
-            id  = dsId ds in
+            id  = dsId ds
+            dout = dsOutput ds in
         createDebugSession id (dsDirectory ds) (
-            MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ))
+            MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ) dout)
        
-dsBreakPointSet :: BreakPoint -> [BreakPoint] -> Bool
+dsBreakPointSet :: DebugBreakPoint -> [DebugBreakPoint] -> Bool
 dsBreakPointSet bp bps = 
     case find (\bp' -> dsEqualBreakPoint bp bp') bps of
         Just _ ->  True
         Nothing -> False
 
-dsEqualBreakPoint :: BreakPoint -> BreakPoint -> Bool
+dsEqualBreakPoint :: DebugBreakPoint -> DebugBreakPoint -> Bool
 dsEqualBreakPoint bp1 bp2 = 
     (dsFilePath bp1 == dsFilePath bp2) &&
     (dsHandle   bp1 == dsHandle   bp2)
 
-dsUpdateBreakPoints :: Session -> ([BreakPoint] -> [BreakPoint]) -> IO ()
+dsUpdateBreakPoints :: Session -> ([DebugBreakPoint] -> [DebugBreakPoint]) -> IO ()
 dsUpdateBreakPoints ss f = do
     atomically ( 
         modifyTVar (ssDebugSession ss) (\ds -> 
                 let bps = dsBreakPoints ds 
-                    id  = dsId ds in
-                createDebugSession id (dsDirectory ds) (f bps)))
+                    id  = dsId ds 
+                    dout = dsOutput ds in
+                createDebugSession id (dsDirectory ds) (f bps) dout))
     return ()
 
-dsGetBreakPoints :: Session -> IO [BreakPoint]
+dsGetBreakPoints :: Session -> IO [DebugBreakPoint]
 dsGetBreakPoints ss = do
     ds <- atomically $ readTVar (ssDebugSession ss)
     return $ dsBreakPoints ds
 
-dsSetBreakPoints :: Session -> [BreakPoint] -> IO ()
+dsSetBreakPoints :: Session -> [DebugBreakPoint] -> IO ()
 dsSetBreakPoints ss bps = dsUpdateBreakPoints ss (\_ -> bps)
 
-dsBreakPointsToString :: Session -> IO String
-dsBreakPointsToString ss = do
-    bps <- dsGetBreakPoints ss
-    return $ "Breakpoints:\n" ++ (intercalate "\n" $ map dsBreakPointToString bps)
-
-dsBreakPointToString :: BreakPoint -> String
-dsBreakPointToString bp = (show $ dsEditor bp) ++ 
-    ", file = " ++ (dsFilePath bp) ++ 
-    ", handle = " ++ (show $ dsHandle bp) ++ 
-    ", no = " ++ (show $ dsNo bp)
-
-dsAddDebugOutput :: Session -> String -> IO ()
-dsAddDebugOutput ss s = atomically $ modifyTVar (ssDebugOutput ss) (++ s)
-
-dsGetDebugOutput :: Session -> IO String
-dsGetDebugOutput ss = atomically $ readTVar $ ssDebugOutput ss
-
-dsClearDebugOutput :: Session -> IO ()
-dsClearDebugOutput ss =  atomically $ writeTVar (ssDebugOutput ss) ("")
-
-dsSetBreakPointNo :: BreakPoint -> Int -> BreakPoint
+dsSetBreakPointNo :: DebugBreakPoint -> Int -> DebugBreakPoint
 dsSetBreakPointNo bp no = createBreakPoint (dsEditor bp) (dsFilePath bp ) (dsHandle bp) no
 
---------------------------------------------
--- Debugger output
---------------------------------------------
+createDebugOutput :: String -> String -> String -> DebugRange -> [DebugVariable] -> DebugOutput
+createDebugOutput mod fn fp dr dvs = (DebugOutput mod fn fp dr dvs)
 
-data DebuggerOutput = DebuggerOutput 
-    { 
-        doModule    :: String, 
-        doFunction  :: String, 
-        doFilePath  :: String,
-        doRange     :: DebuggerRange,
-        doValues    :: [DebuggerValue]
-    }
-
-data DebuggerRange = DebuggerRange
-    {
-        doLineS :: Int,
-        doLineE :: Int,
-        doColS  :: Int,
-        doColE  :: Int
-    }
-
-data DebuggerValue = DebuggerValue 
-    {
-        doVariable  :: String,
-        doType      :: String,
-        doValue     :: String 
-    }
-
-instance Show DebuggerOutput where
-    show (DebuggerOutput mod fn fp dr drs) = 
-        "DebuggerOutput: module = " ++ mod ++ 
-        ", Function = " ++ fn ++
-        ", Filepath = " ++ fp ++
-        "\n  Range = " ++ show dr ++ 
-        (concat $ map (\dr -> "\n" ++ show dr) drs)
-
-instance Show DebuggerValue where
-    show (DebuggerValue var ty val) = 
-        "DebuggerValue: Variable = " ++ var ++ 
-        ", Type = " ++ ty ++
-        ", Value = " ++ val 
-
-instance Show DebuggerRange where
-    show (DebuggerRange ls le cs ce) = 
-        "DebuggerRange: Lines = " ++ show ls ++ " - " ++ show le ++
-        ", Columns = " ++ show cs ++ " - " ++ show ce 
-
-createDebuggerOutput :: String -> String -> String -> DebuggerRange -> [DebuggerValue] -> DebuggerOutput
-createDebuggerOutput mod fn fp dr dvs = (DebuggerOutput mod fn fp dr dvs)
-
-createDebuggerValue :: String -> String -> String -> DebuggerValue
-createDebuggerValue var ty val = (DebuggerValue var ty val)
+createDebugVariable :: String -> String -> String -> DebugVariable
+createDebugVariable var ty val = (DebugVariable var ty val)
   
-createDebuggerRange :: Int -> Int -> Int -> Int -> DebuggerRange
-createDebuggerRange ls le cs ce = (DebuggerRange ls le cs ce)
+createDebugRange :: Int -> Int -> Int -> Int -> DebugRange
+createDebugRange ls le cs ce = (DebugRange ls le cs ce)
 
-doGetDebuggerRange :: DebuggerOutput -> (Int, Int, Int, Int)
-doGetDebuggerRange dout = let r = doRange dout in ((doLineS r), (doLineE r), (doColS r), (doColE r))
+doGetDebugRange :: DebugOutput -> (Int, Int, Int, Int)
+doGetDebugRange dout = let r = doRange dout in ((doLineS r), (doLineE r), (doColS r), (doColE r))
+
+dsGetDebugOutput :: Session -> IO (Maybe DebugOutput)
+dsGetDebugOutput ss = do
+    ds <- atomically (readTVar $ ssDebugSession ss)
+    return $ dsOutput ds
+
+dsSetDebugOutput :: Session -> DebugOutput -> IO ()
+dsSetDebugOutput ss dout =
+    dsUpdateDebugSession ss (\ds ->
+        createDebugSession (dsId ds) (dsDirectory ds) (dsBreakPoints ds) (Just dout))
+
+dsClearDebugOutput :: Session -> IO ()
+dsClearDebugOutput ss =
+    dsUpdateDebugSession ss (\ds ->
+        createDebugSession (dsId ds) (dsDirectory ds) (dsBreakPoints ds) Nothing)
 
 --------------------------------------------
 -- Function queue

@@ -284,13 +284,6 @@ callback ss hw mask hwnd evt str
             setm ss tms CN.menuEditCut           
             setm ss tms CN.menuEditCopy          
             setm ss tms CN.menuEditPaste
-    | evt' == eventOutput = do
-            s <- peekCString str
-            SS.ssDebugInfo ss $ "output = " ++ s 
-            SS.dsAddDebugOutput ss s
-    | evt' == eventInput = do
-            s <- peekCString str
-            SS.ssDebugInfo ss $ "input = " ++ s
     | otherwise = return ()
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
