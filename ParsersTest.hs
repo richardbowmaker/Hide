@@ -10,10 +10,13 @@ where
 import Text.ParserCombinators.Parsec
 import Text.Parsec.Prim (modifyState)
 import Text.ParserCombinators.ReadP (get)
+import Text.Parsec.Char
 -- import Language.Haskell.Exts.Parser
 import System.IO
+import Data.Char (isSpace)
 import Data.List
 import Data.Maybe
+import Control.Monad (liftM)
 
 -- import qualified Session as SS
 
@@ -50,6 +53,119 @@ https://stackoverflow.com/questions/10473857/parsec-positions-as-offsets
 
 
 -}
+
+{-
+
+(Ord a,
+
+qsort :: Ord a => [a] -> [a]
+main :: IO ()
+[TestDebugger.hs:6:24-56] *Main> 
+
+SC.sCE_POV_BADDIRECTIVE :: Int
+xmlResourceLoadToolBar ::
+  XmlResource a -> Window b -> String -> IO (ToolBar ())
+wxcPreviewControlBarCreate ::
+  GHC.Ptr.Ptr a
+  -> Int
+  -> Window c
+  -> GHC.Ptr.Ptr d
+  -> Rect
+  -> Int
+  -> IO (WXCPreviewControlBar ())
+radioBox ::
+  Window a
+  -> Orientation
+  -> [String]
+  -> [Prop (RadioBox ())]
+  -> IO (RadioBox ())
+radioBoxCreate ::
+  Window a
+  -> Id
+  -> String
+  -> Rect
+  -> [String]
+  -> Int
+  -> Style
+  -> IO (RadioBox ())
+
+-}
+
+data FunctionType = FunctionType
+    {
+        functionName    :: String,
+        typeClasses     :: String,
+        arguments       :: [ArgumentType],
+        returnType      :: ArgumentType
+    }
+
+data ArgumentType = ArgumentSimple String | ArgumentFunction [ArgumentType]
+
+instance Show FunctionType where
+    show (FunctionType name classes args ret) = 
+        "Function type: name = " ++ name ++ 
+        ", Type classes = " ++ classes ++
+        ", Arguments = " ++ "(" ++ (intercalate " | " $ map show args) ++ ")" ++
+        ", Return type = " ++ show ret
+
+instance Show ArgumentType where
+    show (ArgumentSimple name) = "Simple " ++ name
+    show (ArgumentFunction args) = "Function {" ++ (intercalate " | " $ map show args) ++ "}"
+
+parseFunction :: String -> Maybe FunctionType
+parseFunction s = 
+    case parse parseFunction' "" s of
+        Left _ -> Nothing
+        Right r -> (Just r)
+
+parseFunction' :: GenParser Char () FunctionType
+parseFunction' = do
+    name <- manyTill anyChar $ ws
+    manyws
+    string "::"
+    manyws
+    class' <- classTypesB <|> classTypesUB
+--    args <- argumentList
+    arg <- functionArgument
+--    ret <-returnArg
+    let ret = (ArgumentSimple "none")
+--    return (FunctionType name class' args ret)       
+    return (FunctionType name class' [arg] ret)       
+
+returnArg :: GenParser Char () ArgumentType
+returnArg = liftM (ArgumentSimple . trim) $ many1 anyChar
+
+classTypesUB :: GenParser Char () String
+classTypesUB = liftM trim $ manyws *> (manyTill anyChar $ (string "=>"))
+
+classTypesB :: GenParser Char () String
+classTypesB = liftM trim $ manyws *> (char '(') *> (manyTill anyChar $ (char ')')) <* manyws <* string "=>"
+
+argumentList :: GenParser Char () [ArgumentType]
+argumentList = argumentList' []
+
+argumentList' :: [ArgumentType] -> GenParser Char () [ArgumentType]
+argumentList' args = do
+    arg@(ArgumentSimple s) <- try simpleArgument <|> pure (ArgumentSimple "")
+    if s == "" then pure args
+    else argumentList' $ args ++ [arg]
+   
+simpleArgument :: GenParser Char () ArgumentType
+simpleArgument = liftM (ArgumentSimple . trim) $ manyws *> (manyTill anyChar $ (string "->"))
+
+functionArgument :: GenParser Char () ArgumentType
+functionArgument = liftM ArgumentFunction $ manyws *> char '(' *> argumentList <* manyws <* char ')'
+      
+ws :: GenParser Char () ()
+ws = ((char ' ') <|> endOfLine) *> pure ()
+
+manyws :: GenParser Char () ()
+manyws = many ws *> pure ()
+
+trim :: String -> String
+trim = f . f
+   where f = reverse . dropWhile isSpace
+
 {-
 -----------------------------------------
 -- parsing debugger output
