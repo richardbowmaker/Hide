@@ -63,16 +63,17 @@ openWindowFile ss ftw = do
             auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
             -- reload the source file
             mfp <- SS.twFilePath tw
-            sendCommand (SS.twPanelHwnd tw) $ ":load " ++ (maybe "" id mfp)
+            sendCommand (SS.twPanelHwnd tw) $ ":load *" ++ (maybe "" id mfp)
             return (Just tw)
         Nothing -> do
             -- GHCI not open so open a new tab
             mfp <- SS.twFilePath ftw
             case mfp of
                 Just fp -> do
-                    mw <- open ss fp                 
+                    mw <- open ss fp                
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
+                                sendCommand hwnd $ ":load *" ++ (maybe "" id mfp)
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
                                 setEventHandler ss hw eventMaskGhci
@@ -115,7 +116,7 @@ open ss fp = do
     let nb = SS.ssOutputs ss
     p <- panel nb []
     hp <- windowGetHandle p    
-    hwnd <- withCString fp (\cfp -> 
+    hwnd <- withCString "" (\cfp ->
                 withCString "-fasm -L. -lScintillaProxy -threaded" (\cop ->
                     withCString (takeDirectory fp) (\cdr -> SI.c_GhciTerminalNew hp cop cfp cdr)))
 

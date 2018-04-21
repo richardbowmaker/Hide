@@ -8,7 +8,7 @@ module ParsersTest
 where
 
 import Text.ParserCombinators.Parsec
-import Text.Parsec.Prim (modifyState)
+import Text.Parsec.Prim (modifyState, parse)
 import Text.ParserCombinators.ReadP (get)
 import Text.Parsec.Char
 -- import Language.Haskell.Exts.Parser
@@ -52,6 +52,124 @@ offset source pos = elemIndex pos positions
 https://stackoverflow.com/questions/10473857/parsec-positions-as-offsets
 
 
+-}
+
+{-
+
+( a1 a2 ( b1 b2 (c1) b3))
+
+Int -> IO () -> (Int -> IO ()) -> IO String
+
+    "Int" sep "IO"          sep 
+                    "()"
+
+
+-}
+
+data Arg = SimpleArg String | NestedArgs [Arg]
+
+instance Show Arg where
+    show (SimpleArg arg)   = show $ arg
+    show (NestedArgs args) = "(" ++ (intercalate " " $ map show args) ++ ")"
+
+parseArguments :: [Arg] -> [Token] -> String -> [Arg]
+parseArguments args [] acc = args ++ [(SimpleArg acc)]
+parseArguments args (tok:toks) acc = 
+    case tok of
+        (SimpleTok st) ->
+            case st of
+                "->"      -> parseArguments (args ++ [(SimpleArg acc)]) toks ""
+                otherwise -> parseArguments args toks (acc ++ " " ++ st)
+        (NestedToks nt) ->
+                parseArguments (args ++ [NestedArgs $ parseArguments [] (tokens1 nt) []]) toks acc
+
+data Token = SimpleTok String | NestedToks Tokens
+data Tokens = Tokens {tokens1 :: [Token]}
+ 
+instance Show Tokens where
+    show (Tokens toks) = "Tokens: " ++ (intercalate " " $ map show toks)
+
+instance Show Token where
+    show (SimpleTok tok) = show tok
+    show (NestedToks toks) = "(" ++ show toks ++ ")"
+
+parseTokens :: String -> Maybe Tokens
+parseTokens s = 
+    case parse tokens' "" s of
+        Left _ -> Nothing
+        Right r -> (Just r)
+        
+tokens' :: GenParser Char () Tokens 
+tokens' = liftM Tokens $ many $ (try nestedTok) <|> simpleTok
+  
+simpleTok :: GenParser Char () Token
+simpleTok = liftM SimpleTok $ manyws *> many1 (noneOf "() \n\r")
+
+nestedTok :: GenParser Char () Token
+nestedTok = do
+    manyws
+    char '('
+    toks <- tokens'
+    manyws
+    char ')'
+    return (NestedToks toks)
+   
+
+{-
+
+( a1 a2 ( b1 b2 (c1) b3))
+
+Int -> IO () -> (Int -> IO ()) -> IO String
+
+    "Int" sep "IO"          sep 
+                    "()"
+
+
+data Args = Args [Exprs]
+data Exprs = Exprs [Expr]
+data Expr = SimpleExpr String | NestedExpr Exprs
+
+instance Show Args where
+    show (Args exprs) = "Args: " ++ (intercalate "->" $ map show exprs)
+
+instance Show Exprs where
+    show (Exprs exprs) = "Expr: " ++ (intercalate " " $ map show exprs)
+
+instance Show Expr where
+    show (SimpleExpr expr) = show expr
+    show (NestedExpr exprs) = "(" ++ show exprs ++ ")"
+
+
+parseArgs :: String -> Maybe Args
+parseArgs s = 
+    case parse exprsList "" s of
+        Left _ -> Nothing
+        Right r -> (Just r)
+
+parseExprs :: String -> Maybe Exprs
+parseExprs s = 
+    case parse expression "" s of
+        Left _ -> Nothing
+        Right r -> (Just r)
+
+exprsList :: GenParser Char () Args 
+exprsList = liftM Args $ sepBy expression (string "->")
+
+expression :: GenParser Char () Exprs
+expression = do    
+    exprs <- many $ (try nestedExpression) <|> simpleExpression
+    return (Exprs exprs)
+
+simpleExpression :: GenParser Char () Expr
+simpleExpression = liftM SimpleExpr $ manyws *> many1 (noneOf "()> \n\r")
+
+nestedExpression :: GenParser Char () Expr
+nestedExpression = do
+    manyws
+    char '('
+    exprs <- expression
+    char ')'
+    return (NestedExpr exprs)
 -}
 
 {-
