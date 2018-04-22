@@ -117,7 +117,8 @@ open ss fp = do
     p <- panel nb []
     hp <- windowGetHandle p    
     hwnd <- withCString "" (\cfp ->
-                withCString "-fasm -L. -lScintillaProxy -threaded" (\cop ->
+--                withCString "-fasm -L. -lScintillaProxy -threaded" (\cop ->
+                withCString "-fasm -threaded" (\cop ->
                     withCString (takeDirectory fp) (\cdr -> SI.c_GhciTerminalNew hp cop cfp cdr)))
 
     case (MI.ptrToWord64 hwnd) of
