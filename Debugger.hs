@@ -42,15 +42,17 @@ onDebugDebug ss tw fileopen = do
     case mfp of
         Just fp -> do
             id <- SI.ghciNew "-fasm -L. -lScintillaProxy -threaded" "" (takeDirectory fp)
-            ms <- SI.ghciWaitForResponse id "Prelude> " 10000
-            case ms of 
-                Just s -> do
-                    SS.ssDebugInfo ss s
-                    SS.dsUpdateDebugSession ss (\ds -> 
-                        SS.createDebugSession id (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
-                    startDebug ss id fp fileopen
-                    return ()
-                Nothing -> SS.ssDebugError ss "GHCI didn't start"
+            if id > 0 then do
+                ms <- SI.ghciWaitForResponse id "Prelude> " 10000
+                case ms of 
+                    Just s -> do
+                        SS.ssDebugInfo ss s
+                        SS.dsUpdateDebugSession ss (\ds -> 
+                            SS.createDebugSession id (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
+                        startDebug ss id fp fileopen
+                        return ()
+                    Nothing -> SS.ssDebugError ss "GHCI didn't start"
+            else SS.ssDebugError ss "GHCI didn't start"
         Nothing -> return ()
 
 onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
