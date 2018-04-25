@@ -76,7 +76,7 @@ openWindowFile ss ftw = do
                                 sendCommand hwnd $ ":load *" ++ (maybe "" id mfp)
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
-                                setEventHandler ss hw eventMaskGhci
+                                setEventHandler ss hw hwnd eventMaskGhci
                                 enableEvents hwnd
                                 setFocus hwnd
                                 return (Just $ SS.hwWindow hw)
@@ -90,7 +90,7 @@ openWindow ss = do
         Just (panel, hwndp, hwnd) -> do
             hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
-            setEventHandler ss hw eventMaskGhci
+            setEventHandler ss hw hwnd eventMaskGhci
             enableEvents hwnd
             setFocus hwnd
             return (Just $ SS.hwWindow hw)
@@ -103,7 +103,7 @@ openDebugWindow ss = do
         Just (panel, hwndp, hwnd) -> do
             hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
-            setEventHandler ss hw eventMaskDebug
+            setEventHandler ss hw hwnd eventMaskDebug
             enableEvents hwnd
             setFocus hwnd
             return (Just $ SS.hwWindow hw)
@@ -115,11 +115,8 @@ open ss fp = do
     -- create panel and embed GHCI window
     let nb = SS.ssOutputs ss
     p <- panel nb []
-    hp <- windowGetHandle p    
-    hwnd <- withCString "" (\cfp ->
---                withCString "-fasm -L. -lScintillaProxy -threaded" (\cop ->
-                withCString "-fasm -threaded" (\cop ->
-                    withCString (takeDirectory fp) (\cdr -> SI.c_GhciTerminalNew hp cop cfp cdr)))
+    hp <- windowGetHandle p 
+    hwnd <- SI.ghciTerminalNew hp "-fasm -threaded" "" (takeDirectory fp) -- "-fasm -L. -lScintillaProxy -threaded"
 
     case (MI.ptrToWord64 hwnd) of
 
@@ -139,7 +136,7 @@ closeWindow :: SS.Session -> SS.TextWindow -> IO ()
 closeWindow ss tw = do
     let nb = SS.ssOutputs ss
     p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
-    windowGetHandle p >>= SI.c_GhciTerminalClose
+    windowGetHandle p >>= SI.ghciTerminalClose
     SS.twRemoveWindow ss tw
     return ()
 
@@ -168,48 +165,37 @@ createHideWindow ss panel phwnd hwnd mfp = do
                     (return "")
 
 sendCommand :: HWND -> String -> IO ()
-sendCommand hwnd cmd = withCString cmd (\cs -> SI.c_GhciTerminalSendCommand hwnd cs) >> return ()
+sendCommand = SI.ghciTerminalSendCommand
 
 paste :: HWND -> IO ()
-paste = SI.c_GhciTerminalPaste
+paste = SI.ghciTerminalPaste
 
 cut :: HWND -> IO ()
-cut = SI.c_GhciTerminalCut
+cut = SI.ghciTerminalCut
 
 copy :: HWND -> IO ()
-copy = SI.c_GhciTerminalCopy
+copy = SI.ghciTerminalCopy
 
 selectAll :: HWND -> IO ()
-selectAll = SI.c_GhciTerminalSelectAll
+selectAll = SI.ghciTerminalSelectAll
 
 isTextSelected :: HWND -> IO Bool
-isTextSelected hwnd = do
-    n <- SI.c_GhciTerminalIsTextSelected hwnd
-    return (n /= 0)
+isTextSelected = SI.ghciTerminalIsTextSelected
 
 hasFocus :: HWND -> IO Bool
-hasFocus h = do 
-        b <- SI.c_GhciTerminalHasFocus h
-        return (b /= 0)
+hasFocus = SI.ghciTerminalHasFocus
 
 setFocus :: HWND -> IO ()
-setFocus = SI.c_GhciTerminalSetFocus
+setFocus = SI.ghciTerminalSetFocus
 
 getTextLength :: HWND -> IO Int
-getTextLength hwnd = do 
-    n <- SI.c_GhciTerminalGetTextLength hwnd
-    return (fromIntegral n :: Int)
+getTextLength = SI.ghciTerminalGetTextLength 
 
 getAllText :: HWND -> IO BS.ByteString
-getAllText hwnd = do            
-    len <- getTextLength hwnd
-    let bs = (BS.replicate len 0)   -- allocate buffer
-    len' <- BS.unsafeUseAsCString bs (\cs -> do SI.c_GhciTerminalGetText hwnd cs (fromIntegral len :: Int32))
-    if len == (fromIntegral len' :: Int) then return bs
-    else return $ BS.take (fromIntegral len' :: Int) bs
+getAllText = SI.ghciTerminalGetText           
 
 clear :: HWND -> IO ()
-clear = SI.c_GhciTerminalClear
+clear = SI.ghciTerminalClear
 
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
@@ -235,20 +221,17 @@ fileSaveAs ss tw = do
             return ()  
         otherwise -> return ()
    
-setEventHandler :: SS.Session -> SS.HideWindow -> Int -> IO ()
-setEventHandler ss hw mask = do
-    cb <- SI.c_GhciTerminalCreateCallback (callback ss hw mask)
-    SI.c_GhciTerminalSetEventHandler (SS.hwPanelHwnd hw) cb    
-    return ()
+setEventHandler :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
+setEventHandler ss hw hwnd mask = SI.ghciTerminalSetEventHandler hwnd (callback ss hw mask)
 
 enableEvents :: HWND -> IO ()
-enableEvents = SI.c_GhciTerminalEnableEvents
+enableEvents = SI.ghciTerminalEnableEvents
 
 disableEvents :: HWND -> IO ()
-disableEvents = SI.c_GhciTerminalDisableEvents
+disableEvents = SI.ghciTerminalDisableEvents
     
-callback :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> CString -> IO ()
-callback ss hw mask hwnd evt str
+callback :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> Maybe String -> IO ()
+callback ss hw mask hwnd evt mstr
     | evt' == eventLostFocus = do
             setm' ss CN.menuFileClose         (return False) (return ())
             setm' ss CN.menuFileCloseAll      (return False) (return ())

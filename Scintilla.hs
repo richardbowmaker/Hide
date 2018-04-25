@@ -210,7 +210,7 @@ instance Show Editor where
 -- parent = HWND of parent window
 createEditor :: HWND -> IO (Editor)
 createEditor parent = do
-    hwnd <- SI.c_ScnNewEditor parent
+    hwnd <- SI.sciNewEditor parent
     let e = (Editor parent hwnd) 
     setBufferedDraw e False
     return e
@@ -219,14 +219,14 @@ createEditor parent = do
 -- Callback from ScintillaProxy dll    
 ---------------------------------------------    
 
-setEventHandler :: Editor -> (SI.SCNotification -> IO ()) -> IO ()
-setEventHandler scn@(Editor p c) eh = (SI.c_ScnCreateCallback $ callback scn eh) >>= SI.c_ScnSetEventHandler c
+setEventHandler :: Editor -> (Editor -> SI.SCNotification -> IO ()) -> IO ()
+setEventHandler scn@(Editor p c) eh = SI.sciSetEventHandler c $ callback scn eh 
 
 enableEvents :: Editor -> IO ()
-enableEvents (Editor _ c) = SI.c_ScnEnableEvents c 
+enableEvents (Editor _ c) = SI.sciEnableEvents c 
 
 disableEvents :: Editor -> IO ()
-disableEvents (Editor _ c) = SI.c_ScnDisableEvents c 
+disableEvents (Editor _ c) = SI.sciDisableEvents c 
    
 {-
 Available event masks
@@ -249,10 +249,9 @@ setModEventMask :: Editor -> Int -> IO ()
 setModEventMask e m = SI.sciSendEditorIO (getHwnd e) sCI_SETMODEVENTMASK m 0 
 
 -- callback from scintilla
-callback :: Editor -> (SI.SCNotification -> IO ()) -> Ptr (SI.SCNotification) -> IO ()
-callback scn eh p = do
-    sn <- peek p 
-    eh sn -- call client event handler
+callback :: Editor -> (Editor -> SI.SCNotification -> IO ()) -> SI.SCNotification -> IO ()
+callback scn eh sn = do
+    eh scn sn -- call client event handler
     case (SI.notifyGetCode sn) of                  
         2007 -> updateBraces scn -- sCN_UPDATEUI                          
         otherwise -> return ()    
@@ -429,7 +428,7 @@ isClean e = do
     return (x == 0)
   
 close :: Editor -> IO ()
-close e = SI.c_ScnDestroyEditor (getHwnd e)
+close e = SI.sciDestroyEditor (getHwnd e)
  
 ----------------------------------------------
 -- Undo and Redo 
@@ -823,11 +822,9 @@ usePopup e p = SI.sciSendEditorIO (getHwnd e) sCI_USEPOPUP  p 0
 --  a function that is executed when the option is selected
 --  a function that is called before the popup is displayed and returns 0-disabled, 1-enabled
 addPopupMenuItem :: Editor -> Int -> String -> (Editor -> Int -> IO ()) -> (Editor -> Int -> IO Int) -> IO ()
-addPopupMenuItem e id title handler enabled = do
-    mf <- SI.c_ScnCreateHandlerCallback $ handler e
-    eh <- SI.c_ScnCreateEnabledCallback $ enabled e
-    withCString title (\cs -> SI.c_ScnAddPopupMenuItem (getHwnd e) (fromIntegral id :: Int32) cs mf eh)
-  
+addPopupMenuItem scn@(Editor _ hwnd) id title handler enabled = 
+    SI.sciAddPopupMenuItem hwnd id title (handler scn) (enabled scn)
+ 
 ----------------------------------------------
 -- Margins
 -- margin numbers are 0..4

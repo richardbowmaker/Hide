@@ -60,7 +60,7 @@ openSourceFileEditor ss fp = do
     SS.hwUpdate ss (\hws -> hw : hws)
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw scn
+    SC.setEventHandler scn $ scnCallback ss hw
     SC.enableEvents scn
     SC.setMarginSensitive scn CN.symbolMargin True
          
@@ -182,7 +182,7 @@ newFile ss = do
     SS.hwUpdate ss (\hws -> hw : hws)
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw scn
+    SC.setEventHandler scn $ scnCallback ss hw 
     SC.enableEvents scn
     SC.setSavePoint scn
       

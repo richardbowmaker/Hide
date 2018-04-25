@@ -234,7 +234,7 @@ sendCommand ss cmd = do
 sendCommandAsynch :: SS.Session -> String -> String -> IO ()
 sendCommandAsynch ss cmd eod = do
     id <- SS.dsGetSessionId ss
-    SI.ghciSendCommandAsynch id cmd eod
+    SI.ghciSendCommandAsynch id cmd "" eod
     
 sendCommandSynch :: SS.Session -> String -> String -> Int -> IO (Maybe String)
 sendCommandSynch ss cmd eod timeout = do
@@ -249,8 +249,8 @@ sendCommandSynch ss cmd eod timeout = do
             SS.ssDebugError ss $ "bad response to command: " ++ cmd
             return Nothing
  
-eventHandler :: SS.Session -> (String -> IO ()) -> Int -> String -> IO ()
-eventHandler ss fileopen id str = do
+eventHandler :: SS.Session -> (String -> IO ()) -> Int -> Int -> String -> IO ()
+eventHandler ss fileopen id ev str = do
     SS.ssDebugInfo ss $ "event handler: " ++ str
     b <- SS.ssTestState ss SS.ssStateRunning
     if b then do

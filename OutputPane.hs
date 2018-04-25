@@ -118,7 +118,7 @@ addOutputTab ss fileOpen = do
     SS.ssSetOutput ss (Just hw)
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw scn fileOpen
+    SC.setEventHandler scn $ scnCallback ss hw fileOpen
     SC.enableEvents scn
     SC.grabFocus scn
 
@@ -275,8 +275,8 @@ gotoError ss ce fileOpen = do
                             Nothing -> return ()
                     Nothing -> return ()
 
-scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> (String -> IO ()) -> SC.SCNotification -> IO ()
-scnCallback ss hw scn fileOpen sn = do 
+scnCallback :: SS.Session -> SS.HideWindow -> (String -> IO ()) -> SC.Editor -> SC.SCNotification -> IO ()
+scnCallback ss hw fileOpen scn sn = do 
     -- event from output pane
     case (SI.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
