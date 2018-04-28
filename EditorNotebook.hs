@@ -114,9 +114,8 @@ enbSetTabText :: SS.Session -> SS.TextWindow -> IO ()
 enbSetTabText ss tw = do
     mix <- enbGetTabIndex ss tw
     case mix of
-        Just ix -> do
-            mfp <-  SS.twFilePath tw
-            case mfp of
+        Just ix -> do 
+            case SS.twFilePath tw of
                 Just fp -> do
                     auiNotebookSetPageText (SS.ssEditors ss) ix $ takeFileName fp
                     return ()

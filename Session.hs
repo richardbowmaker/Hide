@@ -66,6 +66,7 @@ module Session
     dsBreakPointSet,
     dsBreakPoints,
     dsClearDebugOutput,
+    dsClearDebugSession,
     dsDeleteBreakPoint,
     dsDirectory,
     dsEditor,
@@ -74,14 +75,13 @@ module Session
     dsGetBreakPoints,
     dsGetDebugOutput,
     dsGetDebugSession,
-    dsGetSessionId,
+    dsGetSessionHwnd,
     dsHandle,
     dsNo,
     dsOutput,
     dsSetBreakPointNo,
     dsSetBreakPoints,
     dsSetDebugOutput,
-    dsSetSessionId,
     dsUpdateBreakPoints,
     dsUpdateDebugSession,
     ftCurrPos,
@@ -107,7 +107,7 @@ module Session
     hwMenus,
     hwPanelHwnd,
     hwRemoveWindow,
-    hwSetFilePath,
+    hwFindAndSetFilePath,
     hwUpdate,
     hwUpdateHideWindows,
     hwUpdateWindow,
@@ -167,6 +167,7 @@ module Session
     twRemoveWindow,
     twSetFilePath,
     twStatusInfo,
+    twFindAndSetFilePath,
     twType
 ) where
 
@@ -251,7 +252,7 @@ ssCreate mf am nb ms sf ots db dbgr = do
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
-    debug <- atomically $ newTVar $ createNewDebugSession
+    debug <- atomically $ newTVar $ createDebugSession Nothing "" [] Nothing
     return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr)
 
 -- creates a new menu item lookup list
@@ -394,7 +395,7 @@ data TextWindow
                     twPanel             :: Panel (),            -- ^ The parent panel of text window
                     twPanelHwnd         :: HWND,                -- ^ HWND of panel
                     twHwnd              :: HWND,
-                    twTFilePath         :: TFilePath }          -- ^ File name associated with window
+                    twFilePath          :: Maybe String }       -- ^ File name associated with window
 
 data TextMenus 
     = TextMenus {   twMenuFunctions     :: [MenuFunction],
@@ -406,7 +407,21 @@ data HideWindow = HideWindow { hwWindow :: TextWindow, hwMenus :: TextMenus }
 data HideWindows = HideWindows { hwWindows :: [HideWindow] }
 type THideWindows = TVar HideWindows
 type TMHideWindow = TVar (Maybe HideWindow)
-type TFilePath = TVar (Maybe String)
+
+---------------------------------------------------------------
+
+instance Show TextWindowType where
+    show (SourceFile scn) = show scn
+    show Ghci = "GHCI window"
+    show (Debug scn) = show scn
+    show (Output scn) = show scn
+
+instance Show TextWindow where
+    show (TextWindow typ _ phwnd hwnd mfp) = 
+        "TextWindow: " ++ show typ ++ 
+        ", panel hwnd = " ++ MI.hwndToString phwnd ++
+        ", child hwnd = " ++ MI.hwndToString hwnd  ++
+        ", file path = " ++ maybe "" show mfp
 
 ---------------------------------------------------------------
 
@@ -422,10 +437,8 @@ createDebugWindowType scn = (Debug scn)
 createOutputWindowType :: SC.Editor -> TextWindowType
 createOutputWindowType scn = (Output scn)
 
-createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> IO TextWindow
-createTextWindow wtype panel hwndp hwnd file =  do
-    tfile <- (atomically $ newTVar file)
-    return (TextWindow wtype panel hwndp hwnd tfile)
+createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> TextWindow
+createTextWindow wtype panel hwndp hwnd mfp = (TextWindow wtype panel hwndp hwnd mfp)
 
 createTextMenus :: [MenuFunction] -> IO Bool -> IO Bool -> IO String -> TextMenus
 createTextMenus mfs focus clean status = (TextMenus mfs focus clean status)
@@ -478,21 +491,20 @@ hwIsOutput = twIsOutput . hwWindow
 hwIsDebug :: HideWindow -> Bool
 hwIsDebug = twIsDebug . hwWindow 
 
-hwFilePath :: HideWindow -> IO (Maybe String)
+hwFilePath :: HideWindow -> Maybe String
 hwFilePath = twFilePath . hwWindow 
 
 hwIsSameWindow :: HideWindow -> HideWindow -> Bool
 hwIsSameWindow hw1 hw2 = (twPanelHwnd $ hwWindow hw1) == (twPanelHwnd $ hwWindow hw2)
 
-hwIsSameFile :: HideWindow -> HideWindow -> IO Bool
+hwIsSameFile :: HideWindow -> HideWindow -> Bool
 hwIsSameFile hw1 hw2 = twIsSameFile (hwWindow hw1) (hwWindow hw2)
 
 hwFindSourceFileWindow :: Session -> String -> IO (Maybe HideWindow)
 hwFindSourceFileWindow ss fp = do
     hws <- hwGetWindows ss
     MI.findIO (\hw -> do 
-        mfp <- hwFilePath hw
-        case mfp of
+        case hwFilePath hw of
             Just fp' -> do
                 return $ (hwIsSourceFile hw) && (namelc fp == namelc fp')
             Nothing  -> return False) hws
@@ -528,18 +540,13 @@ hwUpdateWindow ss p = atomically (modifyTVar thws (\hws -> createHideWindows $ u
                 Nothing  -> hw:(update hws p)
             thws = ssHideWindows ss
 
-hwSetFilePath :: HideWindow -> String -> IO ()
-hwSetFilePath hw  = twSetFilePath (hwWindow hw) 
+hwFindAndSetFilePath :: Session -> HideWindow -> Maybe String -> IO (Maybe TextWindow)
+hwFindAndSetFilePath ss hw  = twFindAndSetFilePath ss (hwWindow hw) 
 
 ----------------------------------------------------------------
 
-twFilePath :: TextWindow -> IO (Maybe String)
-twFilePath tw = atomically $ readTVar $ twTFilePath tw
-
-twFilePathToString :: TextWindow -> IO String                        
-twFilePathToString tw = do
-    mfp <- twFilePath tw
-    return $ maybe "" id mfp
+twFilePathToString :: TextWindow -> String                        
+twFilePathToString tw = maybe "" id $ twFilePath tw
 
 twGetEditor :: TextWindow -> Maybe SC.Editor
 twGetEditor tw = 
@@ -549,8 +556,16 @@ twGetEditor tw =
         (Debug scn)      -> Just scn
         _                -> Nothing
 
-twSetFilePath :: TextWindow -> String -> IO ()
-twSetFilePath tw fp = atomically $ modifyTVar (twTFilePath tw) (\_ -> Just fp) 
+twFindAndSetFilePath :: Session -> TextWindow -> Maybe String -> IO (Maybe TextWindow)
+twFindAndSetFilePath ss tw mfp = do 
+    hwUpdateWindow ss (\hw -> 
+        if hwMatchesHwnd hw (twHwnd tw) then
+            Just $ createHideWindow (twSetFilePath tw mfp) (hwMenus hw) 
+        else Nothing)
+    twFindWindow ss (\tw' -> return $ twMatchesHwnd tw' (twHwnd tw))
+
+twSetFilePath :: TextWindow -> Maybe String -> TextWindow
+twSetFilePath tw mfp = createTextWindow (twType tw) (twPanel tw) (twPanelHwnd tw) (twHwnd tw) mfp
 
 twIsGhci :: TextWindow -> Bool
 twIsGhci tw = case twType tw of
@@ -573,13 +588,12 @@ twIsDebug tw = case twType tw of
                 otherwise -> False
 
 twMatchesHwnd :: TextWindow -> HWND -> Bool
-twMatchesHwnd tw h = MI.comparePtrs h (twPanelHwnd tw)
+twMatchesHwnd tw h = isMatch (twPanelHwnd tw) || isMatch (twHwnd tw)
+    where isMatch = MI.comparePtrs h
 
-twIsSameFile :: TextWindow -> TextWindow -> IO Bool
-twIsSameFile tw1 tw2 = do
-    mfp1 <- twFilePath tw1
-    mfp2 <- twFilePath tw2
-    return $ fmap (map toLower) mfp1 == fmap (map toLower) mfp2
+twIsSameFile :: TextWindow -> TextWindow -> Bool
+twIsSameFile tw1 tw2 = 
+    fmap (map toLower) (twFilePath tw1) == fmap (map toLower) (twFilePath tw2)
 
 twIsSameWindow :: TextWindow -> TextWindow -> Bool
 twIsSameWindow tw1 tw2 = twPanelHwnd tw1 == twPanelHwnd tw2
@@ -610,10 +624,10 @@ type TDebugSession = TVar DebugSession
 
 data DebugSession = DebugSession 
     { 
-        dsId            :: Int,                     -- GHCI ident
+        dsTw            :: Maybe TextWindow,        -- GHCI session
         dsDirectory     :: String,                  -- working directory for GHCI
         dsBreakPoints   :: [DebugBreakPoint],             
-        dsOutput        :: Maybe DebugOutput       -- after single step the free variables are asved
+        dsOutput        :: Maybe DebugOutput        -- after single step the free variables are saved
     }
 
 data DebugBreakPoint = DebugBreakPoint 
@@ -658,8 +672,8 @@ data DebugVariable = DebugVariable
 ----------------------------------------
 
 instance Show DebugSession where
-    show (DebugSession id dir bps mdout) = 
-        "DebugSession: id = " ++ show id ++ 
+    show (DebugSession tw dir bps mdout) = 
+        "DebugSession: tw = " ++ show tw ++ 
         ", directory = " ++ dir ++
         (intercalate "\n" (map show bps)) ++ 
         maybe "" (\dout -> "\n" ++ show dout) mdout
@@ -690,11 +704,8 @@ instance Show DebugRange where
         "DebugRange: Lines = " ++ show ls ++ " - " ++ show le ++
         ", Columns = " ++ show cs ++ " - " ++ show ce 
 
-createNewDebugSession :: DebugSession
-createNewDebugSession = (DebugSession 0 "" [] Nothing)
-
-createDebugSession :: Int -> String -> [DebugBreakPoint] -> Maybe DebugOutput -> DebugSession 
-createDebugSession id dir bps mdout = (DebugSession id dir bps mdout)
+createDebugSession :: Maybe TextWindow -> String -> [DebugBreakPoint] -> Maybe DebugOutput -> DebugSession 
+createDebugSession mtw dir bps mdout = (DebugSession mtw dir bps mdout)
 
 dsGetDebugSession :: Session -> IO DebugSession
 dsGetDebugSession ss = atomically $ readTVar (ssDebugSession ss)
@@ -703,14 +714,19 @@ dsUpdateDebugSession :: Session -> (DebugSession -> DebugSession) -> IO ()
 dsUpdateDebugSession ss f = atomically $ 
     modifyTVar (ssDebugSession ss) (\ds -> f ds)
 
-dsSetSessionId :: Session -> Int -> IO ()
-dsSetSessionId ss id = dsUpdateDebugSession ss (\ds -> 
-        createDebugSession id (dsDirectory ds) (dsBreakPoints ds) (dsOutput ds))
+dsClearDebugSession :: Session -> IO ()
+dsClearDebugSession ss = dsUpdateDebugSession ss (\ds -> createDebugSession Nothing "" (dsBreakPoints ds) Nothing)
 
-dsGetSessionId :: Session -> IO Int
-dsGetSessionId ss = do
+dsSetSessionTextWindow :: Session -> Maybe TextWindow -> IO ()
+dsSetSessionTextWindow ss mtw = dsUpdateDebugSession ss (\ds -> 
+        createDebugSession mtw (dsDirectory ds) (dsBreakPoints ds) (dsOutput ds))
+
+dsGetSessionHwnd :: Session -> IO (Maybe HWND)
+dsGetSessionHwnd ss = do
     ds <- atomically $ readTVar (ssDebugSession ss)
-    return $ dsId ds
+    case dsTw ds of
+        Just tw -> return $ Just $ twHwnd tw
+        Nothing -> return Nothing
 
 createBreakPoint :: SC.Editor -> String -> Int -> Int -> DebugBreakPoint
 createBreakPoint scn fp handle no = (DebugBreakPoint scn fp handle no)
@@ -719,20 +735,20 @@ dsAddBreakPoint :: Session -> DebugBreakPoint -> IO ()
 dsAddBreakPoint ss bp = 
     atomically $ modifyTVar (ssDebugSession ss) (\ds -> 
         let bps = dsBreakPoints ds 
-            id  = dsId ds
+            mtw  = dsTw ds
             dout = dsOutput ds in
         if dsBreakPointSet bp bps then 
-            createDebugSession id (dsDirectory ds) bps dout
+            createDebugSession mtw (dsDirectory ds) bps dout
         else 
-            createDebugSession id (dsDirectory ds) (bp:bps) dout)
+            createDebugSession mtw (dsDirectory ds) (bp:bps) dout)
 
 dsDeleteBreakPoint :: Session -> String -> Int -> IO ()
 dsDeleteBreakPoint ss fp handle = 
     atomically $ modifyTVar (ssDebugSession ss) (\ds ->
         let bps = dsBreakPoints ds 
-            id  = dsId ds
+            mtw  = dsTw ds
             dout = dsOutput ds in
-        createDebugSession id (dsDirectory ds) (
+        createDebugSession mtw (dsDirectory ds) (
             MI.findAndRemove (\bp -> (dsFilePath bp == fp) && (dsHandle bp == handle)) bps ) dout)
        
 dsBreakPointSet :: DebugBreakPoint -> [DebugBreakPoint] -> Bool
@@ -751,9 +767,9 @@ dsUpdateBreakPoints ss f = do
     atomically ( 
         modifyTVar (ssDebugSession ss) (\ds -> 
                 let bps = dsBreakPoints ds 
-                    id  = dsId ds 
+                    mtw = dsTw ds 
                     dout = dsOutput ds in
-                createDebugSession id (dsDirectory ds) (f bps) dout))
+                createDebugSession mtw (dsDirectory ds) (f bps) dout))
     return ()
 
 dsGetBreakPoints :: Session -> IO [DebugBreakPoint]
@@ -765,7 +781,7 @@ dsSetBreakPoints :: Session -> [DebugBreakPoint] -> IO ()
 dsSetBreakPoints ss bps = dsUpdateBreakPoints ss (\_ -> bps)
 
 dsSetBreakPointNo :: DebugBreakPoint -> Int -> DebugBreakPoint
-dsSetBreakPointNo bp no = createBreakPoint (dsEditor bp) (dsFilePath bp ) (dsHandle bp) no
+dsSetBreakPointNo bp no = createBreakPoint (dsEditor bp) (dsFilePath bp) (dsHandle bp) no
 
 createDebugOutput :: String -> String -> String -> DebugRange -> [DebugVariable] -> DebugOutput
 createDebugOutput mod fn fp dr dvs = (DebugOutput mod fn fp dr dvs)
@@ -787,12 +803,12 @@ dsGetDebugOutput ss = do
 dsSetDebugOutput :: Session -> DebugOutput -> IO ()
 dsSetDebugOutput ss dout =
     dsUpdateDebugSession ss (\ds ->
-        createDebugSession (dsId ds) (dsDirectory ds) (dsBreakPoints ds) (Just dout))
+        createDebugSession (dsTw ds) (dsDirectory ds) (dsBreakPoints ds) (Just dout))
 
 dsClearDebugOutput :: Session -> IO ()
 dsClearDebugOutput ss =
     dsUpdateDebugSession ss (\ds ->
-        createDebugSession (dsId ds) (dsDirectory ds) (dsBreakPoints ds) Nothing)
+        createDebugSession (dsTw ds) (dsDirectory ds) (dsBreakPoints ds) Nothing)
 
 --------------------------------------------
 -- Function queue

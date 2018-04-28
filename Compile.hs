@@ -72,8 +72,7 @@ onBuildBuild ss tw scn fileSave fileOpen = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                mfp <- SS.hwFilePath hw
-                case mfp of
+                case SS.hwFilePath hw of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
                         cpBuildProject ss fp (Just $ compileComplete ss)
@@ -101,8 +100,7 @@ onBuildCompile ss tw scn fileSave fileOpen = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                mfp <- SS.hwFilePath hw
-                case mfp of
+                case SS.hwFilePath hw of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
                         cpCompileFile ss fp (Just $ compileComplete ss)
@@ -131,8 +129,7 @@ onBuildGhci ss tw scn fileSave fileOpen = do
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
         case mhw of
             Just hw -> do
-                mfp <- SS.hwFilePath hw
-                case mfp of
+                case SS.hwFilePath hw of
                     Just fp -> do
                         GH.openWindowFile ss $ SS.hwWindow hw 
                         return ()
@@ -207,9 +204,8 @@ cpCompileFileDone ss mfinally ces = do
     return ()
 
 cpDebugRun :: SS.Session -> SS.TextWindow -> IO ()
-cpDebugRun ss tw = do
-    mfp <- SS.twFilePath tw
-    case mfp of
+cpDebugRun ss tw = do 
+    case SS.twFilePath tw of
         Just fp -> do
             SS.ssDebugInfo ss $ "Start run: " ++ fp
             --  check .exe file exists

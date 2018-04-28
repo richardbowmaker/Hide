@@ -135,7 +135,7 @@ menuOption ss scn id = do
 
 createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd = do
-    tw <- SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing
+    let tw = SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing
     return $ SS.createHideWindow tw (tms tw)
 
     where  tms tw = SS.createTextMenus
@@ -157,7 +157,6 @@ createHideWindow ss scn panel phwnd hwnd = do
 fileSave :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 fileSave ss tw scn = do   
     -- prompt user for name to save to
-    mfp <-SS.twFilePath tw
     fd <- fileDialogCreate 
         (SS.ssFrame ss) 
         "Save output as" 
@@ -173,7 +172,7 @@ fileSave ss tw scn = do
         5100 -> do    
             fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
-            SS.twSetFilePath tw fp 
+            SS.twFindAndSetFilePath ss tw (Just fp) 
             SC.getAllText scn >>= BS.writeFile fp             
             return () 
  
@@ -182,6 +181,8 @@ fileSave ss tw scn = do
             return ()           
         otherwise  -> do
             return ()
+
+    where mfp = SS.twFilePath tw
 
 -- jump to source file error location
 gotoErrorLine :: SS.Session -> Int -> (String -> IO ()) -> IO ()

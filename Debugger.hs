@@ -38,21 +38,21 @@ import qualified Session as SS
 
 onDebugDebug :: SS.Session -> SS.TextWindow -> (String -> IO ()) -> IO ()
 onDebugDebug ss tw fileopen = do
-    mfp <- SS.twFilePath tw
-    case mfp of
-        Just fp -> do
-            id <- SI.ghciNew "-fasm -L. -lScintillaProxy -threaded" "" (takeDirectory fp)
-            if id > 0 then do
-                ms <- SI.ghciWaitForResponse id "Prelude> " 10000
-                case ms of 
-                    Just s -> do
-                        SS.ssDebugInfo ss s
-                        SS.dsUpdateDebugSession ss (\ds -> 
-                            SS.createDebugSession id (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
-                        startDebug ss id fp fileopen
-                        return ()
-                    Nothing -> SS.ssDebugError ss "GHCI didn't start"
-            else SS.ssDebugError ss "GHCI didn't start"
+    mtw <- GH.openWindowFile ss tw
+    case mtw of
+        Just tw -> do
+            case SS.twFilePath tw of
+                Just fp -> do
+--                    ms <- SI.ghciTerminalWaitForResponse (SS.twHwnd tw) "Prelude> " 10000
+--                    case ms of 
+--                        Just s -> do                            
+--                            SS.ssDebugInfo ss s
+                    SS.dsUpdateDebugSession ss (\ds -> 
+                        SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
+                    startDebug ss (SS.twHwnd tw) fp fileopen
+                    return ()
+--                        Nothing -> return ()
+                Nothing -> return ()
         Nothing -> return ()
 
 onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
@@ -85,8 +85,7 @@ toggleBreakPoint ss hw scn sn = do
         traceBPs
     else do
         h <- SC.markerAdd scn l CN.breakPointMarker
-        mfp <- SS.hwFilePath hw
-        let bp = SS.createBreakPoint scn (maybe "" id mfp) h 0 
+        let bp = SS.createBreakPoint scn (maybe "" id $ SS.hwFilePath hw) h 0 
         SS.dsAddBreakPoint ss bp
         traceBPs
 
@@ -95,11 +94,11 @@ toggleBreakPoint ss hw scn sn = do
             bps <- SS.dsGetBreakPoints ss
             SS.ssDebugInfo ss $ intercalate "\n" (map show bps)
        
-startDebug :: SS.Session -> Int -> String -> (String -> IO ()) -> IO Bool
-startDebug ss id fp fileopen = do
+startDebug :: SS.Session -> HWND -> String -> (String -> IO ()) -> IO Bool
+startDebug ss hwnd fp fileopen = do
     -- delete object file, to force GHCi to run in interpretative mode
     -- result <- try (removeFile $ (Win.dropExtension fp) ++ ".o")  :: IO (Either IOException ())
-    SI.ghciSetEventHandler id $ eventHandler ss fileopen
+    SI.ghciTerminalSetEventHandler hwnd $ eventHandler ss fileopen
     load ss fp
     modules <- getModulesLookup ss
     -- mapM_ (addModule ss) modules
@@ -114,9 +113,12 @@ stopDebug ss = do
     clearDebugStoppedMarker ss
     SS.ssClearStateBit ss SS.ssStateDebugging
     SS.ssClearStateBit ss SS.ssStateRunning
-    id <- SS.dsGetSessionId ss
-    SI.ghciClose id
-    SS.dsSetSessionId ss 0
+    mhwnd <- SS.dsGetSessionHwnd ss
+    case mhwnd of
+        Just hwnd -> do
+            SI.ghciTerminalClose hwnd
+            SS.dsClearDebugSession ss
+        Nothing -> SS.ssDebugError ss "Debugger.stopDebug: No GHCI session"
 
 load :: SS.Session -> String -> IO Bool
 load ss fp = do
@@ -228,29 +230,38 @@ setBreakPoint ss bp modules = do
 
 sendCommand :: SS.Session -> String -> IO ()
 sendCommand ss cmd = do
-    id <- SS.dsGetSessionId ss
-    SI.ghciSendCommand id cmd 
+    mhwnd <- SS.dsGetSessionHwnd ss
+    case mhwnd of
+        Just hwnd -> SI.ghciTerminalSendCommand hwnd cmd 
+        Nothing -> SS.ssDebugError ss "Debugger.sendCommand: no GHCI session"
 
 sendCommandAsynch :: SS.Session -> String -> String -> IO ()
 sendCommandAsynch ss cmd eod = do
-    id <- SS.dsGetSessionId ss
-    SI.ghciSendCommandAsynch id cmd "" eod
-    
+    mhwnd <- SS.dsGetSessionHwnd ss
+    case mhwnd of
+        Just hwnd -> SI.ghciTerminalSendCommandAsynch hwnd cmd "" eod
+        Nothing -> SS.ssDebugError ss "Debugger.sendCommandAsynch: no GHCI session"
+   
 sendCommandSynch :: SS.Session -> String -> String -> Int -> IO (Maybe String)
 sendCommandSynch ss cmd eod timeout = do
-    id <- SS.dsGetSessionId ss
-    ms <- SI.ghciSendCommandSynch id cmd eod timeout
-    case ms of 
-        Just s -> do
-            SS.ssDebugInfo ss $ "response to command: " ++ cmd
-            SS.ssDebugInfo ss s
-            return ms
+    mhwnd <- SS.dsGetSessionHwnd ss
+    case mhwnd of
+        Just hwnd -> do
+            ms <- SI.ghciTerminalSendCommandSynch hwnd cmd eod timeout
+            case ms of 
+                Just s -> do
+                    SS.ssDebugInfo ss $ "response to command: " ++ cmd
+                    SS.ssDebugInfo ss s
+                    return ms
+                Nothing -> do
+                    SS.ssDebugError ss $ "bad response to command: " ++ cmd
+                    return Nothing
         Nothing -> do
-            SS.ssDebugError ss $ "bad response to command: " ++ cmd
+            SS.ssDebugError ss "Debugger.sendCommandAsynch: no GHCI session"
             return Nothing
- 
-eventHandler :: SS.Session -> (String -> IO ()) -> Int -> Int -> String -> IO ()
-eventHandler ss fileopen id ev str = do
+    
+eventHandler :: SS.Session -> (String -> IO ()) -> HWND -> Int -> Maybe String -> IO ()
+eventHandler ss fileopen hwnd ev mstr = do
     SS.ssDebugInfo ss $ "event handler: " ++ str
     b <- SS.ssTestState ss SS.ssStateRunning
     if b then do
@@ -261,6 +272,8 @@ eventHandler ss fileopen id ev str = do
             Nothing   -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
         SS.ssClearStateBit ss SS.ssStateRunning
     else return () -- should send this to the output pane
+    
+    where str = (maybe "" id mstr)
 
 handleDebuggerOutput :: SS.Session -> (String -> IO ()) -> IO ()
 handleDebuggerOutput ss fileopen = do

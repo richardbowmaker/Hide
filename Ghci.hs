@@ -55,25 +55,24 @@ import qualified Session as SS
 
 openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
-    mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (SS.twIsSameFile ftw tw)) 
+    -- see if a GHCI window is already open with the same file as in ftw (scintilla editor)
+    mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (return $ SS.twIsSameFile ftw tw)) 
     case mtw of
         Just tw -> do
             -- GHCI already open so select it
             let nb = SS.ssOutputs ss
             auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
             -- reload the source file
-            mfp <- SS.twFilePath tw
-            sendCommand (SS.twPanelHwnd tw) $ ":load *" ++ (maybe "" id mfp)
+            sendCommand (SS.twPanelHwnd tw) $ ":load *" ++ (maybe "" id (SS.twFilePath tw))
             return (Just tw)
         Nothing -> do
             -- GHCI not open so open a new tab
-            mfp <- SS.twFilePath ftw
-            case mfp of
+            case SS.twFilePath ftw of
                 Just fp -> do
                     mw <- open ss fp                
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
-                                sendCommand hwnd $ ":load *" ++ (maybe "" id mfp)
+                                sendCommand hwnd $ ":load *" ++ fp
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
                                 setEventHandler ss hw hwnd eventMaskGhci
@@ -145,7 +144,7 @@ closeAll ss = SS.hwFindWindows ss SS.hwIsGhci >>= mapM_ (\hw -> closeWindow ss (
 
 createHideWindow :: SS.Session -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
 createHideWindow ss panel phwnd hwnd mfp = do
-    tw <- SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
+    let tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
     return $ SS.createHideWindow tw (tms tw)
 
     where  tms tw = SS.createTextMenus 
@@ -158,7 +157,7 @@ createHideWindow ss panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)                           (return True)),
                         (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)                       (return True)),
                         (SS.createMenuFunction CN.menuEditClear      (clear hwnd)                           (return True)),
-                        (SS.createMenuFunction CN.menuBuildGhci      (openWindowFile ss tw >> return ())    (liftM (isJust) (SS.twFilePath tw)))
+                        (SS.createMenuFunction CN.menuBuildGhci      (openWindowFile ss tw >> return ())    (return $ isJust (SS.twFilePath tw)))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -201,12 +200,11 @@ clear = SI.ghciTerminalClear
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
 fileSaveAs ss tw = do 
     -- prompt user for name to save to
-    mfp <- SS.twFilePath tw
     fd <- fileDialogCreate 
         (SS.ssFrame ss)
         "Save GHCI as" 
-        (maybe "." takeDirectory mfp)
-        (maybe "" id mfp) 
+        (maybe "." takeDirectory $ SS.twFilePath tw)
+        (maybe "" id $ SS.twFilePath tw) 
         "*.txt" 
         (Point 100 100) 
         (wxSAVE .|. wxOVERWRITE_PROMPT)
@@ -217,7 +215,7 @@ fileSaveAs ss tw = do
             fp <- fileDialogGetPath fd
             getAllText (SS.twPanelHwnd tw) >>= BS.writeFile fp
             -- save filename used
-            SS.twSetFilePath tw fp 
+            SS.twFindAndSetFilePath ss tw (Just fp) 
             return ()  
         otherwise -> return ()
    

@@ -12,6 +12,7 @@ module Misc
     findAndUpdate2,
     findIO,
     frameToString,
+    hwndToString,
     isSameWindow,
     panelToString,
     ptrToInt,
@@ -33,7 +34,9 @@ import Data.Word (Word64)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Graphics.UI.WX 
 import Graphics.UI.WXCore
+import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
+
 
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
@@ -50,7 +53,10 @@ ptrToInt p = fromIntegral  (minusPtr p nullPtr) :: Int
 panelToString :: Panel () -> IO String
 panelToString p = do
     h <- windowGetHandle p
-    return ("Window HWND: " ++ (showHex (minusPtr h nullPtr) ""))
+    return $ "Window HWND: " ++ hwndToString h
+
+hwndToString :: HWND -> String
+hwndToString hwnd = showHex (minusPtr hwnd nullPtr) ""
 
 frameToString :: Frame () -> IO String
 frameToString f = do

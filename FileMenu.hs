@@ -73,7 +73,7 @@ openSourceFileEditor ss fp = do
 
 createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd mfp = do
-    tw <- SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
+    let tw = SS.createTextWindow (SS.createSourceWindowType scn) panel phwnd hwnd mfp
     return $ SS.createHideWindow tw (tms tw)
 
     where   tms tw =
@@ -201,10 +201,9 @@ closeEditor ss tw scn = do
     else do            
         -- file is dirty so prompt the user if they want to save it
         EN.enbSelectTab ss tw
-        fs <- SS.twFilePathToString tw
         b <- confirmDialog (SS.ssFrame ss) 
             CN.programTitle 
-            ("Do you wish to save the file: ?\n" ++ (show fs))
+            ("Do you wish to save the file: ?\n" ++ (SS.twFilePathToString tw))
             True                        
         if b then do                   
            -- save file
@@ -281,8 +280,7 @@ fileSave ss tw scn = do
     ic <- SC.isClean scn  
     if ic then return True
     else do
-        mfp <- SS.twFilePath tw
-        case mfp of
+        case SS.twFilePath tw of
             Just fp -> do
                 writeSourceFile ss tw scn
                 return True            
@@ -295,7 +293,6 @@ fileSave ss tw scn = do
 fileSaveAs :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool
 fileSaveAs ss tw scn = do   
     -- prompt user for name to save to
-    mfp <-SS.twFilePath tw
     fd <- fileDialogCreate 
         (SS.ssFrame ss) 
         "Save file as" 
@@ -311,23 +308,27 @@ fileSaveAs ss tw scn = do
         5100 -> do    
             fp <- fileDialogGetPath fd           
             -- save new name to mutable project data
-            SS.twSetFilePath tw fp 
-            writeSourceFile ss tw scn                  
-            -- update tab name
-            EN.enbSetTabText ss tw
-            return True 
+            mtw' <- SS.twFindAndSetFilePath ss tw (Just fp)
+            case mtw' of
+                Just tw' -> do
+                    writeSourceFile ss tw' scn                  
+                    -- update tab name
+                    EN.enbSetTabText ss tw'
+                    return True
+                Nothing -> return False
  
         --wxID_CANCEL -> do
         5101 -> do
             return False           
         otherwise  -> do
             return True
+
+    where mfp = SS.twFilePath tw
   
 -- writes file to disk and sets editor to clean
 writeSourceFile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 writeSourceFile ss tw scn = do
-    mfp <- SS.twFilePath tw
-    case mfp of
+    case SS.twFilePath tw of
         Just fp -> do
             SC.getAllText scn >>= BS.writeFile fp
             SC.setSavePoint scn
@@ -349,8 +350,7 @@ updateStatus ss s = do
     
 loadEditor :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
 loadEditor ss hw scn = do
-    mfp <- SS.hwFilePath hw
-    case mfp of
+    case SS.hwFilePath hw of
         Just fp -> do
             text <- BS.readFile fp
             SC.setText scn text

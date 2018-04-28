@@ -419,7 +419,7 @@ ghciTerminalNew parent options file dir =
 ghciTerminalClose :: HWND -> IO ()
 ghciTerminalClose = c_GhciTerminalClose
 
-ghciTerminalSetEventHandler :: HWND -> (HWND -> Int-> Maybe String -> IO()) -> IO ()
+ghciTerminalSetEventHandler :: HWND -> (HWND -> Int -> Maybe String -> IO()) -> IO ()
 ghciTerminalSetEventHandler hwnd fn = do
     cb <- c_GhciTerminalCreateCallback $ ghciTerminalEventHandler fn
     c_GhciTerminalSetEventHandler hwnd cb
