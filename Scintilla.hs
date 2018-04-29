@@ -2,7 +2,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Scintilla
-(   
+( 
+    module ScintillaConstants,
     Editor,
     SI.SCNotification,
     addPopupMenuItem,

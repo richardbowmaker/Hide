@@ -15,11 +15,8 @@ module Output
 
 import qualified Data.ByteString.Char8 as BS (ByteString, writeFile)
 
-
 import qualified Scintilla as SC
-import qualified ScintillaConstants as SC
 import qualified Session as SS
-
 
 clear' :: SS.Session -> SC.Editor -> IO ()
 clear' ss scn = do

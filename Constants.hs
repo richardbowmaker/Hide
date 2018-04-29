@@ -30,16 +30,16 @@ module Constants
     menuBuildBuild,
     menuBuildRebuild,
     menuBuildClean,
-    menuBuildGhci,
+    menuBuildNextError,
+    menuBuildPreviousError,
     menuDebugRun,
+    menuDebugGhci,
     menuDebugDebug,
     menuDebugStop,
     menuDebugContinue,
     menuDebugStep,
     menuDebugStepModule,
     menuDebugStepLocal,
-    menuDebugNextError,
-    menuDebugPreviousError,
     menuWindowGhci,
     menuWindowOutput,
     menuTestTest,
@@ -151,35 +151,35 @@ menuBuildRebuild = 22
 menuBuildClean :: Int
 menuBuildClean = 23
 
-menuBuildGhci :: Int
-menuBuildGhci = 24
+menuBuildNextError :: Int
+menuBuildNextError = 24
+
+menuBuildPreviousError :: Int
+menuBuildPreviousError = 25
 
 menuDebugRun :: Int
-menuDebugRun = 25
+menuDebugRun = 26
+
+menuDebugGhci :: Int
+menuDebugGhci = 27
 
 menuDebugDebug :: Int
-menuDebugDebug = 26
+menuDebugDebug = 28
 
 menuDebugStop :: Int
-menuDebugStop = 27
+menuDebugStop = 29
 
 menuDebugContinue :: Int
-menuDebugContinue = 28
+menuDebugContinue = 30
 
 menuDebugStep :: Int
-menuDebugStep = 29
+menuDebugStep = 31
 
 menuDebugStepLocal:: Int
-menuDebugStepLocal = 30
+menuDebugStepLocal = 32
 
 menuDebugStepModule :: Int
-menuDebugStepModule = 31
-
-menuDebugNextError :: Int
-menuDebugNextError = 32
-
-menuDebugPreviousError :: Int
-menuDebugPreviousError = 33
+menuDebugStepModule = 33
 
 menuWindowGhci :: Int
 menuWindowGhci = 34
@@ -223,16 +223,16 @@ menuNames = [   (Menu menuFileOpen           "Open"               "Ctrl-O"      
                 (Menu menuBuildBuild         "Build"              "Ctrl-Shift-B"  "Builds the project"),
                 (Menu menuBuildRebuild       "Rebuild"            ""              "Rebuilds the project"),
                 (Menu menuBuildClean         "Clean"              ""              "Cleans the project files"),
-                (Menu menuBuildGhci          "Open GHCI"          "F9"            "Open file in GHCI"),
+                (Menu menuBuildNextError     "Next error"         "F4"            "Goto next compile error"),
+                (Menu menuBuildPreviousError "Previous error"     "Shift-F4"      "Goto previous compile error"),
                 (Menu menuDebugRun           "Run"                "F5"            "Run program"),
-                (Menu menuDebugDebug         "Debug"              ""              "Run program in debugger"),
-                (Menu menuDebugStop          "Debug Stop"         "Shift-F5"      "Stop debugging"),
+                (Menu menuDebugGhci          "Open GHCI"          "F9"            "Open file in GHCI"),
+                (Menu menuDebugDebug         "Debug"              "F6"            "Run program in GHCI"),
+                (Menu menuDebugStop          "Debug Stop"         "Shift-F6"      "Stop debugging"),
                 (Menu menuDebugContinue      "Debug Continue"     "Shift-F11"     "Continue in debugger"),
                 (Menu menuDebugStep          "Single step"        "F11"           "Single step debugger"),
                 (Menu menuDebugStepModule    "Single step local"  "F10"           "Single step debugger within current binding"),
                 (Menu menuDebugStepLocal     "Single step module" "F12"           "Single step debugger within module"),
-                (Menu menuDebugNextError     "Next error"         "F4"            "Goto next compile error"),
-                (Menu menuDebugPreviousError "Previous error"     "Shift-F4"      "Goto previous compile error"),
                 (Menu menuWindowGhci         "GHCI"               "Alt-F9"        "Start GHCI"),
                 (Menu menuWindowOutput       "Output"             "F8"            "Open output window"),
                 (Menu menuTestTest           "Test"               "Ctrl-T"        ""),

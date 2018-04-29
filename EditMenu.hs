@@ -24,7 +24,6 @@ import System.IO
 import qualified Constants as CN
 import qualified EditorNotebook as EN
 import qualified Scintilla as SC
-import qualified ScintillaConstants as SC
 import qualified Session as SS
 
 editFind :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()

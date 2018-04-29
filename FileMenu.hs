@@ -29,13 +29,11 @@ import Text.Printf (printf)
 
 import qualified Compile as CP
 import qualified Constants as CN
-import qualified Debugger as DR
 import qualified EditMenu as EM
 import qualified EditorNotebook as EN
 import qualified Ghci as GH
 import qualified Misc as MI
 import qualified Scintilla as SC
-import qualified ScintillaConstants as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
@@ -82,33 +80,33 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
 
                 SS.createTextMenus                    
                     [
-                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)                                                 (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)                                                     (return True)),
-                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)                                                  (liftM not $ SC.isClean scn)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)                                                (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)                                                      (liftM not $ allFilesClean ss)),
-                        (SS.createMenuFunction CN.menuEditUndo          (SC.undo scn)                                                           (SC.canUndo scn)),
-                        (SS.createMenuFunction CN.menuEditRedo          (SC.redo scn)                                                           (SC.canRedo scn)),
-                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                                                            (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                                                           (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                                                          (SC.canPaste scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)                                                      (liftM (>0) $ SC.getTextLen scn)),
-                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)                                                 (return True)),
-                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)                                          (return True)),
-                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn)                                         (return True)),
-                        (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)                                               (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn (fileSave ss tw scn) (fileOpen ss))        (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn (fileSave ss tw scn) (fileOpen ss))          (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                                                             (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuBuildClean        (return ())                                                             (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuBuildGhci         (CP.onBuildGhci ss tw scn (fileSave ss tw scn)  (fileOpen ss))          (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)                                                   (liftM not $ SS.ssTestState ss SS.ssStateDebugging)),
-                        (SS.createMenuFunction CN.menuDebugDebug        (DR.onDebugDebug ss tw (fileOpen ss))                                   (liftM not $ debugging)),
-                        (SS.createMenuFunction CN.menuDebugStop         (DR.onDebugStop ss tw)                                                  (debugging)),
-                        (SS.createMenuFunction CN.menuDebugContinue     (DR.onDebugContinue ss tw)                                              (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStep         (DR.onDebugStep ss tw)                                                  (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepLocal    (DR.onDebugStepLocal ss tw)                                             (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepModule   (DR.onDebugStepModule ss tw)                                            (debuggerPaused))
+                        (SS.createMenuFunction CN.menuFileClose         (onFileClose ss tw scn)         (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (onFileCloseAll ss)             (return True)),
+                        (SS.createMenuFunction CN.menuFileSave          (onFileSave ss tw scn)          (liftM not $ SC.isClean scn)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (onFileSaveAs ss tw scn)        (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAll       (onFileSaveAll ss)              (liftM not $ allFilesClean ss)),
+                        (SS.createMenuFunction CN.menuEditUndo          (SC.undo scn)                   (SC.canUndo scn)),
+                        (SS.createMenuFunction CN.menuEditRedo          (SC.redo scn)                   (SC.canRedo scn)),
+                        (SS.createMenuFunction CN.menuEditCut           (SC.cut scn)                    (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuEditPaste         (SC.paste scn)                  (SC.canPaste scn)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn)),
+                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
+                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
+                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
+                        (SS.createMenuFunction CN.menuEditSort          (SC.sortSelectedText scn)       (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction CN.menuBuildCompile      (CP.onBuildCompile ss tw scn)   (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildBuild        (CP.onBuildBuild ss tw scn)     (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildRebuild      (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuBuildClean        (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)           (liftM not $ SS.ssTestState ss SS.ssStateDebugging)),
+                        (SS.createMenuFunction CN.menuDebugGhci         (CP.onDebugGhci ss tw scn)      (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
+                        (SS.createMenuFunction CN.menuDebugDebug        (GH.onDebugDebug ss tw)         (liftM not $ debugging)),
+                        (SS.createMenuFunction CN.menuDebugStop         (GH.onDebugStop ss tw)          (debugging)),
+                        (SS.createMenuFunction CN.menuDebugContinue     (GH.onDebugContinue ss tw)      (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStep         (GH.onDebugStep ss tw)          (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepLocal    (GH.onDebugStepLocal ss tw)     (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepModule   (GH.onDebugStepModule ss tw)    (debuggerPaused))
                     ]
                     (SC.getFocus scn)
                     (SC.isClean scn)
@@ -388,7 +386,7 @@ scnCallback ss hw scn sn
     | evt == SC.sCN_SAVEPOINTLEFT       = updateMenus ss hw scn              
     | evt == SC.sCN_FOCUSIN             = updateMenus ss hw scn           
     | evt == SC.sCN_FOCUSOUT            = updateMenus ss hw scn
-    | evt == SC.sCN_MARGINCLICK         = DR.toggleBreakPoint ss hw scn sn
+    | evt == SC.sCN_MARGINCLICK         = GH.toggleBreakPoint ss hw scn sn
     | otherwise = return ()
 
     where evt = (fromIntegral (SI.notifyGetCode sn) :: Int)
@@ -417,8 +415,8 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuBuildBuild
         setm ss tms CN.menuBuildRebuild
         setm ss tms CN.menuBuildClean
-        setm ss tms CN.menuBuildGhci
         setm ss tms CN.menuDebugRun
+        setm ss tms CN.menuDebugGhci
         setm ss tms CN.menuDebugDebug
         setm ss tms CN.menuDebugStop
         setm ss tms CN.menuDebugContinue
@@ -445,8 +443,8 @@ updateMenus ss hw scn = do
         setm' ss CN.menuBuildBuild        (return False) (return ())
         setm' ss CN.menuBuildRebuild      (return False) (return ())
         setm' ss CN.menuBuildClean        (return False) (return ())
-        setm' ss CN.menuBuildGhci         (return False) (return ())
         setm' ss CN.menuDebugRun          (return False) (return ())
+        setm' ss CN.menuDebugGhci         (return False) (return ())
         setm' ss CN.menuDebugDebug        (return False) (return ())
         setm' ss CN.menuDebugStop         (return False) (return ())
         setm' ss CN.menuDebugContinue     (return False) (return ())

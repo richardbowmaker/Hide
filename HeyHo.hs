@@ -25,7 +25,6 @@ import System.Process.Common
 
 -- project imports
 import qualified Constants as CN
-import qualified Debugger as DR
 import qualified EditorNotebook as EN
 import qualified FileMenu as FM
 import qualified Ghci as GH
@@ -92,7 +91,7 @@ setUpMainWindow mf sf = do
     auiManagerAddPaneByPaneInfo am tree api
     
     -- add dockable grid
-    grid <- DR.createGrid mf
+    grid <- GH.createGrid mf
     api <- auiPaneInfoCreateDefault
     auiPaneInfoCaption api "Grid Control"
     auiPaneInfoBottom api
@@ -148,23 +147,23 @@ setUpMainWindow mf sf = do
     -- setup the menus
     menus <- setupMenus mf
     -- create the session data
-    ss <- SS.ssCreate mf am enb menus sf onb scn grid 
+    ss <- SS.ssCreate mf am enb menus sf onb scn grid FM.fileOpen FM.fileSave
     
     -- setup static menu handlers
     set (SS.ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen        ss]
     set (SS.ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew         ss]
     set (SS.ssMenuListGet ss CN.menuWindowGhci)         [on command := GH.openWindow ss >> return ()]
-    set (SS.ssMenuListGet ss CN.menuWindowOutput)       [on command := OT.openOutputWindow  ss (FM.fileOpen ss)]
+    set (SS.ssMenuListGet ss CN.menuWindowOutput)       [on command := OT.openOutputWindow  ss]
     set (SS.ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
-    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [on command := OT.gotoNextError     ss (FM.fileOpen ss), enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [on command := OT.gotoPreviousError ss (FM.fileOpen ss), enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [on command := OT.gotoNextError     ss, enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [on command := OT.gotoPreviousError ss, enabled := False]
 
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
     set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
 
-    OT.openOutputWindow ss (FM.fileOpen ss)
+    OT.openOutputWindow ss 
 
     return ss
 
@@ -208,19 +207,19 @@ setupMenus mf  = do
     menuBuildBuild          <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildBuild),          help := (CN.menuHelp' CN.menuBuildBuild)]
     menuBuildReBuild        <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildRebuild),        help := (CN.menuHelp' CN.menuBuildRebuild)]
     menuBuildClean          <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildClean),          help := (CN.menuHelp' CN.menuBuildClean)]
-    menuBuildGhci           <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildGhci),           help := (CN.menuHelp' CN.menuBuildGhci)]
+    menuAppendSeparator menuBuild
+    menuBuildNextError      <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildNextError),      help := (CN.menuHelp' CN.menuBuildNextError)]
+    menuBuildPreviousError  <- menuItem menuBuild   [text := (CN.menuText' CN.menuBuildPreviousError),  help := (CN.menuHelp' CN.menuBuildPreviousError)]
           
     menuDebug               <- menuPane             [text := "Debug"]
     menuDebugRun            <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugRun),            help := (CN.menuHelp' CN.menuDebugRun)]
+    menuDebugGhci           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugGhci),           help := (CN.menuHelp' CN.menuDebugGhci)]
     menuDebugDebug          <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugDebug),          help := (CN.menuHelp' CN.menuDebugDebug)]
     menuDebugStop           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStop),           help := (CN.menuHelp' CN.menuDebugStop)]
     menuDebugContinue       <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugContinue),       help := (CN.menuHelp' CN.menuDebugContinue)]
     menuDebugStep           <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStep),           help := (CN.menuHelp' CN.menuDebugStep)]
     menuDebugStepLocal      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStepLocal),      help := (CN.menuHelp' CN.menuDebugStepLocal)]
     menuDebugStepModule     <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugStepModule),     help := (CN.menuHelp' CN.menuDebugStepModule)]
-    menuAppendSeparator menuDebug
-    menuDebugNextError      <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugNextError),      help := (CN.menuHelp' CN.menuDebugNextError)]
-    menuDebugPreviousError  <- menuItem menuDebug   [text := (CN.menuText' CN.menuDebugPreviousError),  help := (CN.menuHelp' CN.menuDebugPreviousError)]
 
     menuWindow              <- menuPane             [text := "Window"]
     menuWindowGhci          <- menuItem menuWindow  [text := (CN.menuText' CN.menuWindowGhci),          help := (CN.menuHelp' CN.menuWindowGhci)]
@@ -256,16 +255,16 @@ setupMenus mf  = do
                                     (CN.menuEditClear,           menuEditClear),
                                     (CN.menuBuildBuild,          menuBuildBuild),
                                     (CN.menuBuildCompile,        menuBuildCompile),
-                                    (CN.menuBuildGhci,           menuBuildGhci),
+                                    (CN.menuBuildNextError,      menuBuildNextError),
+                                    (CN.menuBuildPreviousError,  menuBuildPreviousError),
                                     (CN.menuDebugRun,            menuDebugRun),
+                                    (CN.menuDebugGhci,           menuDebugGhci),
                                     (CN.menuDebugDebug,          menuDebugDebug),
                                     (CN.menuDebugStop,           menuDebugStop),
                                     (CN.menuDebugContinue,       menuDebugContinue),
                                     (CN.menuDebugStep,           menuDebugStep),
                                     (CN.menuDebugStepLocal,      menuDebugStepLocal),
                                     (CN.menuDebugStepModule,     menuDebugStepModule),
-                                    (CN.menuDebugNextError,      menuDebugNextError),
-                                    (CN.menuDebugPreviousError,  menuDebugPreviousError),
                                     (CN.menuWindowGhci,          menuWindowGhci),
                                     (CN.menuWindowOutput,        menuWindowOutput),
                                     (CN.menuTestTest,            menuTestTest)]

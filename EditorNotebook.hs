@@ -26,9 +26,6 @@ import System.IO
 
 -- project imports
 
-import Misc
-import Scintilla
-import ScintillaConstants
 import qualified Session as SS
 
 ------------------------------------------------------------    

@@ -123,6 +123,8 @@ module Session
     ssDebugSession,
     ssDebugWarn,
     ssEditors,
+    ssFileOpen,
+    ssFileSave,
     ssFindText,
     ssFrame,
     ssGetCompilerReport,
@@ -216,7 +218,10 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssHideWindows       :: THideWindows,
                             ssState             :: TState,
                             ssDebugSession      :: TDebugSession,
-                            ssDebugGrid         :: Grid () }
+                            ssDebugGrid         :: Grid (),
+                            ssFileOpen          :: (Session -> String -> IO ()), -- File Open and Save are used in many places in the program
+                                                                                 -- however the strict modular hierarchy prevents import of FileMenu.hs where needed
+                            ssFileSave          :: (Session -> TextWindow -> SC.Editor -> IO Bool) }
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
@@ -240,8 +245,19 @@ type TState = TVar Int
 ----------------------------------------------------------------
 
 -- please call this on the main thread
-ssCreate :: Frame () -> AuiManager () -> AuiNotebook () -> SsMenuList -> StatusField -> AuiNotebook () -> SC.Editor -> Grid () -> IO Session
-ssCreate mf am nb ms sf ots db dbgr = do
+ssCreate :: 
+    Frame () -> 
+    AuiManager () -> 
+    AuiNotebook () -> 
+    SsMenuList -> 
+    StatusField -> 
+    AuiNotebook () -> 
+    SC.Editor -> 
+    Grid () ->
+    (Session -> String -> IO ()) ->
+    (Session -> TextWindow -> SC.Editor -> IO Bool) ->
+    IO Session
+ssCreate mf am nb ms sf ots db dbgr fileopen filesave = do
     mtid <- myThreadId
     cfn  <- atomically $ newTChan
     terr <- atomically $ newTVar (crCreateCompReport Nothing [])
@@ -253,7 +269,7 @@ ssCreate mf am nb ms sf ots db dbgr = do
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession Nothing "" [] Nothing
-    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr)
+    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr fileopen filesave)
 
 -- creates a new menu item lookup list
 -- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 

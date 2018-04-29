@@ -10,7 +10,7 @@ module Compile
     cpDebugRun,
     onBuildCompile,
     onBuildBuild,
-    onBuildGhci
+    onDebugGhci
 ) where
 
 -- library imports
@@ -51,22 +51,22 @@ import qualified Session as SS
 -- Build Menu handlers
 ------------------------------------------------------------    
     
-onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
-onBuildBuild ss tw scn fileSave fileOpen = do
+onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+onBuildBuild ss tw scn = do
 
     SS.ssSetStateBit ss SS.ssStateCompile
 
-    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)          [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugGhci)          [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
 
-    OT.openOutputWindow ss fileOpen
+    OT.openOutputWindow ss
 
     -- save file first
-    ans <- fileSave
+    ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -81,20 +81,20 @@ onBuildBuild ss tw scn fileSave fileOpen = do
                     SS.ssDebugError ss "onBuildBuild:: no file name set"
     else return ()
     
-onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
-onBuildCompile ss tw scn fileSave fileOpen = do
+onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+onBuildCompile ss tw scn = do
 
-    set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)          [enabled := False]
+    set (SS.ssMenuListGet ss CN.menuDebugGhci)          [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
 
-    OT.openOutputWindow ss fileOpen
+    OT.openOutputWindow ss
 
     -- save file first
-    ans <- fileSave
+    ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -113,17 +113,17 @@ compileComplete :: SS.Session -> IO ()
 compileComplete ss = do
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
-    set (SS.ssMenuListGet ss CN.menuBuildGhci)    [enabled := True]
+    set (SS.ssMenuListGet ss CN.menuDebugGhci)    [enabled := True]
     set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
     SS.ssClearStateBit ss SS.ssStateCompile
     OT.addTextS ss $ "Compile complete\n"
     return ()
 
-onBuildGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool -> (String -> IO ()) -> IO ()
-onBuildGhci ss tw scn fileSave fileOpen = do
+onDebugGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+onDebugGhci ss tw scn = do
 
    -- save file first
-    ans <- fileSave
+    ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
         mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
@@ -187,12 +187,12 @@ cpCompileFileDone ss mfinally ces = do
     
     if SS.crErrorCount ces == 0 then do
         SS.ssQueueFunction ss (OT.addTextS ss "\nNo errors\n")
-        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := False]
+        set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
+        set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
     else do
         SS.ssQueueFunction ss (OT.addTextS ss ("\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"))
-        set (SS.ssMenuListGet ss CN.menuDebugNextError)     [enabled := True]
-        set (SS.ssMenuListGet ss CN.menuDebugPreviousError) [enabled := True]
+        set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := True]
+        set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := True]
 
     -- save compilation results to session
     SS.ssSetCompilerReport ss ces

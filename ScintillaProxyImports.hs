@@ -15,6 +15,16 @@ module ScintillaProxyImports
     sciAddPopupMenuItem,
     ghciTerminalNew,
     ghciTerminalClose,
+    ghciTerminalEventGotFocus,
+    ghciTerminalEventLostFocus,
+    ghciTerminalEventSelectionSet,
+    ghciTerminalEventSelectionClear,
+    ghciTerminalEventClosed,
+    ghciTerminalEventOutput,
+    ghciTerminalEventAsynchOutput,
+    ghciTerminalEventInput,
+    ghciTerminalEventMaskGhci,
+    ghciTerminalEventMaskDebug,
     ghciTerminalSetEventHandler,
     ghciTerminalEnableEvents,
     ghciTerminalDisableEvents,
@@ -514,4 +524,32 @@ ghciTerminalGetText hwnd = do
 ghciTerminalClear :: HWND -> IO ()
 ghciTerminalClear = c_GhciTerminalClear
 
+ghciTerminalEventGotFocus :: Int
+ghciTerminalEventGotFocus = 0x01
 
+ghciTerminalEventLostFocus :: Int
+ghciTerminalEventLostFocus = 0x02
+
+ghciTerminalEventSelectionSet :: Int
+ghciTerminalEventSelectionSet = 0x04
+
+ghciTerminalEventSelectionClear :: Int
+ghciTerminalEventSelectionClear = 0x08
+
+ghciTerminalEventClosed :: Int
+ghciTerminalEventClosed = 0x10
+
+ghciTerminalEventOutput :: Int
+ghciTerminalEventOutput = 0x20
+  
+ghciTerminalEventInput :: Int
+ghciTerminalEventInput = 0x40
+
+ghciTerminalEventAsynchOutput :: Int
+ghciTerminalEventAsynchOutput = 0x80
+
+ghciTerminalEventMaskGhci :: Int
+ghciTerminalEventMaskGhci = 0x1f
+
+ghciTerminalEventMaskDebug :: Int
+ghciTerminalEventMaskDebug = 0xff

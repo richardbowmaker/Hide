@@ -35,7 +35,6 @@ import qualified EditMenu as EM
 import qualified EditorNotebook as EN
 import qualified Misc as MI
 import qualified Scintilla as SC
-import qualified ScintillaConstants as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
@@ -49,8 +48,8 @@ createOutputWindow f =
     auiNotebookCreate f idAny (Point 0 0) (Size 0 0) 
         (wxCLIP_CHILDREN + wxAUI_NB_TOP + wxAUI_NB_CLOSE_ON_ACTIVE_TAB)
 
-openOutputWindow :: SS.Session -> (String -> IO ()) -> IO ()
-openOutputWindow ss fileOpen = do
+openOutputWindow :: SS.Session -> IO ()
+openOutputWindow ss = do
     mhw <- SS.ssOutput ss
     case mhw of
         Just hw -> do
@@ -61,7 +60,7 @@ openOutputWindow ss fileOpen = do
                 Just scn -> SC.grabFocus scn
                 Nothing  -> return () -- shouldn't get here
 -}
-        Nothing -> addOutputTab ss fileOpen
+        Nothing -> addOutputTab ss
     
 closeOutputWindow :: SS.Session -> IO ()
 closeOutputWindow ss = do
@@ -92,8 +91,8 @@ closeOutputTab ss = do
                 Nothing  -> return () -- shouldn't get here
         Nothing -> return ()
 
-addOutputTab :: SS.Session -> (String -> IO ()) -> IO ()
-addOutputTab ss fileOpen = do
+addOutputTab :: SS.Session -> IO ()
+addOutputTab ss = do
     let nb = SS.ssOutputs ss
     -- create output tab
     panel <- panel nb []
@@ -118,7 +117,7 @@ addOutputTab ss fileOpen = do
     SS.ssSetOutput ss (Just hw)
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw fileOpen
+    SC.setEventHandler scn $ scnCallback ss hw
     SC.enableEvents scn
     SC.grabFocus scn
 
@@ -185,53 +184,53 @@ fileSave ss tw scn = do
     where mfp = SS.twFilePath tw
 
 -- jump to source file error location
-gotoErrorLine :: SS.Session -> Int -> (String -> IO ()) -> IO ()
-gotoErrorLine ss line fileOpen = do
+gotoErrorLine :: SS.Session -> Int -> IO ()
+gotoErrorLine ss line = do
     mce <- SS.crFindError ss line 
     case mce of
-        Just ce -> gotoError ss ce fileOpen
+        Just ce -> gotoError ss ce
         Nothing -> return ()
 
-gotoNextError :: SS.Session -> (String -> IO ()) -> IO ()
-gotoNextError ss fileOpen = do
+gotoNextError :: SS.Session -> IO ()
+gotoNextError ss  = do
     report <- SS.ssGetCompilerReport ss
     if SS.crErrorCount report > 0 then do
         let merr = SS.crCurrErr report
         case merr of
             Just err -> do
                 if err < (SS.crErrorCount report) - 1 then 
-                    gotoErrorNo ss (err+1) fileOpen
+                    gotoErrorNo ss (err+1)
                 else do
                     infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
                     SS.crUpdateCurrentError ss $ Nothing
-            Nothing -> gotoErrorNo ss 0 fileOpen
+            Nothing -> gotoErrorNo ss 0
     else return ()
 
-gotoPreviousError :: SS.Session -> (String -> IO ()) -> IO ()
-gotoPreviousError ss fileOpen = do
+gotoPreviousError :: SS.Session -> IO ()
+gotoPreviousError ss = do
     report <- SS.ssGetCompilerReport ss
     if SS.crErrorCount report > 0 then do
         let merr = SS.crCurrErr report
         case merr of
             Just err -> do
-                if err > 0 then gotoErrorNo ss (err-1) fileOpen
+                if err > 0 then gotoErrorNo ss (err-1)
                 else do
                     infoDialog (SS.ssFrame ss) CN.programTitle "No more errors"
                     SS.crUpdateCurrentError ss $ Nothing
-            Nothing -> gotoErrorNo ss 0 fileOpen
+            Nothing -> gotoErrorNo ss 0
     else return ()
      
-gotoErrorNo :: SS.Session -> Int -> (String -> IO ()) -> IO ()
-gotoErrorNo ss errno fileOpen = do
+gotoErrorNo :: SS.Session -> Int -> IO ()
+gotoErrorNo ss errno = do
     report <- SS.ssGetCompilerReport ss
     let errs = SS.crErrorCount report
     if errno >= 0 && errno < errs then 
-        gotoError ss ((SS.crErrors report) !! errno) fileOpen
+        gotoError ss ((SS.crErrors report) !! errno)
     else
         return ()
 
-gotoError :: SS.Session -> SS.CompError -> (String -> IO ()) -> IO ()
-gotoError ss ce fileOpen = do
+gotoError :: SS.Session -> SS.CompError -> IO ()
+gotoError ss ce = do
     -- goto source file from list of open files
     mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
     case mhw of          
@@ -244,7 +243,7 @@ gotoError ss ce fileOpen = do
             else return ()
         Nothing -> do
             -- source file not open
-            fileOpen $ SS.ceFilePath ce
+            (SS.ssFileOpen ss) ss $ SS.ceFilePath ce
             mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
             case mhw of
                 Just hw -> do
@@ -276,12 +275,12 @@ gotoError ss ce fileOpen = do
                             Nothing -> return ()
                     Nothing -> return ()
 
-scnCallback :: SS.Session -> SS.HideWindow -> (String -> IO ()) -> SC.Editor -> SC.SCNotification -> IO ()
-scnCallback ss hw fileOpen scn sn = do 
+scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
+scnCallback ss hw scn sn = do 
     -- event from output pane
     case (SI.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
-            gotoErrorLine ss (fromIntegral (SI.snLine sn) :: Int) fileOpen
+            gotoErrorLine ss (fromIntegral (SI.snLine sn) :: Int)
             return ()
         2007 -> do -- sCN_UPDATEUI
             SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
