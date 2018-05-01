@@ -12,11 +12,6 @@ module Ghci
     getTextLength,
     hasFocus,
     onDebugGhci,
-    onDebugContinue,
-    onDebugStep,
-    onDebugStepLocal,
-    onDebugStepModule,
-    onDebugStop,
     openDebugWindow,
     openWindow,
     openWindowFile,
@@ -31,23 +26,15 @@ module Ghci
 import qualified Data.ByteString as BS (init, replicate)
 import qualified Data.ByteString.Char8 as BS (unpack, take, writeFile)
 import qualified Data.ByteString.Internal as BS (ByteString)
-import qualified Data.ByteString.Unsafe as BS (unsafeUseAsCString)
-import Control.Concurrent 
-import Control.Concurrent.STM
-import Control.Monad (foldM, mapM_, liftM, liftM2) 
+import Control.Monad (foldM, liftM, liftM2) 
 import Data.Bits ((.&.), (.|.), testBit)
 import Data.Int (Int32)
-import Data.List (find, findIndex, intercalate)
-import Data.Maybe (isJust)
-import Data.Word (Word64)
-import Foreign.C.String (CString, withCString, peekCString)
-import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
+import Data.List (findIndex, intercalate)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
 import System.FilePath.Windows ((</>), takeFileName, takeDirectory)
-import System.IO
-import System.Win32.Types (nullHANDLE)
+
 
 -- project imports
 
@@ -71,27 +58,14 @@ onDebugGhci ss tw scn = do
                     Just fp -> do
                         mtw' <- openWindowFile ss $ SS.hwWindow hw 
                         case mtw' of 
-                            Just tw' -> startDebug ss tw' >> return() 
+                            Just tw' -> do
+                                SS.ssQueueFunction ss $ startDebug ss tw (SS.twHwnd tw')
+                                return() 
                             Nothing -> return ()
                     Nothing -> return ()
             Nothing -> do
                 SS.ssDebugError ss "onBuildGhci:: no file name set"
     else return ()
-
-onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStop ss tw = stopDebug ss
-
-onDebugContinue :: SS.Session -> SS.TextWindow -> IO ()
-onDebugContinue ss tw = continue ss >> return ()
-
-onDebugStep :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStep ss tw = step ss >> return ()
-
-onDebugStepLocal :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStepLocal ss tw = stepLocal ss >> return ()
-
-onDebugStepModule :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStepModule ss tw = stepModule ss >> return ()
 
 openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
@@ -103,7 +77,6 @@ openWindowFile ss ftw = do
             let nb = SS.ssOutputs ss
             auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
             -- reload the source file
-            sendCommand ss $ ":load *" ++ (maybe "" id (SS.twFilePath tw))
             return (Just tw)
         Nothing -> do
             -- GHCI not open so open a new tab
@@ -112,7 +85,6 @@ openWindowFile ss ftw = do
                     mw <- open ss fp                
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
-                                sendCommand ss $ ":load *" ++ fp
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
                                 setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
@@ -122,20 +94,19 @@ openWindowFile ss ftw = do
                         Nothing -> return Nothing
                 Nothing -> return Nothing
 
-startDebug :: SS.Session -> SS.TextWindow -> IO Bool
-startDebug ss tw = do
+startDebug :: SS.Session -> SS.TextWindow -> HWND -> IO ()
+startDebug ss tw hwnd = do
     case SS.twFilePath tw of
         Just fp -> do
             SS.dsUpdateDebugSession ss (\ds -> 
                 SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
-            modules <- getModulesLookup ss
+            load ss hwnd fp
+            modules <- getModulesLookup ss hwnd
             -- mapM_ (addModule ss) modules
-            setBreakPoints ss modules
+            setBreakPoints ss modules hwnd
             SS.ssSetStateBit ss SS.ssStateDebugging
-            return True
         Nothing -> do
             SS.ssDebugError ss "Ghci.startDebug: no filename set"
-            return False
 
 openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
@@ -207,19 +178,19 @@ createHideWindow ss panel phwnd hwnd mfp = do
         debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
         tms tw = SS.createTextMenus 
                     [ 
-                        (SS.createMenuFunction CN.menuFileClose         (closeWindow ss tw)                 (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll      (closeAll ss)                       (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSaveAs ss tw)                  (return True)),
-                        (SS.createMenuFunction CN.menuEditCut           (cut hwnd)                          (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditCopy          (copy hwnd)                         (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditPaste         (paste hwnd)                        (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (selectAll hwnd)                    (return True)),
-                        (SS.createMenuFunction CN.menuEditClear         (clear hwnd)                        (return True)),
-                        (SS.createMenuFunction CN.menuDebugStop         (onDebugStop ss tw)                 (debugging)),
-                        (SS.createMenuFunction CN.menuDebugContinue     (onDebugContinue ss tw)             (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStep         (onDebugStep ss tw)                 (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepLocal    (onDebugStepLocal ss tw)            (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepModule   (onDebugStepModule ss tw)           (debuggerPaused))
+                        (SS.createMenuFunction CN.menuFileClose         (closeWindow ss tw)     (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (closeAll ss)           (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSaveAs ss tw)      (return True)),
+                        (SS.createMenuFunction CN.menuEditCut           (cut hwnd)              (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditCopy          (copy hwnd)             (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditPaste         (paste hwnd)            (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (selectAll hwnd)        (return True)),
+                        (SS.createMenuFunction CN.menuEditClear         (clear hwnd)            (return True)),
+                        (SS.createMenuFunction CN.menuDebugStop         (stopDebug ss hwnd)     (debugging)),
+                        (SS.createMenuFunction CN.menuDebugContinue     (continue ss hwnd)      (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStep         (step ss hwnd)          (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepLocal    (stepLocal ss hwnd)     (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepModule   (stepModule ss hwnd)    (debuggerPaused))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -311,29 +282,25 @@ toggleBreakPoint ss hw scn sn = do
             bps <- SS.dsGetBreakPoints ss
             SS.ssDebugInfo ss $ "Ghci.toggleBreakPoint" ++ intercalate "\n" (map show bps)
 
-stopDebug :: SS.Session -> IO ()
-stopDebug ss = do
-    sendCommand ss ":quit\n"
+stopDebug :: SS.Session -> HWND -> IO ()
+stopDebug ss hwnd = do
+    sendCommand hwnd ":quit\n"
     clearDebugStoppedMarker ss
     SS.ssClearStateBit ss SS.ssStateDebugging
     SS.ssClearStateBit ss SS.ssStateRunning
-    mhwnd <- SS.dsGetSessionHwnd ss
-    case mhwnd of
-        Just hwnd -> do
-            SI.ghciTerminalClose hwnd
-            SS.dsClearDebugSession ss
-        Nothing -> SS.ssDebugError ss "Ghci.stopDebug: No GHCI session"
+    SI.ghciTerminalClose hwnd
+    SS.dsClearDebugSession ss
 
-load :: SS.Session -> String -> IO Bool
-load ss fp = do
-    ms <- sendCommandSynch ss (":load *" ++ fp) "Main> " 30000
+load :: SS.Session -> HWND -> String -> IO Bool
+load ss hwnd fp = do
+    ms <- sendCommandSynch ss hwnd (":load *" ++ fp) "Main> " 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
-printVar :: SS.Session -> String -> IO String
-printVar ss var = do
-    ms <- sendCommandSynch ss (":print " ++ var) "Main> " 30000
+printVar :: SS.Session -> HWND -> String -> IO String
+printVar ss hwnd var = do
+    ms <- sendCommandSynch ss hwnd (":print " ++ var) "Main> " 30000
     case ms of
         Just s  -> do
             let is = maybe 0 id (findIndex (== '=') s)
@@ -341,60 +308,59 @@ printVar ss var = do
             return $ take (ie - is) $ drop is s
         Nothing -> return "<variable not found>"
 
-addModule :: SS.Session -> (String, String) -> IO Bool
-addModule ss (_, mod) = do
-    ms <- sendCommandSynch ss (":add *" ++ mod) "Main> " 30000
+addModule :: SS.Session -> HWND -> (String, String) -> IO Bool
+addModule ss hwnd (_, mod) = do
+    ms <- sendCommandSynch ss hwnd (":add *" ++ mod) "Main> " 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
-runMain :: SS.Session -> IO Bool
-runMain ss = do
+runMain :: SS.Session -> HWND -> IO ()
+runMain ss hwnd = do
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch ss "main\n" "Main> "
-    return True
+    sendCommandAsynch hwnd "main\n" "Main> "
 
-continue :: SS.Session -> IO Bool
-continue ss = do
+continue :: SS.Session -> HWND -> IO ()
+continue ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning    
-    sendCommandAsynch ss ":continue\n" "Main> "
-    return True
+    sendCommandAsynch hwnd ":continue\n" "Main> "
 
-step :: SS.Session -> IO Bool
-step ss = do
+step :: SS.Session -> HWND -> IO ()
+step ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch ss ":step\n" "Main> "
-    return True
+    sendCommandAsynch hwnd ":step\n" "Main> "
 
-stepLocal :: SS.Session -> IO Bool
-stepLocal ss = do
+stepLocal :: SS.Session -> HWND -> IO ()
+stepLocal ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch ss ":steplocal\n" "Main> "
-    return True
+    sendCommandAsynch hwnd ":steplocal\n" "Main> "
 
-stepModule :: SS.Session -> IO Bool
-stepModule ss = do
+stepModule :: SS.Session -> HWND -> IO ()
+stepModule ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch ss ":stepmodule\n" "Main> "
-    return True
+    sendCommandAsynch hwnd ":stepmodule\n" "Main> "
 
-deleteBreakPoints :: SS.Session -> IO Bool
-deleteBreakPoints ss = do
-    ms <- sendCommandSynch ss ":delete *" "Main> " 1000
+deleteBreakPoints :: SS.Session -> HWND -> IO Bool
+deleteBreakPoints ss hwnd = do
+    ms <- sendCommandSynch ss hwnd ":delete *" "Main> " 1000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
-getModulesLookup :: SS.Session -> IO ([(String, String)])
-getModulesLookup ss = do
-    ms <- sendCommandSynch ss ":show modules" "Main> " 1000 
+getModulesLookup :: SS.Session -> HWND -> IO ([(String, String)])
+getModulesLookup ss hwnd = do
+    ms <- sendCommandSynch ss hwnd ":show modules" "Main> " 1000 
     case ms of
-        Just s -> return $ map getModuleLookup (lines s) 
-        Nothing -> return [] 
+        Just s -> do 
+            SS.ssDebugInfo ss $ "Modules: " ++ (intercalate "\n" (map tuptostr $ modules s))
+            return $ modules s
+        Nothing -> return []
+    where modules s = map getModuleLookup (lines s)
+          tuptostr (x,y) = show x ++ " = " ++ show y
 
 getModuleLookup :: String -> (String, String)
 getModuleLookup s = 
@@ -404,11 +370,11 @@ getModuleLookup s =
     else
         ("", "")
 
-setBreakPoints :: SS.Session -> [(String, String)] -> IO Bool
-setBreakPoints ss modules = do
+setBreakPoints :: SS.Session -> [(String, String)] -> HWND -> IO Bool
+setBreakPoints ss modules hwnd = do
     bps <- SS.dsGetBreakPoints ss
     bps' <- foldM (\bps' bp -> do
-        mno <- setBreakPoint ss bp modules
+        mno <- setBreakPoint ss bp modules hwnd
         case mno of
             Just no -> return $ (SS.dsSetBreakPointNo bp no) : bps'
             Nothing -> return $ bp : bps') [] bps
@@ -418,11 +384,11 @@ setBreakPoints ss modules = do
     else
         return False
   
-setBreakPoint :: SS.Session -> SS.DebugBreakPoint -> [(String, String)] -> IO (Maybe Int)
-setBreakPoint ss bp modules = do
+setBreakPoint :: SS.Session -> SS.DebugBreakPoint -> [(String, String)] -> HWND -> IO (Maybe Int)
+setBreakPoint ss bp modules hwnd = do
     l <- SC.markerLineFromHandle (SS.dsEditor bp) (SS.dsHandle bp)
     let mod = maybe "" id $ lookup (takeFileName $ SS.dsFilePath bp) modules
-    ms <- sendCommandSynch ss  (":break " ++ mod ++ " " ++ (show (l+1)))  "Main> " 1000
+    ms <- sendCommandSynch ss  hwnd (":break " ++ mod ++ " " ++ (show (l+1)))  "Main> " 1000
     case ms of
         Just s -> do
             let ws = words s
@@ -432,36 +398,22 @@ setBreakPoint ss bp modules = do
                 return Nothing
         Nothing -> return Nothing 
 
-sendCommand :: SS.Session -> String -> IO ()
-sendCommand ss cmd = do
-    mhwnd <- SS.dsGetSessionHwnd ss
-    case mhwnd of
-        Just hwnd -> SI.ghciTerminalSendCommand hwnd cmd 
-        Nothing -> SS.ssDebugError ss "Debugger.sendCommand: no GHCI session"
+sendCommand :: HWND -> String -> IO ()
+sendCommand hwnd cmd = SI.ghciTerminalSendCommand hwnd cmd 
 
-sendCommandAsynch :: SS.Session -> String -> String -> IO ()
-sendCommandAsynch ss cmd eod = do
-    mhwnd <- SS.dsGetSessionHwnd ss
-    case mhwnd of
-        Just hwnd -> SI.ghciTerminalSendCommandAsynch hwnd cmd "" eod
-        Nothing -> SS.ssDebugError ss "Debugger.sendCommandAsynch: no GHCI session"
+sendCommandAsynch :: HWND -> String -> String -> IO ()
+sendCommandAsynch hwnd cmd eod = SI.ghciTerminalSendCommandAsynch hwnd cmd "" eod
    
-sendCommandSynch :: SS.Session -> String -> String -> Int -> IO (Maybe String)
-sendCommandSynch ss cmd eod timeout = do
-    mhwnd <- SS.dsGetSessionHwnd ss
-    case mhwnd of
-        Just hwnd -> do
-            ms <- SI.ghciTerminalSendCommandSynch hwnd cmd eod timeout
-            case ms of 
-                Just s -> do
-                    SS.ssDebugInfo ss $ "response to command: " ++ cmd
-                    SS.ssDebugInfo ss s
-                    return ms
-                Nothing -> do
-                    SS.ssDebugError ss $ "bad response to command: " ++ cmd
-                    return Nothing
+sendCommandSynch :: SS.Session -> HWND -> String -> String -> Int -> IO (Maybe String)
+sendCommandSynch ss hwnd cmd eod timeout = do
+    ms <- SI.ghciTerminalSendCommandSynch hwnd cmd eod timeout
+    case ms of 
+        Just s -> do
+            SS.ssDebugInfo ss $ "response to command: " ++ cmd
+            SS.ssDebugInfo ss s
+            return ms
         Nothing -> do
-            SS.ssDebugError ss "Debugger.sendCommandAsynch: no GHCI session"
+            SS.ssDebugError ss $ "bad response to command: " ++ cmd
             return Nothing
     
 clearDebugStoppedMarker :: SS.Session -> IO ()
@@ -556,7 +508,7 @@ eventHandler ss hw mask hwnd evt mstr
             case PR.parseDebuggerOutput str of
                 Just dout -> do
                     SS.dsSetDebugOutput ss dout
-                    SS.ssQueueFunction ss $ handleDebuggerOutput ss
+                    SS.ssQueueFunction ss $ handleDebuggerOutput ss hwnd
                 Nothing   -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
             SS.ssClearStateBit ss SS.ssStateRunning            
         else return () -- should send this to the output pane
@@ -572,8 +524,8 @@ eventHandler ss hw mask hwnd evt mstr
             evt' = evt .&. mask
             str = (maybe "" id mstr)
 
-handleDebuggerOutput :: SS.Session -> IO ()
-handleDebuggerOutput ss = do
+handleDebuggerOutput :: SS.Session -> HWND -> IO ()
+handleDebuggerOutput ss hwnd = do
     ds <- SS.dsGetDebugSession ss
     case SS.dsOutput ds of
         Just dout -> do
@@ -581,10 +533,10 @@ handleDebuggerOutput ss = do
             (SS.ssFileOpen ss) ss filePath
         Nothing -> return ()
     setDebugStoppedMarker ss
-    displayVariablesGrid ss
+    displayVariablesGrid ss hwnd
 
-displayVariablesGrid :: SS.Session -> IO ()
-displayVariablesGrid ss = do
+displayVariablesGrid :: SS.Session -> HWND -> IO ()
+displayVariablesGrid ss hwnd = do
     mdout <- SS.dsGetDebugOutput ss
     case mdout of
         Just dout -> do
@@ -593,7 +545,7 @@ displayVariablesGrid ss = do
             if nr > 0 then gridDeleteRows grid 0 nr True
             else return False
             appendRows grid $ replicate (length $ SS.doVariables dout) ""
-            prints <- mapM (\var -> printVar ss (SS.doVariable var)) (SS.doVariables dout)
+            prints <- mapM (\var -> printVar ss hwnd (SS.doVariable var)) (SS.doVariables dout)
             mapM_ (\(row, var, print) -> 
                 setRow grid (row, [(SS.doVariable var), (SS.doType var), print])) (zip3 [0..] (SS.doVariables dout) prints)
             return ()
