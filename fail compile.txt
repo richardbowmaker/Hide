@@ -1,5 +1,0 @@
-[6 of 7] Compiling Compile          ( Compile.hs, Compile.o )
-
-Compile.hs:45:17: error:
-    * Variable not in scope: ss1 :: Session
-    * Perhaps you meant `ss' (line 41)

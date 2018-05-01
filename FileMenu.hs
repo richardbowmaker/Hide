@@ -75,8 +75,6 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
     return $ SS.createHideWindow tw (tms tw)
 
     where   tms tw =
-                let debugging = SS.ssTestState ss SS.ssStateDebugging
-                    debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning) in
 
                 SS.createTextMenus                    
                     [
@@ -100,13 +98,7 @@ createHideWindow ss scn panel phwnd hwnd mfp = do
                         (SS.createMenuFunction CN.menuBuildRebuild      (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
                         (SS.createMenuFunction CN.menuBuildClean        (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
                         (SS.createMenuFunction CN.menuDebugRun          (CP.cpDebugRun ss tw)           (liftM not $ SS.ssTestState ss SS.ssStateDebugging)),
-                        (SS.createMenuFunction CN.menuDebugGhci         (CP.onDebugGhci ss tw scn)      (liftM not $ SS.ssTestState ss SS.ssStateCompile)),
-                        (SS.createMenuFunction CN.menuDebugDebug        (GH.onDebugDebug ss tw)         (liftM not $ debugging)),
-                        (SS.createMenuFunction CN.menuDebugStop         (GH.onDebugStop ss tw)          (debugging)),
-                        (SS.createMenuFunction CN.menuDebugContinue     (GH.onDebugContinue ss tw)      (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStep         (GH.onDebugStep ss tw)          (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepLocal    (GH.onDebugStepLocal ss tw)     (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepModule   (GH.onDebugStepModule ss tw)    (debuggerPaused))
+                        (SS.createMenuFunction CN.menuDebugGhci         (GH.onDebugGhci ss tw scn)      (liftM not $ SS.ssTestState ss SS.ssStateCompile))
                     ]
                     (SC.getFocus scn)
                     (SC.isClean scn)
@@ -417,12 +409,6 @@ updateMenus ss hw scn = do
         setm ss tms CN.menuBuildClean
         setm ss tms CN.menuDebugRun
         setm ss tms CN.menuDebugGhci
-        setm ss tms CN.menuDebugDebug
-        setm ss tms CN.menuDebugStop
-        setm ss tms CN.menuDebugContinue
-        setm ss tms CN.menuDebugStep
-        setm ss tms CN.menuDebugStepLocal
-        setm ss tms CN.menuDebugStepModule
     else do
         setm' ss CN.menuFileClose         (return False) (return ())
         setm' ss CN.menuFileCloseAll      (return False) (return ())
@@ -445,12 +431,6 @@ updateMenus ss hw scn = do
         setm' ss CN.menuBuildClean        (return False) (return ())
         setm' ss CN.menuDebugRun          (return False) (return ())
         setm' ss CN.menuDebugGhci         (return False) (return ())
-        setm' ss CN.menuDebugDebug        (return False) (return ())
-        setm' ss CN.menuDebugStop         (return False) (return ())
-        setm' ss CN.menuDebugContinue     (return False) (return ())
-        setm' ss CN.menuDebugStep         (return False) (return ())
-        setm' ss CN.menuDebugStepLocal    (return False) (return ())
-        setm' ss CN.menuDebugStepModule   (return False) (return ())
 
         where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
                 setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)

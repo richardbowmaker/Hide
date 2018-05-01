@@ -11,8 +11,8 @@ module Ghci
     getAllText,
     getTextLength,
     hasFocus,
+    onDebugGhci,
     onDebugContinue,
-    onDebugDebug,
     onDebugStep,
     onDebugStepLocal,
     onDebugStepModule,
@@ -58,6 +58,41 @@ import qualified Scintilla as SC
 import qualified ScintillaProxyImports as SI
 import qualified Session as SS
 
+onDebugGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+onDebugGhci ss tw scn = do
+   -- save file first
+    ans <- (SS.ssFileSave ss) ss tw scn
+    if ans then do
+        -- get again in case filename changed
+        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
+        case mhw of
+            Just hw -> do
+                case SS.hwFilePath hw of
+                    Just fp -> do
+                        mtw' <- openWindowFile ss $ SS.hwWindow hw 
+                        case mtw' of 
+                            Just tw' -> startDebug ss tw' >> return() 
+                            Nothing -> return ()
+                    Nothing -> return ()
+            Nothing -> do
+                SS.ssDebugError ss "onBuildGhci:: no file name set"
+    else return ()
+
+onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStop ss tw = stopDebug ss
+
+onDebugContinue :: SS.Session -> SS.TextWindow -> IO ()
+onDebugContinue ss tw = continue ss >> return ()
+
+onDebugStep :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStep ss tw = step ss >> return ()
+
+onDebugStepLocal :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStepLocal ss tw = stepLocal ss >> return ()
+
+onDebugStepModule :: SS.Session -> SS.TextWindow -> IO ()
+onDebugStepModule ss tw = stepModule ss >> return ()
+
 openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
     -- see if a GHCI window is already open with the same file as in ftw (scintilla editor)
@@ -86,6 +121,21 @@ openWindowFile ss ftw = do
                                 return (Just $ SS.hwWindow hw)
                         Nothing -> return Nothing
                 Nothing -> return Nothing
+
+startDebug :: SS.Session -> SS.TextWindow -> IO Bool
+startDebug ss tw = do
+    case SS.twFilePath tw of
+        Just fp -> do
+            SS.dsUpdateDebugSession ss (\ds -> 
+                SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
+            modules <- getModulesLookup ss
+            -- mapM_ (addModule ss) modules
+            setBreakPoints ss modules
+            SS.ssSetStateBit ss SS.ssStateDebugging
+            return True
+        Nothing -> do
+            SS.ssDebugError ss "Ghci.startDebug: no filename set"
+            return False
 
 openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
@@ -152,17 +202,24 @@ createHideWindow ss panel phwnd hwnd mfp = do
     let tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
     return $ SS.createHideWindow tw (tms tw)
 
-    where  tms tw = SS.createTextMenus 
+    where  
+        debugging = SS.ssTestState ss SS.ssStateDebugging
+        debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
+        tms tw = SS.createTextMenus 
                     [ 
-                        (SS.createMenuFunction CN.menuFileClose      (closeWindow ss tw)                    (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll   (closeAll ss)                          (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs     (fileSaveAs ss tw)                     (return True)),
-                        (SS.createMenuFunction CN.menuEditCut        (cut hwnd)                             (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditCopy       (copy hwnd)                            (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditPaste      (paste hwnd)                           (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll  (selectAll hwnd)                       (return True)),
-                        (SS.createMenuFunction CN.menuEditClear      (clear hwnd)                           (return True)),
-                        (SS.createMenuFunction CN.menuDebugGhci      (openWindowFile ss tw >> return ())    (return $ isJust (SS.twFilePath tw)))
+                        (SS.createMenuFunction CN.menuFileClose         (closeWindow ss tw)                 (return True)),
+                        (SS.createMenuFunction CN.menuFileCloseAll      (closeAll ss)                       (return True)),
+                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSaveAs ss tw)                  (return True)),
+                        (SS.createMenuFunction CN.menuEditCut           (cut hwnd)                          (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditCopy          (copy hwnd)                         (isTextSelected hwnd)),
+                        (SS.createMenuFunction CN.menuEditPaste         (paste hwnd)                        (return True)),
+                        (SS.createMenuFunction CN.menuEditSelectAll     (selectAll hwnd)                    (return True)),
+                        (SS.createMenuFunction CN.menuEditClear         (clear hwnd)                        (return True)),
+                        (SS.createMenuFunction CN.menuDebugStop         (onDebugStop ss tw)                 (debugging)),
+                        (SS.createMenuFunction CN.menuDebugContinue     (onDebugContinue ss tw)             (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStep         (onDebugStep ss tw)                 (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepLocal    (onDebugStepLocal ss tw)            (debuggerPaused)),
+                        (SS.createMenuFunction CN.menuDebugStepModule   (onDebugStepModule ss tw)           (debuggerPaused))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -230,24 +287,6 @@ enableEvents = SI.ghciTerminalEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = SI.ghciTerminalDisableEvents
     
-onDebugDebug :: SS.Session -> SS.TextWindow -> IO ()
-onDebugDebug ss tw = startDebug ss tw >> return ()
-
-onDebugStop :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStop ss tw = stopDebug ss
-
-onDebugContinue :: SS.Session -> SS.TextWindow -> IO ()
-onDebugContinue ss tw = continue ss >> return ()
-
-onDebugStep :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStep ss tw = step ss >> return ()
-
-onDebugStepLocal :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStepLocal ss tw = stepLocal ss >> return ()
-
-onDebugStepModule :: SS.Session -> SS.TextWindow -> IO ()
-onDebugStepModule ss tw = stepModule ss >> return ()
-
 toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
 toggleBreakPoint ss hw scn sn = do
     l <- SC.getLineFromPosition scn (fromIntegral (SI.snPosition sn) :: Int)
@@ -271,22 +310,6 @@ toggleBreakPoint ss hw scn sn = do
         traceBPs = do
             bps <- SS.dsGetBreakPoints ss
             SS.ssDebugInfo ss $ "Ghci.toggleBreakPoint" ++ intercalate "\n" (map show bps)
-
-startDebug :: SS.Session -> SS.TextWindow -> IO Bool
-startDebug ss tw = do
-    case SS.twFilePath tw of
-        Just fp -> do
-            SS.dsUpdateDebugSession ss (\ds -> 
-                SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
-            modules <- getModulesLookup ss
-            -- mapM_ (addModule ss) modules
-            setBreakPoints ss modules
-            runMain ss
-            SS.ssSetStateBit ss SS.ssStateDebugging
-            return True
-        Nothing -> do
-            SS.ssDebugError ss "Ghci.startDebug: no filename set"
-            return False
 
 stopDebug :: SS.Session -> IO ()
 stopDebug ss = do
@@ -497,7 +520,11 @@ eventHandler ss hw mask hwnd evt mstr
         setm' ss CN.menuEditFindForward   (return False) (return ())
         setm' ss CN.menuEditFindBackward  (return False) (return ())
         setm' ss CN.menuEditClear         (return False) (return ())
-        setm' ss CN.menuDebugGhci         (return False) (return ())
+        setm' ss CN.menuDebugStop         (return False) (return ())
+        setm' ss CN.menuDebugContinue     (return False) (return ())
+        setm' ss CN.menuDebugStep         (return False) (return ())
+        setm' ss CN.menuDebugStepLocal    (return False) (return ())
+        setm' ss CN.menuDebugStepModule   (return False) (return ())
     | evt' == SI.ghciTerminalEventGotFocus = do
         setm ss tms CN.menuFileClose        
         setm ss tms CN.menuFileCloseAll        
@@ -514,7 +541,11 @@ eventHandler ss hw mask hwnd evt mstr
         setm ss tms CN.menuEditFindForward   
         setm ss tms CN.menuEditFindBackward            
         setm ss tms CN.menuEditClear          
-        setm ss tms CN.menuDebugGhci         
+        setm ss tms CN.menuDebugStop   
+        setm ss tms CN.menuDebugContinue   
+        setm ss tms CN.menuDebugStep   
+        setm ss tms CN.menuDebugStepLocal   
+        setm ss tms CN.menuDebugStepModule   
     | evt' == SI.ghciTerminalEventSelectionSet || evt == SI.ghciTerminalEventSelectionClear = do
         setm ss tms CN.menuEditCut           
         setm ss tms CN.menuEditCopy          

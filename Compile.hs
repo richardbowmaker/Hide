@@ -9,8 +9,7 @@ module Compile
     cpCompileFile,
     cpDebugRun,
     onBuildCompile,
-    onBuildBuild,
-    onDebugGhci
+    onBuildBuild
 ) where
 
 -- library imports
@@ -118,25 +117,6 @@ compileComplete ss = do
     SS.ssClearStateBit ss SS.ssStateCompile
     OT.addTextS ss $ "Compile complete\n"
     return ()
-
-onDebugGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
-onDebugGhci ss tw scn = do
-
-   -- save file first
-    ans <- (SS.ssFileSave ss) ss tw scn
-    if ans then do
-        -- get again in case filename changed
-        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
-        case mhw of
-            Just hw -> do
-                case SS.hwFilePath hw of
-                    Just fp -> do
-                        GH.openWindowFile ss $ SS.hwWindow hw 
-                        return ()
-                    Nothing -> return ()
-            Nothing -> do
-                    SS.ssDebugError ss "onBuildGhci:: no file name set"
-    else return ()
 
 -- | Build the project
 cpBuildProject ::   SS.Session          -- ^ The HIDE session
