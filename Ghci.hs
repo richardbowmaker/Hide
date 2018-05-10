@@ -101,9 +101,9 @@ startDebug ss tw hwnd = do
             SS.dsUpdateDebugSession ss (\ds -> 
                 SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
             load ss hwnd fp
-            modules <- getModulesLookup ss hwnd
+            -- modules <- getModulesLookup ss hwnd
             -- mapM_ (addModule ss) modules
-            setBreakPoints ss modules hwnd
+            -- setBreakPoints ss modules hwnd
             SS.ssSetStateBit ss SS.ssStateDebugging
         Nothing -> do
             SS.ssDebugError ss "Ghci.startDebug: no filename set"

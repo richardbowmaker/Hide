@@ -15,14 +15,17 @@ module Compile
 -- library imports
 import Control.Concurrent 
 import Control.Concurrent.STM
+import Control.Concurrent.STM.TVar
 import qualified Control.Concurrent.Thread as Thread
 import Control.Exception
 import Control.Monad (liftM)
 import Control.Monad.Loops
 import Data.Bits ((.&.), (.|.), xor)
-import qualified Data.ByteString.Char8 as BS (ByteString, hGetContents, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
-import qualified Data.ByteString as BS (append, empty)
+--import qualified Data.ByteString.Char8 as BS (ByteString, hGetContents, hGetLine, hPutStr, readFile, pack, putStrLn, unpack, writeFile)
+--import qualified Data.ByteString as BS (append, empty)
 import Data.List (find, findIndex, isInfixOf)
+import qualified Data.Text as TX (append, init, pack, Text, unpack)
+import qualified Data.Text.IO as TX (hGetChunk, hGetLine)
 import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
@@ -200,38 +203,44 @@ cpDebugRun ss tw = do
         Nothing -> return ()
 
 -- run command and redirect std out to the output pane
--- session -> arguments -> working directory -> stdout TChan -> completion function
+-- session -> arguments -> working directory -> completion function
 runGHC :: SS.Session -> [String] -> String -> Maybe (SS.CompReport -> IO ()) -> IO ()
 runGHC ss args dir mfinally = do
     
     SS.ssDebugInfo ss $ "Run GHC: " ++ (concat $ map (\s -> s ++ "|") args) ++ " dir: " ++ dir
 
-    (hr, hw) <- createPipe
+    (hor, how) <- createPipe
+    (_, _, _, ph) <- createProcess (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc.exe" args)
+        {cwd = Just dir, std_out = UseHandle how, std_err = UseHandle how}
 
-    (_, _, _, ph) <- createProcess_ "errors" (proc "C:\\Program Files\\Haskell Platform\\8.0.1\\bin\\ghc.exe" args)
-        {cwd = Just dir, std_out = UseHandle hw, std_err = UseHandle hw}
+    -- capture compiler output and stream it to the output pane
+    tx <- captureOutput ss hor ph 
+    SS.ssDebugInfo ss $ "compiler report: " ++ TX.unpack tx
 
-    -- stream compiler output to output pane
-    s <- captureOutput ss hr ""
-
-    waitForProcess ph
-
-    case (P.runParser PR.errorFile 0 "" s) of
-        Left _   -> SS.ssDebugError ss "Parse of compilation errors failed"
+    case P.runParser PR.errorFile 0 "" $ TX.unpack tx of
+        Left _       -> SS.ssDebugError ss "Parse of compilation errors failed"
         Right report -> do
             SS.ssDebugInfo ss $ "parsed ok\n" ++ (SS.compErrorsToString $ SS.crErrors report)
             maybe (return ()) (\f -> f report) mfinally
+   
+-- the first parameter is a delay in ms, which is doubled each time on EOF, this is
+-- because the linking phase can take several minutes with no output, and the stack might overflow
+captureOutput :: SS.Session -> Handle -> ProcessHandle -> IO TX.Text
+captureOutput = captureOutput' 10 $ TX.pack ""
 
--- captures output from handle, wrtes to the output pane and returns
--- the captured data
-captureOutput :: SS.Session -> Handle -> String -> IO String
-captureOutput ss h str = do
-    eof <- hIsEOF h
-    if eof then do
-        return str
-    else do
-        bs <- BS.hGetLine h -- NB hGetLine is appending a CR on the end of the line !!
-        SS.ssQueueFunction ss (OT.addTextBS ss bs)
-        -- remove CR and append new line, required by parser
-        captureOutput ss h $ str ++ (init (BS.unpack bs)) ++ "\n"
+captureOutput' :: Int -> TX.Text -> SS.Session -> Handle -> ProcessHandle -> IO TX.Text
+captureOutput' delay output ss h ph = do
+    mcode <- getProcessExitCode ph
+    case mcode of
+        Just _ -> return output
+        Nothing -> do
+            eof <- hIsEOF h         
+            if eof then do
+                threadDelay (1000 * delay)
+                captureOutput' (min 1000 (delay * 2)) output ss h ph             
+            else do
+                tx <- TX.hGetLine h -- NB hGetLine is appending a CR on the end of the line !!
+                SS.ssQueueFunction ss $ OT.addTextS ss $ TX.unpack tx
+                -- remove CR and append new line, required by parser
+                captureOutput' 10 (output `TX.append` TX.init tx `TX.append` TX.pack "\n") ss h ph
 

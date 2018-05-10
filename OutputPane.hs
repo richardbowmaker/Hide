@@ -20,6 +20,7 @@ import Control.Monad (liftM)
 import qualified Data.ByteString.Char8 as BS (ByteString, writeFile, pack)
 import Data.Bits ((.|.), (.&.))
 import Data.List (find, findIndex)
+import qualified Data.Text as TX (Text, unpack, pack)
 import Data.Word (Word64)
 import Graphics.UI.WX
 import Graphics.UI.WXCore

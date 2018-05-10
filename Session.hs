@@ -1,3 +1,4 @@
+
 module Session 
 (
     CompError,
@@ -833,10 +834,17 @@ dsClearDebugOutput ss =
 ssQueueFunction :: Session -> IO () -> IO ()
 ssQueueFunction ss f = atomically $ writeTChan (ssCFunc ss) f
 
+-- the queue is read before it is sequenced so that any of the queued functions
+-- can schedule another function for the next timer tic
 ssRunFunctionQueue :: Session -> IO ()
-ssRunFunctionQueue ss = 
-    whileM_ (liftM not $ atomically $ isEmptyTChan chan)
-        (atomically (tryReadTChan chan) >>= maybe (return ()) id)
+ssRunFunctionQueue ss = ssReadQueue ss [] >>= sequence_ . reverse
+
+ssReadQueue :: Session -> [IO ()] -> IO [IO ()]
+ssReadQueue ss fns = do
+    mfn <- atomically (tryReadTChan chan)
+    case mfn of
+        Just fn -> ssReadQueue ss $ fn:fns
+        Nothing -> return fns
     where chan = ssCFunc ss
 
  
