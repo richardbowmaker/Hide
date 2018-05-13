@@ -61,6 +61,7 @@ module ScintillaProxyImports
     snModificationType,
     snPosition,
     snUpdated,
+    winOpenFileDialog
 ) where 
   
 import qualified Data.ByteString as BS (init, replicate)
@@ -76,6 +77,9 @@ import Foreign.Marshal.Utils (fromBool)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Foreign.Storable (Storable, alignment, sizeOf, peek, poke, pokeByteOff, peekByteOff)
 import Graphics.Win32.GDI.Types (HWND)
+import Graphics.UI.WX
+import Graphics.UI.WXCore
+
 
 import qualified Misc as MI
 
@@ -553,3 +557,27 @@ ghciTerminalEventMaskGhci = 0x1f
 
 ghciTerminalEventMaskDebug :: Int
 ghciTerminalEventMaskDebug = 0xff
+
+
+-----------------------------------------------
+-- Windows Imports
+-----------------------------------------------
+
+foreign import ccall safe "WinOpenFileDialog"   c_WinOpenFileDialog :: HWND -> CString -> CString -> CString -> CString -> Int32 -> Ptr CString -> IO Int
+
+winOpenFileDialog :: Frame () -> String -> String -> String -> String -> Int -> IO (Maybe String)
+winOpenFileDialog frame prompt dir filter filterName flags = do
+    hwnd <- windowGetHandle frame
+    alloca (\pr ->
+        withCString prompt (\cpr -> 
+            withCString dir (\cdir -> 
+                withCString filter (\cf -> 
+                    withCString filterName (\cfn -> do
+                        res <- c_WinOpenFileDialog hwnd cpr cdir cf cfn (fromIntegral flags :: Int32) pr
+                        if (res /= 0) then do
+                            liftM Just $ peekCString =<< peek pr
+                        else
+                            return Nothing)))))
+    
+                    
+ 

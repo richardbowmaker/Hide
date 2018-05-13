@@ -12,6 +12,7 @@ import Control.Monad (liftM, when)
 import Control.Monad.Loops
 import qualified Data.ByteString.Char8 as BS (ByteString, hGetLine, readFile, pack, putStrLn, writeFile)
 import qualified Data.ByteString as BS (append)
+import Data.Bits ((.&.), (.|.)) 
 import Data.List (find, findIndex)
 import Data.Word (Word64)
 import Graphics.UI.WX
@@ -335,6 +336,11 @@ onOutputTabChanged ss _ = do
  
 onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
-    return ()
+    mfn <- SI.winOpenFileDialog (SS.ssFrame ss) "Open a file" "." "*.txt" "text files" 0x1000 -- file must exist
+    case mfn of 
+        Just fn -> infoDialog (SS.ssFrame ss) "file name picked" fn
+        Nothing -> infoDialog (SS.ssFrame ss) "no filename" ""
+        
+
 
 

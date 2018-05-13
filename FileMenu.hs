@@ -116,22 +116,17 @@ createPopupMenu scn = do
 
 -- File Open
 onFileOpen :: SS.Session -> IO ()
-onFileOpen ss = do                    
-    fd <- fileDialogCreate 
-        (SS.ssFrame ss) 
-        "Open file" 
-        "." "" 
-        "*.hs" 
-        (Point 100 100) 
-        (wxOPEN .|. wxFILE_MUST_EXIST)
-    ans <- dialogShowModal fd
-    if ans == wxID_OK
-    then do
-        fp <- fileDialogGetPath fd 
-        fileOpen ss fp   
-        return ()
-    else
-        return ()
+onFileOpen ss = do 
+    mfn <- SI.winOpenFileDialog 
+            (SS.ssFrame ss) 
+            "Open a file" 
+            "." 
+            "*.hs" 
+            "Haskell file" 
+            0x1000 -- file must exist
+    case mfn of 
+        Just fp -> fileOpen ss fp   
+        Nothing -> return ()
 
 onFileNew :: SS.Session -> IO ()
 onFileNew ss = do
