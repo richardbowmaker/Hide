@@ -277,22 +277,16 @@ fileSave ss tw scn = do
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> SC.Editor -> IO Bool
 fileSaveAs ss tw scn = do   
-    -- prompt user for name to save to
-    fd <- fileDialogCreate 
-        (SS.ssFrame ss) 
-        "Save file as" 
-        (maybe "." takeDirectory mfp) 
-        (maybe "" id mfp )
-        "*.hs" 
-        (Point 100 100) 
-        (wxSAVE .|. wxOVERWRITE_PROMPT)
-    rs <- dialogShowModal fd    
-    case rs of
---        wxID_OK -> do
--- ?? don't know how to fix pattern match against a function    
-        5100 -> do    
-            fp <- fileDialogGetPath fd           
-            -- save new name to mutable project data
+    mfn <- SI.winSaveFileDialog 
+            (SS.ssFrame ss) 
+            "Save file as" 
+            (maybe "." takeDirectory mfp)  
+            "*.hs" 
+            "Haskell file" 
+            (maybe "" id mfp)
+            0x02 -- overwrite prompt
+    case mfn of 
+        Just fp -> do
             mtw' <- SS.twFindAndSetFilePath ss tw (Just fp)
             case mtw' of
                 Just tw' -> do
@@ -301,13 +295,8 @@ fileSaveAs ss tw scn = do
                     EN.enbSetTabText ss tw'
                     return True
                 Nothing -> return False
- 
-        --wxID_CANCEL -> do
-        5101 -> do
-            return False           
-        otherwise  -> do
-            return True
-
+        Nothing -> return False
+        
     where mfp = SS.twFilePath tw
   
 -- writes file to disk and sets editor to clean

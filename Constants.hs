@@ -76,7 +76,7 @@ import Graphics.Win32.GDI.Types (COLORREF)
 debug = True
 
 programTitle :: String
-programTitle = "HIDE Dev **************************"
+programTitle = "HIDE 14/5/2018"
 
 -------------------------------------
 -- menu ids

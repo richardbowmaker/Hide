@@ -336,7 +336,8 @@ onOutputTabChanged ss _ = do
  
 onTestTest :: SS.Session -> IO ()
 onTestTest ss = do 
-    mfn <- SI.winOpenFileDialog (SS.ssFrame ss) "Open a file" "." "*.txt" "text files" 0x1000 -- file must exist
+--    mfn <- SI.winOpenFileDialog (SS.ssFrame ss) "Open a file" "." "*.txt" "text files" 0x1000 -- file must exist
+    mfn <- SI.winSaveFileDialog (SS.ssFrame ss) "Save file" "." "*.txt" "text files" "test.txt" 0x02 -- overwrite prompt
     case mfn of 
         Just fn -> infoDialog (SS.ssFrame ss) "file name picked" fn
         Nothing -> infoDialog (SS.ssFrame ss) "no filename" ""

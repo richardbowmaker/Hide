@@ -225,30 +225,26 @@ getAllText = SI.ghciTerminalGetText
 
 clear :: HWND -> IO ()
 clear = SI.ghciTerminalClear
-
+   
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
-fileSaveAs ss tw = do 
-    -- prompt user for name to save to
-    fd <- fileDialogCreate 
-        (SS.ssFrame ss)
-        "Save GHCI as" 
-        (maybe "." takeDirectory $ SS.twFilePath tw)
-        (maybe "" id $ SS.twFilePath tw) 
-        "*.txt" 
-        (Point 100 100) 
-        (wxSAVE .|. wxOVERWRITE_PROMPT)
-    rs <- dialogShowModal fd  
-    case rs of
---        wxID_OK -> do
-        5100 -> do    
-            fp <- fileDialogGetPath fd
+fileSaveAs ss tw = do   
+    mfn <- SI.winSaveFileDialog 
+            (SS.ssFrame ss) 
+            "Save GHCI as" 
+            (maybe "." takeDirectory $ SS.twFilePath tw) 
+            "*.txt" 
+            "Text file" 
+            (maybe "" id $ SS.twFilePath tw)
+            0x02 -- overwrite prompt
+    case mfn of 
+        Just fp -> do
             getAllText (SS.twPanelHwnd tw) >>= BS.writeFile fp
             -- save filename used
             SS.twFindAndSetFilePath ss tw (Just fp) 
-            return ()  
-        otherwise -> return ()
-   
+            return ()
+        Nothing -> return ()
+          
 setEventHandler :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
 setEventHandler ss hw hwnd mask = SI.ghciTerminalSetEventHandler hwnd (eventHandler ss hw mask)
 
