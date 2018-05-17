@@ -34,6 +34,7 @@ import qualified Constants as CN
 import qualified Debug as DG
 import qualified EditMenu as EM
 import qualified EditorNotebook as EN
+import qualified Menus as MN
 import qualified Misc as MI
 import qualified Scintilla as SC
 import qualified ScintillaProxyImports as SI

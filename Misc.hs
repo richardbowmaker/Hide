@@ -23,7 +23,8 @@ module Misc
     scanInt,
     stringEndsWith,
     stringStartsWith,
-    windowToString
+    windowToString,
+    withCStrings
 ) where
 
 import Control.Monad (liftM2)
@@ -31,12 +32,12 @@ import Data.Char (isDigit)
 import Data.Int (Int64)
 import Data.List (findIndex)
 import Data.Word (Word64)
+import Foreign.C.String (CString, withCString)
 import Foreign.Ptr (FunPtr, Ptr, minusPtr, nullPtr)
 import Graphics.UI.WX 
 import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
 import Numeric (showHex)
-
 
 ptrToString :: Ptr a -> String
 ptrToString p = "0x0" ++ (showHex (minusPtr p nullPtr) "")
@@ -145,6 +146,12 @@ readInt s ix n
     | otherwise = readInt s (ix+1) (n*10 + read [c])
     where c = s !! ix
 
+withCStrings :: [String] -> ([CString] -> IO a) -> IO a
+withCStrings = withCStrings' []
+    where
+        withCStrings' :: [CString] -> [String] -> ([CString] -> IO a) -> IO a
+        withCStrings' cstrs [] fn = (fn . reverse) cstrs
+        withCStrings' cstrs (str:strs) fn = withCString str (\cstr -> withCStrings' (cstr:cstrs) strs fn)
 
 ------------------------------------------------------------    
 -- Tree Control

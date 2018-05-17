@@ -336,12 +336,10 @@ foreign import ccall safe "wrapper" c_GhciCreateCallback ::
     (Int32 -> Int32 -> CString -> Word64 -> IO ()) -> IO (FunPtr (Int32 -> Int32 -> CString -> Word64 -> IO ()))
 
 ghciNew :: String -> String -> String -> IO Int
-ghciNew options file dir = do
-    id <- withCString options (\o ->
-            withCString file (\f -> 
-                withCString dir (\d -> do
-                    c_GhciNew o f d)))
-    return (fromIntegral id :: Int)
+ghciNew options file dir = 
+    MI.withCStrings [options, file, dir] $ \(copts:cfile:cdir:[]) -> do
+        id <- c_GhciNew copts cfile cdir
+        return (fromIntegral id :: Int)
 
 ghciClose :: Int -> IO ()
 ghciClose id = c_GhciClose (fromIntegral id :: Int32)
@@ -361,26 +359,23 @@ ghciSendCommand id cmd =
 
 ghciSendCommandAsynch :: Int -> String -> String -> String -> IO ()
 ghciSendCommandAsynch id cmd sod eod = 
-    withCString cmd (\ccmd -> 
-        withCString sod (\csod -> 
-            withCString eod (\ceod -> do
-                c_GhciSendCommandAsynch (fromIntegral id :: Int32) ccmd csod ceod)))
+    MI.withCStrings [cmd, sod, eod] $ \(ccmd:csod:ceod:[]) -> do
+        c_GhciSendCommandAsynch (fromIntegral id :: Int32) ccmd csod ceod
                
 ghciSendCommandSynch :: Int -> String -> String -> Int -> IO (Maybe String)
 ghciSendCommandSynch id cmd eod timeout = 
     alloca (\pr ->
-        withCString cmd (\ccmd -> 
-            withCString eod (\ceod -> do
-                res <- c_GhciSendCommandSynch 
-                        (fromIntegral id :: Int32) 
-                        ccmd 
-                        ceod
-                        (fromIntegral timeout :: Word64)
-                        pr            
-                if (res /= 0) then 
-                    liftM Just $ peekCString =<< peek pr
-                else 
-                    return Nothing)))
+        MI.withCStrings [cmd, eod] $ \(ccmd:ceod:[]) -> do
+            res <- c_GhciSendCommandSynch 
+                    (fromIntegral id :: Int32) 
+                    ccmd 
+                    ceod
+                    (fromIntegral timeout :: Word64)
+                    pr            
+            if (res /= 0) then 
+                liftM Just $ peekCString =<< peek pr
+            else 
+                return Nothing)
                
 ghciWaitForResponse :: Int -> String -> Int -> IO (Maybe String)
 ghciWaitForResponse id eod timeout = 
@@ -425,11 +420,9 @@ foreign import ccall safe "wrapper" c_GhciTerminalCreateCallback ::
     (HWND -> Int32 -> CString -> IO ()) -> IO (FunPtr (HWND -> Int32 -> CString -> IO ()))
 
 ghciTerminalNew :: HWND -> String -> String -> String -> IO HWND
-ghciTerminalNew parent options file dir = 
-    withCString options (\copts ->
-            withCString file (\cfile -> 
-                withCString dir (\cdir -> do
-                    c_GhciTerminalNew parent copts cfile cdir)))
+ghciTerminalNew parent options file dir =
+    MI.withCStrings [options, file, dir] $ \(copts:cfile:cdir:[]) -> 
+        c_GhciTerminalNew parent copts cfile cdir
 
 ghciTerminalClose :: HWND -> IO ()
 ghciTerminalClose = c_GhciTerminalClose
@@ -475,16 +468,13 @@ ghciTerminalSendCommand hwnd cmd =
 
 ghciTerminalSendCommandAsynch :: HWND -> String -> String -> String -> IO ()
 ghciTerminalSendCommandAsynch hwnd cmd sod eod = 
-    withCString cmd (\ccmd -> 
-        withCString sod (\csod -> 
-            withCString eod (\ceod -> do
-                c_GhciTerminalSendCommandAsynch hwnd ccmd csod ceod)))
+    MI.withCStrings [cmd, sod, eod] $ \(ccmd:csod:ceod:[]) -> 
+        c_GhciTerminalSendCommandAsynch hwnd ccmd csod ceod
                
 ghciTerminalSendCommandSynch :: HWND -> String -> String -> Int -> IO (Maybe String)
 ghciTerminalSendCommandSynch hwnd cmd eod timeout = 
     alloca (\pr ->
-        withCString cmd (\ccmd -> 
-            withCString eod (\ceod -> do
+        MI.withCStrings [cmd, eod] $ \(ccmd:ceod:[]) -> do
                 res <- c_GhciTerminalSendCommandSynch 
                         hwnd 
                         ccmd 
@@ -494,7 +484,7 @@ ghciTerminalSendCommandSynch hwnd cmd eod timeout =
                 if (res /= 0) then 
                     liftM Just $ peekCString =<< peek pr
                 else 
-                    return Nothing)))
+                    return Nothing)
                
 ghciTerminalWaitForResponse :: HWND -> String -> Int -> IO (Maybe String)
 ghciTerminalWaitForResponse hwnd eod timeout = 
@@ -571,30 +561,23 @@ winOpenFileDialog :: Frame () -> String -> String -> String -> String -> Int -> 
 winOpenFileDialog frame prompt dir filter filterName flags = do
     hwnd <- windowGetHandle frame
     alloca (\pr ->
-        withCString prompt (\cpr -> 
-            withCString dir (\cdir -> 
-                withCString filter (\cf -> 
-                    withCString filterName (\cfn -> do
-                        res <- c_WinOpenFileDialog hwnd cpr cdir cf cfn (fromIntegral flags :: Int32) pr
-                        if (res /= 0) then do
-                            liftM Just $ peekCString =<< peek pr
-                        else
-                            return Nothing)))))
-                     
+        MI.withCStrings [prompt, dir, filter, filterName] $ \(cpr:cdir:cf:cfn:[]) -> do
+            res <- c_WinOpenFileDialog hwnd cpr cdir cf cfn (fromIntegral flags :: Int32) pr
+            if (res /= 0) then do
+                liftM Just $ peekCString =<< peek pr
+            else
+                return Nothing)
+
 winSaveFileDialog :: Frame () -> String -> String -> String -> String -> String -> Int -> IO (Maybe String)
 winSaveFileDialog frame prompt dir filter filterName defName flags = do
     hwnd <- windowGetHandle frame
     alloca (\pr ->
-        withCString prompt (\cpr -> 
-            withCString dir (\cdir -> 
-                withCString filter (\cf -> 
-                    withCString filterName (\cfn -> do
-                        withCString defName (\cdfn -> do
-                            res <- c_WinSaveFileDialog hwnd cpr cdir cf cfn cdfn (fromIntegral flags :: Int32) pr
-                            if (res /= 0) then do
-                                liftM Just $ peekCString =<< peek pr
-                            else
-                                return Nothing))))))
-    
-                    
+        MI.withCStrings [prompt, dir, filter, filterName, defName] $ \(cpr:cdir:cf:cfn:cdfn:[]) -> do
+            res <- c_WinSaveFileDialog hwnd cpr cdir cf cfn cdfn (fromIntegral flags :: Int32) pr
+            if (res /= 0) then do
+                liftM Just $ peekCString =<< peek pr
+            else
+                return Nothing)
+
+
  

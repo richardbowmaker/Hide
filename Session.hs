@@ -130,11 +130,6 @@ module Session
     ssFrame,
     ssGetCompilerReport,
     ssHideWindows,
-    ssMenuListAdd,
-    ssMenuListCreate,
-    ssMenuListGet,
-    ssMenuListNew,
-    ssMenus,
     ssOutput,
     ssOutputs,
     ssQueueFunction,
@@ -178,7 +173,7 @@ module Session
 import Control.Concurrent (myThreadId, ThreadId)
 import Control.Concurrent.STM
 import Control.Concurrent.STM.TChan
-import Control.Monad (liftM, liftM2)
+import Control.Monad (forM_, liftM, liftM2)
 import Control.Monad.Loops (whileM_)
 import Data.Bits ((.&.), setBit, clearBit, testBit)
 import Data.ByteString.Internal (ByteString)
@@ -195,6 +190,7 @@ import System.FilePath.Windows (takeFileName)
 
 import qualified Constants as CN
 import Debug as DG
+import qualified Menus as MN
 import qualified Misc as MI
 import qualified Scintilla as SC
                 
@@ -205,7 +201,7 @@ import qualified Scintilla as SC
 data Session = Session {    ssFrame             :: Frame (),            -- Main window
                             ssAuiMgr            :: AuiManager (),       -- Application level AUI manager
                             ssEditors           :: AuiNotebook (),      -- Notebook of source file editors
-                            ssMenus             :: SsMenuList,
+                            ssMenus             :: TMenus,
                             ssStatus            :: StatusField,
                             ssCFunc             :: FunctionChannel,     -- TChan for scheduling functions to be called in main GUI thread (see timer)
                             ssOutputs           :: AuiNotebook (),      -- The output panes notebook, includes ssOutput pane below
@@ -222,13 +218,12 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssDebugGrid         :: Grid (),
                             ssFileOpen          :: (Session -> String -> IO ()), -- File Open and Save are used in many places in the program
                                                                                  -- however the strict modular hierarchy prevents import of FileMenu.hs where needed
-                            ssFileSave          :: (Session -> TextWindow -> SC.Editor -> IO Bool) }
+                            ssFileSave          :: (Session -> TextWindow -> SC.Editor -> IO Bool)}
    
 data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int }
 
 -- compiler errors
 type TErrors = TVar CompReport
-
 type TFindText = TVar FindText
 
 -- scheduled functions for timer event to run
@@ -241,6 +236,9 @@ type SsMenuList = [SsNameMenuPair]
 
 type TState = TVar Int
 
+-- menus
+type TMenus = TVar MN.HideMenus
+
 ----------------------------------------------------------------
 -- Session  helpers
 ----------------------------------------------------------------
@@ -250,7 +248,7 @@ ssCreate ::
     Frame () -> 
     AuiManager () -> 
     AuiNotebook () -> 
-    SsMenuList -> 
+    MN.HideMenus -> 
     StatusField -> 
     AuiNotebook () -> 
     SC.Editor -> 
@@ -264,36 +262,35 @@ ssCreate mf am nb ms sf ots db dbgr fileopen filesave = do
     terr <- atomically $ newTVar (crCreateCompReport Nothing [])
     tfnd <- atomically $ newTVar (FindText "" 0 0)
     tout <- atomically $ newTVar Nothing
+    tms  <- atomically $ newTVar ms
     let dbe = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugError db s) else (\s -> return ())
     let dbw = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugWarn  db s) else (\s -> return ())
     let dbi = if CN.debug then (\s -> ssInvokeInGuiThread mtid cfn $ DG.debugInfo  db s) else (\s -> return ())
     hws  <- atomically $ newTVar $ createHideWindows [] 
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession Nothing "" [] Nothing
-    return (Session mf am nb ms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr fileopen filesave)
+    return (Session mf am nb tms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr fileopen filesave)
 
--- creates a new menu item lookup list
--- a dummy entry is provided for failed lookups to simplfy client calls to menuListGet 
-ssMenuListNew :: IO SsMenuList 
-ssMenuListNew = do
-    mi <- menuItemCreate
-    return ([(0, mi)])
+----------------------------------------------------------------
+-- Menu helpers
+----------------------------------------------------------------
 
-ssMenuListCreate :: [SsNameMenuPair] -> IO SsMenuList
-ssMenuListCreate nmps = do
-    ml <- ssMenuListNew
-    return (ssMenuListAdd nmps ml)
+ssSetMenuHandlers :: Session -> [MN.HideMenuHandlers] -> IO ()
+ssSetMenuHandlers ss handlers = do
+    -- update the session with the new handlers
+    menus <- atomically $ do
+        menus <- readTVar $ ssMenus ss
+        writeTVar (ssMenus ss) $ MN.mergeMenus menus handlers
+        return menus
+    -- update the menus
+    forM_ menus $ \menu -> do
+        e <- MN.mnEnabled menu
+        set (MN.mnItem menu) [on command := MN.mnAction menu, enabled := e]
+ 
+----------------------------------------------------------------
+-- 
+----------------------------------------------------------------
 
-ssMenuListAdd :: [SsNameMenuPair] -> SsMenuList -> SsMenuList
-ssMenuListAdd nmps ml = ml ++ nmps
-
-ssMenuListGet :: Session -> Int -> MenuItem ()
-ssMenuListGet ss n = 
-    case (lookup n ml) of
-        Just mi -> mi
-        Nothing -> snd $ last ml
-    where ml = ssMenus ss
-    
 ssToString :: Session -> IO String
 ssToString ss = do
     fs <- MI.frameToString $ ssFrame ss
@@ -841,10 +838,10 @@ ssRunFunctionQueue ss = ssReadQueue ss [] >>= sequence_ . reverse
 
 ssReadQueue :: Session -> [IO ()] -> IO [IO ()]
 ssReadQueue ss fns = do
-    mfn <- atomically (tryReadTChan chan)
+    mfn <- atomically (tryReadTChan $ ssCFunc ss)
     case mfn of
         Just fn -> ssReadQueue ss $ fn:fns
         Nothing -> return fns
-    where chan = ssCFunc ss
+
 
  
