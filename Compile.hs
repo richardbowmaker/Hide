@@ -43,6 +43,7 @@ import System.Process.Common
 -- project imports
 import qualified Constants as CN
 import qualified Ghci as GH
+import qualified Menus as MN
 import qualified Misc as MI
 import qualified OutputPane as OT
 import qualified Parsers as PR
@@ -57,14 +58,15 @@ onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 onBuildBuild ss tw scn = do
 
     SS.ssSetStateBit ss SS.ssStateCompile
-
-    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugGhci)          [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
-
+{-
+    set (SS.ssMenuListGet ss MN.menuBuildNextError)     [enabled := False]
+    set (SS.ssMenuListGet ss MN.menuBuildPreviousError) [enabled := False]
+    set (SS.ssMenuListGet ss MN.menuBuildBuild)         [enabled := False]        
+    set (SS.ssMenuListGet ss MN.menuBuildCompile)       [enabled := False]
+    set (SS.ssMenuListGet ss MN.menuDebugGhci)          [enabled := False]
+    set (SS.ssMenuListGet ss MN.menuDebugRun)           [enabled := False]
+-}
+    SS.ssSetMenus ss
     OT.openOutputWindow ss
 
     -- save file first
@@ -86,12 +88,15 @@ onBuildBuild ss tw scn = do
 onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 onBuildCompile ss tw scn = do
 
+{-
     set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
     set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugGhci)          [enabled := False]
     set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
+-}
+    SS.ssSetMenus ss
 
     OT.openOutputWindow ss
 
@@ -113,11 +118,15 @@ onBuildCompile ss tw scn = do
                
 compileComplete :: SS.Session -> IO ()
 compileComplete ss = do
+{-
     set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
     set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
     set (SS.ssMenuListGet ss CN.menuDebugGhci)    [enabled := True]
     set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
+-}
     SS.ssClearStateBit ss SS.ssStateCompile
+    SS.ssSetMenus ss
+
     OT.addTextS ss $ "Compile complete\n"
     return ()
 
@@ -170,12 +179,14 @@ cpCompileFileDone ss mfinally ces = do
     
     if SS.crErrorCount ces == 0 then do
         SS.ssQueueFunction ss (OT.addTextS ss "\nNo errors\n")
-        set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
-        set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
+        SS.ssSetMenus ss
+        --set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
+        --set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
     else do
         SS.ssQueueFunction ss (OT.addTextS ss ("\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"))
-        set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := True]
-        set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := True]
+        SS.ssSetMenus ss
+        --set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := True]
+        --set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := True]
 
     -- save compilation results to session
     SS.ssSetCompilerReport ss ces

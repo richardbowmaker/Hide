@@ -39,6 +39,7 @@ import System.FilePath.Windows ((</>), takeFileName, takeDirectory)
 -- project imports
 
 import qualified Constants as CN
+import qualified Menus as MN
 import qualified Misc as MI
 import qualified Parsers as PR
 import qualified Scintilla as SC
@@ -87,6 +88,8 @@ openWindowFile ss ftw = do
                         Just (panel, hwndp, hwnd) -> do
                                 hw <- createHideWindow ss panel hwndp hwnd (Just fp)
                                 SS.hwUpdate ss (\hws -> hw : hws)
+                                let menus = createMenuHandlers ss (SS.hwWindow hw) (Just fp)
+                                SS.ssSetMenuHandlers ss menus
                                 setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
                                 enableEvents hwnd
                                 setFocus hwnd
@@ -115,6 +118,8 @@ openWindow ss = do
         Just (panel, hwndp, hwnd) -> do
             hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
+            let menus = createMenuHandlers ss (SS.hwWindow hw) Nothing
+            SS.ssSetMenuHandlers ss menus
             setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
             enableEvents hwnd
             setFocus hwnd
@@ -128,6 +133,8 @@ openDebugWindow ss = do
         Just (panel, hwndp, hwnd) -> do
             hw <- createHideWindow ss panel hwndp hwnd Nothing
             SS.hwUpdate ss (\hws -> hw : hws)
+            let menus = createMenuHandlers ss (SS.hwWindow hw) Nothing
+            SS.ssSetMenuHandlers ss menus 
             setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
             enableEvents hwnd
             setFocus hwnd
@@ -168,6 +175,29 @@ closeWindow ss tw = do
 closeAll :: SS.Session -> IO ()
 closeAll ss = SS.hwFindWindows ss SS.hwIsGhci >>= mapM_ (\hw -> closeWindow ss (SS.hwWindow hw))
 
+-- create the menu handlers
+createMenuHandlers :: SS.Session -> SS.TextWindow -> Maybe String -> MN.HideMenuHandlers 
+createMenuHandlers ss tw mfp = 
+    [MN.createMenuHandler MN.menuFileClose         hwnd (closeWindow ss tw)     (return True),
+     MN.createMenuHandler MN.menuFileCloseAll      hwnd (closeAll ss)           (return True),
+     MN.createMenuHandler MN.menuFileSaveAs        hwnd (fileSaveAs ss tw)      (return True),
+     MN.createMenuHandler MN.menuEditCut           hwnd (cut hwnd)              (isTextSelected hwnd),
+     MN.createMenuHandler MN.menuEditCopy          hwnd (copy hwnd)             (isTextSelected hwnd),
+     MN.createMenuHandler MN.menuEditPaste         hwnd (paste hwnd)            (return True),
+     MN.createMenuHandler MN.menuEditSelectAll     hwnd (selectAll hwnd)        (return True),
+     MN.createMenuHandler MN.menuEditClear         hwnd (clear hwnd)            (return True),
+     MN.createMenuHandler MN.menuDebugStop         hwnd (stopDebug ss hwnd)     (debugging),
+     MN.createMenuHandler MN.menuDebugContinue     hwnd (continue ss hwnd)      (debuggerPaused),
+     MN.createMenuHandler MN.menuDebugStep         hwnd (step ss hwnd)          (debuggerPaused),
+     MN.createMenuHandler MN.menuDebugStepLocal    hwnd (stepLocal ss hwnd)     (debuggerPaused),
+     MN.createMenuHandler MN.menuDebugStepModule   hwnd (stepModule ss hwnd)    (debuggerPaused)]
+
+    where 
+        hwnd = SS.twHwnd tw
+        debugging = SS.ssTestState ss SS.ssStateDebugging
+        debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
+
+
 createHideWindow :: SS.Session -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
 createHideWindow ss panel phwnd hwnd mfp = do
     let tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
@@ -178,19 +208,19 @@ createHideWindow ss panel phwnd hwnd mfp = do
         debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
         tms tw = SS.createTextMenus 
                     [ 
-                        (SS.createMenuFunction CN.menuFileClose         (closeWindow ss tw)     (return True)),
-                        (SS.createMenuFunction CN.menuFileCloseAll      (closeAll ss)           (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSaveAs ss tw)      (return True)),
-                        (SS.createMenuFunction CN.menuEditCut           (cut hwnd)              (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditCopy          (copy hwnd)             (isTextSelected hwnd)),
-                        (SS.createMenuFunction CN.menuEditPaste         (paste hwnd)            (return True)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (selectAll hwnd)        (return True)),
-                        (SS.createMenuFunction CN.menuEditClear         (clear hwnd)            (return True)),
-                        (SS.createMenuFunction CN.menuDebugStop         (stopDebug ss hwnd)     (debugging)),
-                        (SS.createMenuFunction CN.menuDebugContinue     (continue ss hwnd)      (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStep         (step ss hwnd)          (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepLocal    (stepLocal ss hwnd)     (debuggerPaused)),
-                        (SS.createMenuFunction CN.menuDebugStepModule   (stepModule ss hwnd)    (debuggerPaused))
+                        (SS.createMenuFunction MN.menuFileClose         (closeWindow ss tw)     (return True)),
+                        (SS.createMenuFunction MN.menuFileCloseAll      (closeAll ss)           (return True)),
+                        (SS.createMenuFunction MN.menuFileSaveAs        (fileSaveAs ss tw)      (return True)),
+                        (SS.createMenuFunction MN.menuEditCut           (cut hwnd)              (isTextSelected hwnd)),
+                        (SS.createMenuFunction MN.menuEditCopy          (copy hwnd)             (isTextSelected hwnd)),
+                        (SS.createMenuFunction MN.menuEditPaste         (paste hwnd)            (return True)),
+                        (SS.createMenuFunction MN.menuEditSelectAll     (selectAll hwnd)        (return True)),
+                        (SS.createMenuFunction MN.menuEditClear         (clear hwnd)            (return True)),
+                        (SS.createMenuFunction MN.menuDebugStop         (stopDebug ss hwnd)     (debugging)),
+                        (SS.createMenuFunction MN.menuDebugContinue     (continue ss hwnd)      (debuggerPaused)),
+                        (SS.createMenuFunction MN.menuDebugStep         (step ss hwnd)          (debuggerPaused)),
+                        (SS.createMenuFunction MN.menuDebugStepLocal    (stepLocal ss hwnd)     (debuggerPaused)),
+                        (SS.createMenuFunction MN.menuDebugStepModule   (stepModule ss hwnd)    (debuggerPaused))
                     ]
                     (hasFocus hwnd)
                     (return True)
@@ -454,50 +484,12 @@ setDebugStoppedMarker ss = do
 eventHandler :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> Maybe String -> IO ()
 eventHandler ss hw mask hwnd evt mstr
     | evt' == SI.ghciTerminalEventLostFocus = do
-        setm' ss CN.menuFileClose         (return False) (return ())
-        setm' ss CN.menuFileCloseAll      (return False) (return ())
-        setm' ss CN.menuFileSave          (return False) (return ())
-        setm' ss CN.menuFileSaveAs        (return False) (return ())
-        setm' ss CN.menuFileSaveAll       (return False) (return ())
-        setm' ss CN.menuEditUndo          (return False) (return ())
-        setm' ss CN.menuEditCut           (return False) (return ())
-        setm' ss CN.menuEditCopy          (return False) (return ())
-        setm' ss CN.menuEditPaste         (return False) (return ())
-        setm' ss CN.menuEditSelectAll     (return False) (return ())
-        setm' ss CN.menuEditFind          (return False) (return ())
-        setm' ss CN.menuEditFindForward   (return False) (return ())
-        setm' ss CN.menuEditFindBackward  (return False) (return ())
-        setm' ss CN.menuEditClear         (return False) (return ())
-        setm' ss CN.menuDebugStop         (return False) (return ())
-        setm' ss CN.menuDebugContinue     (return False) (return ())
-        setm' ss CN.menuDebugStep         (return False) (return ())
-        setm' ss CN.menuDebugStepLocal    (return False) (return ())
-        setm' ss CN.menuDebugStepModule   (return False) (return ())
+        SS.ssDisableMenuHandlers ss (SS.hwHwnd hw)
     | evt' == SI.ghciTerminalEventGotFocus = do
-        setm ss tms CN.menuFileClose        
-        setm ss tms CN.menuFileCloseAll        
-        setm ss tms CN.menuFileSave        
-        setm ss tms CN.menuFileSaveAs        
-        setm ss tms CN.menuFileSaveAll        
-        setm ss tms CN.menuEditUndo          
-        setm ss tms CN.menuEditRedo          
-        setm ss tms CN.menuEditCut           
-        setm ss tms CN.menuEditCopy          
-        setm ss tms CN.menuEditPaste         
-        setm ss tms CN.menuEditSelectAll     
-        setm ss tms CN.menuEditFind          
-        setm ss tms CN.menuEditFindForward   
-        setm ss tms CN.menuEditFindBackward            
-        setm ss tms CN.menuEditClear          
-        setm ss tms CN.menuDebugStop   
-        setm ss tms CN.menuDebugContinue   
-        setm ss tms CN.menuDebugStep   
-        setm ss tms CN.menuDebugStepLocal   
-        setm ss tms CN.menuDebugStepModule   
+        let mhs = createMenuHandlers ss (SS.hwWindow hw) Nothing
+        SS.ssSetMenuHandlers ss mhs
     | evt' == SI.ghciTerminalEventSelectionSet || evt == SI.ghciTerminalEventSelectionClear = do
-        setm ss tms CN.menuEditCut           
-        setm ss tms CN.menuEditCopy          
-        setm ss tms CN.menuEditPaste
+        SS.ssSetMenus ss        
     | evt' == SI.ghciTerminalEventAsynchOutput = do
         b <- SS.ssTestState ss SS.ssStateRunning
         if b then do
@@ -510,14 +502,7 @@ eventHandler ss hw mask hwnd evt mstr
         else return () -- should send this to the output pane
     | otherwise = return ()
 
-    where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
-            setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid) 
-            setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
-            setm' ss mid me mf = do 
-                e <- me
-                set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
-            tms = SS.hwMenus hw
-            evt' = evt .&. mask
+    where   evt' = evt .&. mask
             str = (maybe "" id mstr)
 
 handleDebuggerOutput :: SS.Session -> HWND -> IO ()

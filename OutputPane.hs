@@ -118,6 +118,9 @@ addOutputTab ss = do
     hw <- createHideWindow ss scn panel hwndp (SC.getHwnd scn)
     SS.ssSetOutput ss (Just hw)
 
+    let mhs = createMenuHandlers ss scn (SS.hwWindow hw) 
+    SS.ssSetMenuHandlers ss mhs
+
     -- enable events
     SC.setEventHandler scn $ scnCallback ss hw
     SC.enableEvents scn
@@ -134,6 +137,20 @@ menuOption :: SS.Session -> SC.Editor -> Int -> IO ()
 menuOption ss scn id = do
     infoDialog (SS.ssFrame ss) CN.programTitle ("menu item " ++ (show id))
 
+-- create the menu handlers
+createMenuHandlers :: SS.Session -> SC.Editor -> SS.TextWindow -> MN.HideMenuHandlers 
+createMenuHandlers ss scn tw = 
+    [MN.createMenuHandler MN.menuFileClose         hwnd (closeOutputTab ss)             (return True),
+     MN.createMenuHandler MN.menuFileSaveAs        hwnd (fileSave ss tw scn)            (liftM (>0) $ SC.getTextLen scn),
+     MN.createMenuHandler MN.menuEditCopy          hwnd (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn),
+     MN.createMenuHandler MN.menuEditSelectAll     hwnd (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn),
+     MN.createMenuHandler MN.menuEditFind          hwnd (EM.editFind ss tw scn)         (return True),
+     MN.createMenuHandler MN.menuEditFindForward   hwnd (EM.editFindForward ss tw scn)  (return True),
+     MN.createMenuHandler MN.menuEditFindBackward  hwnd (EM.editFindBackward ss tw scn) (return True),
+     MN.createMenuHandler MN.menuEditClear         hwnd (clearText scn)                 (liftM (>0) $ SC.getTextLen scn)]
+
+    where  hwnd = SS.twHwnd tw
+
 createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
 createHideWindow ss scn panel phwnd hwnd = do
     let tw = SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing
@@ -141,14 +158,14 @@ createHideWindow ss scn panel phwnd hwnd = do
 
     where  tms tw = SS.createTextMenus
                     [
-                        (SS.createMenuFunction CN.menuFileClose         (closeOutputTab ss)             (return True)),
-                        (SS.createMenuFunction CN.menuFileSaveAs        (fileSave ss tw scn)            (liftM (>0) $ SC.getTextLen scn)),
-                        (SS.createMenuFunction CN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction CN.menuEditSelectAll     (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn)),
-                        (SS.createMenuFunction CN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
-                        (SS.createMenuFunction CN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
-                        (SS.createMenuFunction CN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
-                        (SS.createMenuFunction CN.menuEditClear         (clearText scn)                 (liftM (>0) $ SC.getTextLen scn))
+                        (SS.createMenuFunction MN.menuFileClose         (closeOutputTab ss)             (return True)),
+                        (SS.createMenuFunction MN.menuFileSaveAs        (fileSave ss tw scn)            (liftM (>0) $ SC.getTextLen scn)),
+                        (SS.createMenuFunction MN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
+                        (SS.createMenuFunction MN.menuEditSelectAll     (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn)),
+                        (SS.createMenuFunction MN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
+                        (SS.createMenuFunction MN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
+                        (SS.createMenuFunction MN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
+                        (SS.createMenuFunction MN.menuEditClear         (clearText scn)                 (liftM (>0) $ SC.getTextLen scn))
                     ]
                     (SC.getFocus scn)
                     (return True)
@@ -302,48 +319,11 @@ updateMenus :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
 updateMenus ss hw scn = do
     f <- SC.getFocus scn 
     if f then do 
-        setm ss tms CN.menuFileClose        
-        setm ss tms CN.menuFileCloseAll        
-        setm ss tms CN.menuFileSave        
-        setm ss tms CN.menuFileSaveAs        
-        setm ss tms CN.menuFileSaveAll        
-        setm ss tms CN.menuEditUndo          
-        setm ss tms CN.menuEditRedo          
-        setm ss tms CN.menuEditCut           
-        setm ss tms CN.menuEditCopy          
-        setm ss tms CN.menuEditPaste         
-        setm ss tms CN.menuEditSelectAll     
-        setm ss tms CN.menuEditFind          
-        setm ss tms CN.menuEditFindForward   
-        setm ss tms CN.menuEditFindBackward  
-        setm ss tms CN.menuEditSort          
-        setm ss tms CN.menuEditClear          
+        -- set the menu handlers
+        let mhs = createMenuHandlers ss scn (SS.hwWindow hw) 
+        SS.ssSetMenuHandlers ss mhs
     else do
-        setm' ss CN.menuFileClose         (return False) (return ())
-        setm' ss CN.menuFileCloseAll      (return False) (return ())
-        setm' ss CN.menuFileSave          (return False) (return ())
-        setm' ss CN.menuFileSaveAs        (return False) (return ())
-        setm' ss CN.menuFileSaveAll       (return False) (return ())
-        setm' ss CN.menuEditUndo          (return False) (return ())
-        setm' ss CN.menuEditCut           (return False) (return ())
-        setm' ss CN.menuEditCopy          (return False) (return ())
-        setm' ss CN.menuEditPaste         (return False) (return ())
-        setm' ss CN.menuEditSelectAll     (return False) (return ())
-        setm' ss CN.menuEditFind          (return False) (return ())
-        setm' ss CN.menuEditFindForward   (return False) (return ())
-        setm' ss CN.menuEditFindBackward  (return False) (return ())
-        setm' ss CN.menuEditSort          (return False) (return ())
-        setm' ss CN.menuEditClear         (return False) (return ())
-
-        where   setm :: SS.Session -> SS.TextMenus -> Int -> IO ()
-                setm ss tw mid = setm' ss mid (SS.tmGetMenuEnabled tw mid) (SS.tmGetMenuFunction tw mid)
- 
-                setm' :: SS.Session -> Int -> IO Bool -> IO () -> IO ()
-                setm' ss mid me mf = do 
-                    e <- me
-                    set (SS.ssMenuListGet ss mid) [on command := mf, enabled := e]
-
-                tms = SS.hwMenus hw
+        SS.ssDisableMenuHandlers ss (SS.hwHwnd hw)
 
 -- returns the HWND of the child panel of the currently selected notebook page
 getSelectedTabHwnd :: SS.Session -> IO (Maybe HWND)

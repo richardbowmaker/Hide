@@ -50,6 +50,7 @@ module Session
     createSourceWindowType,
     createTextMenus,
     createTextWindow,
+    ssDisableMenuHandlers,
     doColE,
     doColS,
     doFilePath,
@@ -90,6 +91,7 @@ module Session
     ftStartPos, 
     ftText,
     hwFilePath,
+    hwFindAndSetFilePath,
     hwFindFocusedWindow,
     hwFindSourceFileWindow,
     hwFindWindow,
@@ -97,6 +99,7 @@ module Session
     hwGetEditor,
     hwGetWindows,
     hwHasFocus,
+    hwHwnd,
     hwIsClean,
     hwIsDebug,
     hwIsGhci,
@@ -108,7 +111,6 @@ module Session
     hwMenus,
     hwPanelHwnd,
     hwRemoveWindow,
-    hwFindAndSetFilePath,
     hwUpdate,
     hwUpdateHideWindows,
     hwUpdateWindow,
@@ -135,6 +137,8 @@ module Session
     ssQueueFunction,
     ssRunFunctionQueue,
     ssSetCompilerReport,
+    ssSetMenuHandlers,
+    ssSetMenus,
     ssSetOutput,
     ssSetStateBit,
     ssStateCompile,
@@ -147,6 +151,7 @@ module Session
     tmGetMenuFunction,
     twFilePath,
     twFilePathToString,
+    twFindAndSetFilePath,
     twFindWindow,
     twGetEditor,
     twHasFocus,
@@ -165,7 +170,6 @@ module Session
     twRemoveWindow,
     twSetFilePath,
     twStatusInfo,
-    twFindAndSetFilePath,
     twType
 ) where
 
@@ -275,7 +279,7 @@ ssCreate mf am nb ms sf ots db dbgr fileopen filesave = do
 -- Menu helpers
 ----------------------------------------------------------------
 
-ssSetMenuHandlers :: Session -> [MN.HideMenuHandlers] -> IO ()
+ssSetMenuHandlers :: Session -> MN.HideMenuHandlers -> IO ()
 ssSetMenuHandlers ss handlers = do
     -- update the session with the new handlers
     menus <- atomically $ do
@@ -283,10 +287,25 @@ ssSetMenuHandlers ss handlers = do
         writeTVar (ssMenus ss) $ MN.mergeMenus menus handlers
         return menus
     -- update the menus
+    ssSetMenus ss
+
+ssSetMenus :: Session -> IO ()
+ssSetMenus ss = do
+    menus <- atomically $ do readTVar $ ssMenus ss
     forM_ menus $ \menu -> do
         e <- MN.mnEnabled menu
-        set (MN.mnItem menu) [on command := MN.mnAction menu, enabled := e]
- 
+        set (MN.mnItem menu) [text := MN.mnTitle menu, help := MN.mnHelp menu, on command := MN.mnAction menu, enabled := e]
+
+ssDisableMenuHandlers :: Session -> HWND -> IO ()
+ssDisableMenuHandlers ss handlers = do
+    -- update the session with the new handlers
+    menus <- atomically $ do
+        menus <- readTVar $ ssMenus ss
+        writeTVar (ssMenus ss) $ MN.disableMenus menus handlers
+        return menus
+    -- update the menus
+    ssSetMenus ss
+
 ----------------------------------------------------------------
 -- 
 ----------------------------------------------------------------
@@ -470,6 +489,9 @@ createMenuFunction id mf me = (MenuFunction id mf me)
 
 hwPanelHwnd :: HideWindow -> HWND
 hwPanelHwnd = twPanelHwnd . hwWindow
+
+hwHwnd :: HideWindow -> HWND
+hwHwnd = twHwnd . hwWindow
 
 hwFindWindow :: Session -> (HideWindow -> Bool) -> IO (Maybe HideWindow)
 hwFindWindow ss p = do

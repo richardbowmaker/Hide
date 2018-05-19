@@ -151,34 +151,28 @@ setUpMainWindow mf sf = do
 
     -- create the session data
     ss <- SS.ssCreate mf am enb menus sf onb scn grid FM.fileOpen FM.fileSave
-
-    infoDialog mf CN.programTitle  "1"
-{-    
+    
     -- setup static menu handlers
-    set (SS.ssMenuListGet ss CN.menuFileOpen)           [on command := FM.onFileOpen        ss]
-    set (SS.ssMenuListGet ss CN.menuFileNew)            [on command := FM.onFileNew         ss]
-    set (SS.ssMenuListGet ss CN.menuWindowGhci)         [on command := GH.openWindow ss >> return ()]
-    set (SS.ssMenuListGet ss CN.menuWindowOutput)       [on command := OT.openOutputWindow  ss]
-    set (SS.ssMenuListGet ss CN.menuTestTest)           [on command := onTestTest           ss]
-    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [on command := OT.gotoNextError     ss, enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [on command := OT.gotoPreviousError ss, enabled := False]
--}
-    infoDialog mf CN.programTitle  "2"
+    let mhs = [ MN.createMenuHandler MN.menuFileOpen           hwnd (FM.onFileOpen ss)                 (return True),
+                MN.createMenuHandler MN.menuFileNew            hwnd (FM.onFileNew ss)                  (return True),
+                MN.createMenuHandler MN.menuWindowGhci         hwnd (GH.openWindow ss >> return ())    (return True),
+                MN.createMenuHandler MN.menuWindowOutput       hwnd (OT.openOutputWindow ss)           (return True),
+                MN.createMenuHandler MN.menuTestTest           hwnd (onTestTest ss)                    (return True),
+                MN.createMenuHandler MN.menuBuildNextError     hwnd (OT.gotoNextError ss)              (return False),
+                MN.createMenuHandler MN.menuBuildPreviousError hwnd (OT.gotoPreviousError ss)          (return False)]
+    SS.ssSetMenuHandlers ss mhs
+    SS.ssSetMenus ss
 
     set enb [on auiNotebookOnPageCloseEvent   := onTabClose         ss]
     set enb [on auiNotebookOnPageChangedEvent := onTabChanged       ss]
     set onb [on auiNotebookOnPageCloseEvent   := onOutputTabClose   ss]
     set onb [on auiNotebookOnPageChangedEvent := onOutputTabChanged ss]
 
-    infoDialog mf CN.programTitle  "3"
-
-
-    -- OT.openOutputWindow ss 
-
-    infoDialog mf CN.programTitle  "4"
-
+    OT.openOutputWindow ss 
 
     return ss
+
+    where hwnd = windowGetHandle mf
 
 ------------------------------------------------------------    
 -- Setup menus
@@ -242,6 +236,9 @@ setupMenus mf  = do
 
             (MN.createMenu menuHelp' MN.menuHelpAbout)
         ]
+
+    set mf [ menuBar := [menuFile, menuEdit, menuBuild, menuDebug, menuWindow, menuTest, menuHelp']]
+
 
 
 

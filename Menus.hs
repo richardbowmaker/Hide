@@ -2,10 +2,11 @@
 module Menus 
 (
     HideMenu,
-    HideMenuHandlers,
+    HideMenuHandler,
     HideMenus,
+    HideMenuHandlers,
     createMenu,
-    createMenuHandlers,
+    createMenuHandler,
     disableMenus,
     menuBuildBuild,
     menuBuildClean,
@@ -77,11 +78,14 @@ data HideMenu = HideMenu
         mnHwnd          :: Maybe HWND        
     }
 
-data HideMenuHandlers = HideMenuHandlers
+type HideMenuHandlers = [HideMenuHandler]
+
+data HideMenuHandler = HideMenuHandler
     {
         mhId            :: Int, -- menu ident
         mhAction        :: IO (),
-        mhEnabled       :: IO Bool
+        mhEnabled       :: IO Bool,
+        mhHwnd          :: HWND
     }
 
 -- creates a menu item and attaches it to the parent
@@ -97,17 +101,17 @@ createMenu parent mid = do
 
 -- creates a hide window with just the handlers set, is a precursor to
 -- merging a windows menus into the current active set of menus
-createMenuHandlers :: Int -> IO () -> IO Bool -> HideMenuHandlers
-createMenuHandlers mid action enabled = (HideMenuHandlers mid action enabled)
+createMenuHandler :: Int -> HWND -> IO () -> IO Bool -> HideMenuHandler
+createMenuHandler mid hwnd action enabled = (HideMenuHandler mid action enabled hwnd)
 
 -- merge a set of menu handlers into the active set
 -- mergeMenus active new, each menu in new is used to set the handlers (action and enabled) in
 -- the corresponding menu in the active set.
-mergeMenus :: HideMenus -> [HideMenuHandlers] -> HideMenus
+mergeMenus :: HideMenus -> HideMenuHandlers -> HideMenus
 mergeMenus menus handlers = 
     flip map menus $ \m -> 
         case find (\h -> mnId m == mhId h) handlers of
-            Just h  -> m { mnAction = mhAction h, mnEnabled = mhEnabled h } 
+            Just h  -> m { mnAction = mhAction h, mnEnabled = mhEnabled h, mnHwnd = Just $ mhHwnd h } 
             Nothing -> m
 
 -- disables all menu handlers owned by the window with hwnd
