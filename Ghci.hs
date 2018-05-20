@@ -52,12 +52,12 @@ onDebugGhci ss tw scn = do
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
-        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
-        case mhw of
-            Just hw -> do
-                case SS.hwFilePath hw of
+        mtw <- SS.twFindWindow ss (\tw' -> SS.twMatchesHwnd tw' (SS.twPanelHwnd tw))
+        case mtw of
+            Just tw -> do
+                case SS.twFilePath tw of
                     Just fp -> do
-                        mtw' <- openWindowFile ss $ SS.hwWindow hw 
+                        mtw' <- openWindowFile ss tw 
                         case mtw' of 
                             Just tw' -> do
                                 SS.ssQueueFunction ss $ startDebug ss tw (SS.twHwnd tw')
@@ -71,7 +71,7 @@ onDebugGhci ss tw scn = do
 openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
     -- see if a GHCI window is already open with the same file as in ftw (scintilla editor)
-    mtw <- SS.twFindWindow ss (\tw -> liftM2 (&&) (return $ SS.twIsGhci tw) (return $ SS.twIsSameFile ftw tw)) 
+    mtw <- SS.twFindWindow ss (\tw -> (SS.twIsGhci tw) && (SS.twIsSameFile ftw tw)) 
     case mtw of
         Just tw -> do
             -- GHCI already open so select it
@@ -86,14 +86,15 @@ openWindowFile ss ftw = do
                     mw <- open ss fp                
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
-                                hw <- createHideWindow ss panel hwndp hwnd (Just fp)
-                                SS.hwUpdate ss (\hws -> hw : hws)
-                                let menus = createMenuHandlers ss (SS.hwWindow hw) (Just fp)
-                                SS.ssSetMenuHandlers ss menus
-                                setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
-                                enableEvents hwnd
-                                setFocus hwnd
-                                return (Just $ SS.hwWindow hw)
+                            let tw = SS.createGhciTextWindow panel hwndp hwnd 
+                                    (Just fp) (hasFocus hwnd) (return True) (return "")
+                            SS.twUpdate ss (\tws -> tw : tws)
+                            let menus = createMenuHandlers ss tw (Just fp)
+                            SS.ssSetMenuHandlers ss menus
+                            setEventHandler ss tw hwnd SI.ghciTerminalEventMaskDebug
+                            enableEvents hwnd
+                            setFocus hwnd
+                            return $ Just tw
                         Nothing -> return Nothing
                 Nothing -> return Nothing
 
@@ -116,14 +117,15 @@ openWindow ss = do
     m <- open ss "" 
     case m of
         Just (panel, hwndp, hwnd) -> do
-            hw <- createHideWindow ss panel hwndp hwnd Nothing
-            SS.hwUpdate ss (\hws -> hw : hws)
-            let menus = createMenuHandlers ss (SS.hwWindow hw) Nothing
+            let tw = SS.createGhciTextWindow panel hwndp hwnd 
+                    Nothing (hasFocus hwnd) (return False) (return "")
+            SS.twUpdate ss (\tws -> tw : tws)
+            let menus = createMenuHandlers ss tw Nothing
             SS.ssSetMenuHandlers ss menus
-            setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
+            setEventHandler ss tw hwnd SI.ghciTerminalEventMaskDebug
             enableEvents hwnd
             setFocus hwnd
-            return (Just $ SS.hwWindow hw)
+            return $ Just tw
         Nothing -> return Nothing
 
 openDebugWindow :: SS.Session -> IO (Maybe SS.TextWindow)
@@ -131,14 +133,15 @@ openDebugWindow ss = do
     m <- open ss "" 
     case m of
         Just (panel, hwndp, hwnd) -> do
-            hw <- createHideWindow ss panel hwndp hwnd Nothing
-            SS.hwUpdate ss (\hws -> hw : hws)
-            let menus = createMenuHandlers ss (SS.hwWindow hw) Nothing
+            let tw = SS.createGhciTextWindow panel hwndp hwnd 
+                    Nothing (hasFocus hwnd) (return False) (return "")
+            SS.twUpdate ss (\tws -> tw : tws)
+            let menus = createMenuHandlers ss tw Nothing
             SS.ssSetMenuHandlers ss menus 
-            setEventHandler ss hw hwnd SI.ghciTerminalEventMaskDebug
+            setEventHandler ss tw hwnd SI.ghciTerminalEventMaskDebug
             enableEvents hwnd
             setFocus hwnd
-            return (Just $ SS.hwWindow hw)
+            return $ Just tw
         Nothing -> return Nothing
 
 open :: SS.Session -> String -> IO (Maybe (Panel (), HWND, HWND))
@@ -173,7 +176,7 @@ closeWindow ss tw = do
     return ()
 
 closeAll :: SS.Session -> IO ()
-closeAll ss = SS.hwFindWindows ss SS.hwIsGhci >>= mapM_ (\hw -> closeWindow ss (SS.hwWindow hw))
+closeAll ss = SS.twFindWindows ss SS.twIsGhci >>= mapM_ (\tw -> closeWindow ss tw)
 
 -- create the menu handlers
 createMenuHandlers :: SS.Session -> SS.TextWindow -> Maybe String -> MN.HideMenuHandlers 
@@ -197,34 +200,6 @@ createMenuHandlers ss tw mfp =
         debugging = SS.ssTestState ss SS.ssStateDebugging
         debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
 
-
-createHideWindow :: SS.Session -> Panel() -> HWND -> HWND -> Maybe String -> IO SS.HideWindow
-createHideWindow ss panel phwnd hwnd mfp = do
-    let tw = SS.createTextWindow SS.createGhciWindowType panel phwnd hwnd mfp
-    return $ SS.createHideWindow tw (tms tw)
-
-    where  
-        debugging = SS.ssTestState ss SS.ssStateDebugging
-        debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
-        tms tw = SS.createTextMenus 
-                    [ 
-                        (SS.createMenuFunction MN.menuFileClose         (closeWindow ss tw)     (return True)),
-                        (SS.createMenuFunction MN.menuFileCloseAll      (closeAll ss)           (return True)),
-                        (SS.createMenuFunction MN.menuFileSaveAs        (fileSaveAs ss tw)      (return True)),
-                        (SS.createMenuFunction MN.menuEditCut           (cut hwnd)              (isTextSelected hwnd)),
-                        (SS.createMenuFunction MN.menuEditCopy          (copy hwnd)             (isTextSelected hwnd)),
-                        (SS.createMenuFunction MN.menuEditPaste         (paste hwnd)            (return True)),
-                        (SS.createMenuFunction MN.menuEditSelectAll     (selectAll hwnd)        (return True)),
-                        (SS.createMenuFunction MN.menuEditClear         (clear hwnd)            (return True)),
-                        (SS.createMenuFunction MN.menuDebugStop         (stopDebug ss hwnd)     (debugging)),
-                        (SS.createMenuFunction MN.menuDebugContinue     (continue ss hwnd)      (debuggerPaused)),
-                        (SS.createMenuFunction MN.menuDebugStep         (step ss hwnd)          (debuggerPaused)),
-                        (SS.createMenuFunction MN.menuDebugStepLocal    (stepLocal ss hwnd)     (debuggerPaused)),
-                        (SS.createMenuFunction MN.menuDebugStepModule   (stepModule ss hwnd)    (debuggerPaused))
-                    ]
-                    (hasFocus hwnd)
-                    (return True)
-                    (return "")
 
 paste :: HWND -> IO ()
 paste = SI.ghciTerminalPaste
@@ -275,8 +250,8 @@ fileSaveAs ss tw = do
             return ()
         Nothing -> return ()
           
-setEventHandler :: SS.Session -> SS.HideWindow -> HWND -> Int -> IO ()
-setEventHandler ss hw hwnd mask = SI.ghciTerminalSetEventHandler hwnd (eventHandler ss hw mask)
+setEventHandler :: SS.Session -> SS.TextWindow -> HWND -> Int -> IO ()
+setEventHandler ss tw hwnd mask = SI.ghciTerminalSetEventHandler hwnd (eventHandler ss tw mask)
 
 enableEvents :: HWND -> IO ()
 enableEvents = SI.ghciTerminalEnableEvents
@@ -284,8 +259,8 @@ enableEvents = SI.ghciTerminalEnableEvents
 disableEvents :: HWND -> IO ()
 disableEvents = SI.ghciTerminalDisableEvents
     
-toggleBreakPoint :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
-toggleBreakPoint ss hw scn sn = do
+toggleBreakPoint :: SS.Session -> SS.TextWindow -> SC.Editor -> SC.SCNotification -> IO ()
+toggleBreakPoint ss tw scn sn = do
     l <- SC.getLineFromPosition scn (fromIntegral (SI.snPosition sn) :: Int)
     markers <- SC.markerGet scn l
     if testBit markers CN.breakPointMarker then do
@@ -299,7 +274,7 @@ toggleBreakPoint ss hw scn sn = do
         traceBPs
     else do
         h <- SC.markerAdd scn l CN.breakPointMarker
-        let bp = SS.createBreakPoint scn (maybe "" id $ SS.hwFilePath hw) h 0 
+        let bp = SS.createBreakPoint scn (maybe "" id $ SS.twFilePath tw) h 0 
         SS.dsAddBreakPoint ss bp
         traceBPs
 
@@ -448,10 +423,10 @@ clearDebugStoppedMarker ss = do
     case SS.dsOutput ds of
         Just dout -> do
             let filePath = (SS.dsDirectory ds) </> (takeFileName $ SS.doFilePath dout)
-            mhw <- SS.hwFindSourceFileWindow ss filePath
-            case mhw of 
-                Just hw -> do
-                    case SS.hwGetEditor hw of
+            mtw <- SS.twFindSourceFileWindow ss filePath
+            case mtw of 
+                Just tw -> do
+                    case SS.twGetEditor tw of
                         Just scn -> do                            
                             SC.markerDeleteAll scn CN.debugMarker
                         Nothing -> return ()
@@ -465,10 +440,10 @@ setDebugStoppedMarker ss = do
         Just dout -> do
             let (ls, le, cs, ce) = SS.doGetDebugRange dout
             let filePath = (SS.dsDirectory ds) </> (takeFileName $ SS.doFilePath dout)
-            mhw <- SS.hwFindSourceFileWindow ss filePath
-            case mhw of 
-                Just hw -> do
-                    case SS.hwGetEditor hw of
+            mtw <- SS.twFindSourceFileWindow ss filePath
+            case mtw of 
+                Just tw -> do
+                    case SS.twGetEditor tw of
                         Just scn -> do
                             SC.markerAdd scn (ls-1) CN.debugMarker
                             SC.selectLinesCols scn (ls-1) (cs-1) (le-1) ce
@@ -481,12 +456,12 @@ setDebugStoppedMarker ss = do
 -- Event Handling
 ------------------------------------------------------------  
 
-eventHandler :: SS.Session -> SS.HideWindow -> Int -> HWND -> Int -> Maybe String -> IO ()
-eventHandler ss hw mask hwnd evt mstr
+eventHandler :: SS.Session -> SS.TextWindow -> Int -> HWND -> Int -> Maybe String -> IO ()
+eventHandler ss tw mask hwnd evt mstr
     | evt' == SI.ghciTerminalEventLostFocus = do
-        SS.ssDisableMenuHandlers ss (SS.hwHwnd hw)
+        SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
     | evt' == SI.ghciTerminalEventGotFocus = do
-        let mhs = createMenuHandlers ss (SS.hwWindow hw) Nothing
+        let mhs = createMenuHandlers ss tw Nothing
         SS.ssSetMenuHandlers ss mhs
     | evt' == SI.ghciTerminalEventSelectionSet || evt == SI.ghciTerminalEventSelectionClear = do
         SS.ssSetMenus ss        

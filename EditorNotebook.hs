@@ -57,18 +57,18 @@ enbGetSelectedTabHwnd ss = do
     where   nb = SS.ssEditors ss
  
 -- returns the source file for the currently selected tab
-enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.HideWindow)
+enbGetSelectedSourceFile :: SS.Session -> IO (Maybe SS.TextWindow)
 enbGetSelectedSourceFile ss = do  
-    hws <- SS.hwGetWindows ss
+    tws <- SS.twGetWindows ss
     mhwnd <- enbGetSelectedTabHwnd ss
     case mhwnd of 
-        Just hwnd -> return $ find (\hw -> (SS.hwIsSourceFile hw) && (SS.hwMatchesHwnd hw hwnd)) hws
+        Just hwnd -> return $ find (\tw -> (SS.twIsSourceFile tw) && (SS.twMatchesHwnd tw hwnd)) tws
         Nothing   -> return Nothing
 
 -- returns true if the source file of the currently selected tab is clean 
 enbSelectedSourceFileIsClean :: SS.Session -> IO Bool
 enbSelectedSourceFileIsClean ss = 
-    enbGetSelectedSourceFile ss >>= maybe (return True) (\tw -> SS.hwIsClean tw) 
+    enbGetSelectedSourceFile ss >>= maybe (return True) (\tw -> SS.twIsClean tw) 
  
 enbSelectTab :: SS.Session -> SS.TextWindow -> IO (Bool)
 enbSelectTab ss tw = do

@@ -73,10 +73,10 @@ onBuildBuild ss tw scn = do
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
-        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
-        case mhw of
-            Just hw -> do
-                case SS.hwFilePath hw of
+        mtw <- SS.twFindWindow ss (\tw' -> SS.twMatchesHwnd tw' (SS.twPanelHwnd tw))
+        case mtw of
+            Just tw' -> do
+                case SS.twFilePath tw' of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
                         cpBuildProject ss fp (Just $ compileComplete ss)
@@ -104,10 +104,10 @@ onBuildCompile ss tw scn = do
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
-        mhw <- SS.hwFindWindow ss (\hw -> SS.hwMatchesHwnd hw (SS.twPanelHwnd tw))
-        case mhw of
-            Just hw -> do
-                case SS.hwFilePath hw of
+        mtw <- SS.twFindWindow ss (\tw' -> SS.twMatchesHwnd tw' (SS.twPanelHwnd tw))
+        case mtw of
+            Just tw' -> do
+                case SS.twFilePath tw' of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
                         cpCompileFile ss fp (Just $ compileComplete ss)

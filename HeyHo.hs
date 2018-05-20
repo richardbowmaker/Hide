@@ -270,22 +270,22 @@ onClosing ss previous = do
 
 onTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
 onTabChanged ss ev@(AuiNotebookPageChanged _ _) = do   
-    mhw <- EN.enbGetSelectedSourceFile ss 
-    case mhw of
-        Just hw -> do 
-            case SS.hwGetEditor hw of
+    mtw <- EN.enbGetSelectedSourceFile ss 
+    case mtw of
+        Just tw -> do 
+            case SS.twGetEditor tw of
                 Just scn -> SC.grabFocus scn
                 Nothing  -> return ()
         Nothing -> return ()
 
 onTabClose :: SS.Session -> EventAuiNotebook -> IO ()
 onTabClose ss enb = do
-    mhw <- EN.enbGetSelectedSourceFile ss 
-    case mhw of
-        Just hw -> do 
-            case SS.hwGetEditor hw of
+    mtw <- EN.enbGetSelectedSourceFile ss 
+    case mtw of
+        Just tw -> do 
+            case SS.twGetEditor tw of
                 Just scn -> do
-                    FM.closeEditor ss (SS.hwWindow hw) scn
+                    FM.closeEditor ss tw scn
                     return ()
                 Nothing  -> return ()
         Nothing -> return ()
@@ -293,16 +293,16 @@ onTabClose ss enb = do
 
 onOutputTabClose :: SS.Session -> EventAuiNotebook -> IO ()
 onOutputTabClose ss _ = do
-    mhw <- OT.getSelectedGhci ss 
-    case mhw of
-        Just hw -> GH.closeWindow ss $ SS.hwWindow hw
+    mtw <- OT.getSelectedGhci ss 
+    case mtw of
+        Just tw -> GH.closeWindow ss tw
         Nothing -> OT.closeOutputWindow ss
 
 onOutputTabChanged :: SS.Session -> EventAuiNotebook -> IO ()
 onOutputTabChanged ss _ = do
-    mhw <- OT.getSelectedGhci ss 
-    case mhw of
-        Just hw -> GH.setFocus $ SS.hwPanelHwnd hw
+    mtw <- OT.getSelectedGhci ss 
+    case mtw of
+        Just tw -> GH.setFocus $ SS.twPanelHwnd tw
         Nothing -> return ()
 
 ------------------------------------------------------------    

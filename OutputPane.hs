@@ -66,10 +66,10 @@ openOutputWindow ss = do
     
 closeOutputWindow :: SS.Session -> IO ()
 closeOutputWindow ss = do
-    mhw <- SS.ssOutput ss
-    case mhw of
-        Just hw -> do
-            case SS.hwGetEditor hw of
+    mtw <- SS.ssOutput ss
+    case mtw of
+        Just tw -> do
+            case SS.twGetEditor tw of
                 Just scn -> do
                     SS.ssSetOutput ss Nothing
                     SC.disableEvents scn
@@ -80,10 +80,10 @@ closeOutputWindow ss = do
 
 closeOutputTab :: SS.Session -> IO ()
 closeOutputTab ss = do
-    mhw <- SS.ssOutput ss
-    case mhw of
-        Just hw -> do
-            case SS.hwGetEditor hw of
+    mtw <- SS.ssOutput ss
+    case mtw of
+        Just tw -> do
+            case SS.twGetEditor tw of
                 Just scn -> do
                     SS.ssSetOutput ss Nothing
                     SC.disableEvents scn
@@ -115,23 +115,24 @@ addOutputTab ss = do
     SC.setSelectionMode scn SC.sC_SEL_LINES
 
     -- add text window to project
-    hw <- createHideWindow ss scn panel hwndp (SC.getHwnd scn)
-    SS.ssSetOutput ss (Just hw)
+    let tw = SS.createOutputTextWindow scn panel hwndp (SC.getHwnd scn)
+                (SC.getFocus scn) (return True) (getStatusInfo scn)
+    SS.ssSetOutput ss (Just tw)
 
-    let mhs = createMenuHandlers ss scn (SS.hwWindow hw) 
+    let mhs = createMenuHandlers ss scn tw 
     SS.ssSetMenuHandlers ss mhs
 
     -- enable events
-    SC.setEventHandler scn $ scnCallback ss hw
+    SC.setEventHandler scn $ scnCallback ss tw
     SC.enableEvents scn
     SC.grabFocus scn
 
     -- setup the context menu
     SC.usePopup scn SC.sC_POPUP_NEVER
-    SC.addPopupMenuItem scn 1000 "Save As ... " (\scn _ -> fileSave ss (SS.hwWindow hw) scn) (\scn _ -> SC.getTextLen scn)
-    SC.addPopupMenuItem scn 1001 "Copy"         (\scn _ -> SC.copy scn)                      (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
-    SC.addPopupMenuItem scn 1002 "Select All"   (\scn _ -> SC.selectAll scn)                 (\scn _ -> SC.getTextLen scn)
-    SC.addPopupMenuItem scn 1003 "Clear"        (\scn _ -> clearText scn)                    (\scn _ -> SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1000 "Save As ... " (\scn _ -> fileSave ss tw scn) (\scn _ -> SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1001 "Copy"         (\scn _ -> SC.copy scn)        (\scn _ -> liftM MI.boolToInt $ liftM not $ SC.selectionIsEmpty scn)
+    SC.addPopupMenuItem scn 1002 "Select All"   (\scn _ -> SC.selectAll scn)   (\scn _ -> SC.getTextLen scn)
+    SC.addPopupMenuItem scn 1003 "Clear"        (\scn _ -> clearText scn)      (\scn _ -> SC.getTextLen scn)
 
 menuOption :: SS.Session -> SC.Editor -> Int -> IO ()
 menuOption ss scn id = do
@@ -150,26 +151,6 @@ createMenuHandlers ss scn tw =
      MN.createMenuHandler MN.menuEditClear         hwnd (clearText scn)                 (liftM (>0) $ SC.getTextLen scn)]
 
     where  hwnd = SS.twHwnd tw
-
-createHideWindow :: SS.Session -> SC.Editor -> Panel() -> HWND -> HWND -> IO SS.HideWindow
-createHideWindow ss scn panel phwnd hwnd = do
-    let tw = SS.createTextWindow (SS.createOutputWindowType scn) panel phwnd hwnd Nothing
-    return $ SS.createHideWindow tw (tms tw)
-
-    where  tms tw = SS.createTextMenus
-                    [
-                        (SS.createMenuFunction MN.menuFileClose         (closeOutputTab ss)             (return True)),
-                        (SS.createMenuFunction MN.menuFileSaveAs        (fileSave ss tw scn)            (liftM (>0) $ SC.getTextLen scn)),
-                        (SS.createMenuFunction MN.menuEditCopy          (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn)),
-                        (SS.createMenuFunction MN.menuEditSelectAll     (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn)),
-                        (SS.createMenuFunction MN.menuEditFind          (EM.editFind ss tw scn)         (return True)),
-                        (SS.createMenuFunction MN.menuEditFindForward   (EM.editFindForward ss tw scn)  (return True)),
-                        (SS.createMenuFunction MN.menuEditFindBackward  (EM.editFindBackward ss tw scn) (return True)),
-                        (SS.createMenuFunction MN.menuEditClear         (clearText scn)                 (liftM (>0) $ SC.getTextLen scn))
-                    ]
-                    (SC.getFocus scn)
-                    (return True)
-                    (getStatusInfo scn)
 
 -- File Save As, returns False if user opted to cancel the save 
 fileSave :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
@@ -251,28 +232,28 @@ gotoErrorNo ss errno = do
 gotoError :: SS.Session -> SS.CompError -> IO ()
 gotoError ss ce = do
     -- goto source file from list of open files
-    mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
-    case mhw of          
-        Just hw -> do
-            b <- EN.enbSelectTab ss $ SS.hwWindow hw
+    mtw <- SS.twFindSourceFileWindow ss $ SS.ceFilePath ce 
+    case mtw of          
+        Just tw -> do
+            b <- EN.enbSelectTab ss tw
             if b then do
                 highlightOutput ss ce
-                gotoPos hw ce 
+                gotoPos tw ce 
                 SS.crUpdateCurrentError ss (Just $ SS.ceErrorNo ce)
             else return ()
         Nothing -> do
             -- source file not open
             (SS.ssFileOpen ss) ss $ SS.ceFilePath ce
-            mhw <- SS.hwFindSourceFileWindow ss $ SS.ceFilePath ce 
-            case mhw of
-                Just hw -> do
+            mtw <- SS.twFindSourceFileWindow ss $ SS.ceFilePath ce 
+            case mtw of
+                Just tw -> do
                     highlightOutput ss ce
-                    gotoPos hw ce 
+                    gotoPos tw ce 
                     SS.crUpdateCurrentError ss (Just $ SS.ceErrorNo ce)
                 Nothing -> return ()
     
-    where   gotoPos hw ce = do
-                case SS.hwGetEditor hw of
+    where   gotoPos tw ce = do
+                case SS.twGetEditor tw of
                     Just scn -> do
                         SC.gotoLineCol scn ((SS.ceSrcLine ce)-1) ((SS.ceSrcCol ce)-1)
                         SC.grabFocus scn
@@ -282,8 +263,8 @@ gotoError ss ce = do
             highlightOutput ss ce = do
                 mout <- SS.ssOutput ss
                 case mout of
-                    Just hw ->
-                        case SS.hwGetEditor hw of
+                    Just tw ->
+                        case SS.twGetEditor tw of
                             Just scn -> do
                                 let ls = SS.ceErrLine ce
                                 ps <- SC.getPositionFromLine scn ls
@@ -294,36 +275,36 @@ gotoError ss ce = do
                             Nothing -> return ()
                     Nothing -> return ()
 
-scnCallback :: SS.Session -> SS.HideWindow -> SC.Editor -> SC.SCNotification -> IO ()
-scnCallback ss hw scn sn = do 
+scnCallback :: SS.Session -> SS.TextWindow -> SC.Editor -> SC.SCNotification -> IO ()
+scnCallback ss tw scn sn = do 
     -- event from output pane
     case (SI.notifyGetCode sn) of
         2006 -> do -- sCN_DOUBLECLICK
             gotoErrorLine ss (fromIntegral (SI.snLine sn) :: Int)
             return ()
         2007 -> do -- sCN_UPDATEUI
-            SS.twStatusInfo (SS.hwMenus hw) >>= updateStatus ss 
+            SS.twStatusInfo tw >>= updateStatus ss 
             if  ( (.&.) (fromIntegral (SI.snUpdated sn) :: Int) 
                         (fromIntegral SC.sC_UPDATE_SELECTION :: Int)) > 0 then
-                updateMenus ss hw scn
+                updateMenus ss tw scn
             else
                 return ()
         2028 -> do -- sCN_FOCUSIN
-            updateMenus ss hw scn           
+            updateMenus ss tw scn           
         2029 -> do -- sCN_FOCUSOUT
-            updateMenus ss hw scn         
+            updateMenus ss tw scn         
         otherwise -> do
             return ()
 
-updateMenus :: SS.Session -> SS.HideWindow -> SC.Editor -> IO ()
-updateMenus ss hw scn = do
+updateMenus :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+updateMenus ss tw scn = do
     f <- SC.getFocus scn 
     if f then do 
         -- set the menu handlers
-        let mhs = createMenuHandlers ss scn (SS.hwWindow hw) 
+        let mhs = createMenuHandlers ss scn tw 
         SS.ssSetMenuHandlers ss mhs
     else do
-        SS.ssDisableMenuHandlers ss (SS.hwHwnd hw)
+        SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
 
 -- returns the HWND of the child panel of the currently selected notebook page
 getSelectedTabHwnd :: SS.Session -> IO (Maybe HWND)
@@ -336,12 +317,12 @@ getSelectedTabHwnd ss = do
     where nb = SS.ssOutputs ss
  
 -- returns the source file for the currently selected tab
-getSelectedGhci :: SS.Session -> IO (Maybe SS.HideWindow)
+getSelectedGhci :: SS.Session -> IO (Maybe SS.TextWindow)
 getSelectedGhci ss = do  
-    hws <- SS.hwGetWindows ss
+    tws <- SS.twGetWindows ss
     mhwnd <- getSelectedTabHwnd ss
     case mhwnd of 
-        Just hwnd -> return $ find (\hw -> (SS.hwIsGhci hw) && (SS.hwMatchesHwnd hw hwnd)) hws
+        Just hwnd -> return $ find (\tw -> (SS.twIsGhci tw) && (SS.twMatchesHwnd tw hwnd)) tws
         Nothing   -> return Nothing
 
 getTabCount :: SS.Session -> IO Int
@@ -402,10 +383,10 @@ addLineS ss s = withEditor ss $ addLine' ss $ BS.pack s
 
 withEditor :: SS.Session -> (SC.Editor -> IO ()) -> IO ()
 withEditor ss f = do    
-    mhw <- SS.ssOutput ss
-    case mhw of
-        Just hw -> do
-            case SS.hwGetEditor hw of
+    mtw <- SS.ssOutput ss
+    case mtw of
+        Just tw -> do
+            case SS.twGetEditor tw of
                 Just scn -> f scn
                 Nothing  -> return () -- shouldn't get here
         Nothing -> return ()
