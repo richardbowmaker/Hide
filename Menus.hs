@@ -92,12 +92,12 @@ data HideMenuHandler = HideMenuHandler
 -- createMenu parent menuid
 createMenu :: Menu () -> Int -> IO HideMenu
 createMenu parent mid = do
-    item <- menuItem parent [text := (title ++ "\t" ++ key), help := help', enabled := False]  
+    item <- menuItem parent [text := title, help := help', enabled := False]  
     return $ (HideMenu mid item title help' (return ()) (return False) Nothing)
     where 
-        title = maybe "" mcTitle $ find (\m -> mcId m == mid) menusConfig
-        key   = maybe "" mcKey   $ find (\m -> mcId m == mid) menusConfig
-        help' = maybe "" mcHelp  $ find (\m -> mcId m == mid) menusConfig
+        title = (menuCfg mcTitle) ++ "\t" ++ (menuCfg mcKey)
+        help' = menuCfg mcHelp
+        menuCfg x = maybe "" x $ find (\m -> mcId m == mid) menusConfig
 
 -- creates a hide window with just the handlers set, is a precursor to
 -- merging a windows menus into the current active set of menus

@@ -116,7 +116,7 @@ addOutputTab ss = do
 
     -- add text window to project
     let tw = SS.createOutputTextWindow scn panel hwndp (SC.getHwnd scn)
-                (SC.getFocus scn) (return True) (getStatusInfo scn)
+                (SC.grabFocus scn) (SC.getFocus scn) (return True) (getStatusInfo scn)
     SS.ssSetOutput ss (Just tw)
 
     let mhs = createMenuHandlers ss scn tw 

@@ -57,18 +57,6 @@ import qualified Session as SS
 onBuildBuild :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 onBuildBuild ss tw scn = do
 
-    SS.ssSetStateBit ss SS.ssStateCompile
-{-
-    set (SS.ssMenuListGet ss MN.menuBuildNextError)     [enabled := False]
-    set (SS.ssMenuListGet ss MN.menuBuildPreviousError) [enabled := False]
-    set (SS.ssMenuListGet ss MN.menuBuildBuild)         [enabled := False]        
-    set (SS.ssMenuListGet ss MN.menuBuildCompile)       [enabled := False]
-    set (SS.ssMenuListGet ss MN.menuDebugGhci)          [enabled := False]
-    set (SS.ssMenuListGet ss MN.menuDebugRun)           [enabled := False]
--}
-    SS.ssSetMenus ss
-    OT.openOutputWindow ss
-
     -- save file first
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
@@ -79,27 +67,19 @@ onBuildBuild ss tw scn = do
                 case SS.twFilePath tw' of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
+                        SS.ssSetMenus ss
+                        OT.openOutputWindow ss
                         cpBuildProject ss fp (Just $ compileComplete ss)
-                    Nothing -> return ()
-            Nothing -> do
-                    SS.ssDebugError ss "onBuildBuild:: no file name set"
+                        SS.twSetFocus tw
+                    Nothing -> do
+                        SS.ssDebugError ss "onBuildBuild:: no file name set"
+                        return ()
+            Nothing -> return ()
     else return ()
     
 onBuildCompile :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
 onBuildCompile ss tw scn = do
 
-{-
-    set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)         [enabled := False]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile)       [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugGhci)          [enabled := False]
-    set (SS.ssMenuListGet ss CN.menuDebugRun)           [enabled := False]
--}
-    SS.ssSetMenus ss
-
-    OT.openOutputWindow ss
-
     -- save file first
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
@@ -110,20 +90,19 @@ onBuildCompile ss tw scn = do
                 case SS.twFilePath tw' of
                     Just fp -> do
                         SS.ssSetStateBit ss SS.ssStateCompile
+                        SS.ssSetMenus ss
+                        OT.openOutputWindow ss
                         cpCompileFile ss fp (Just $ compileComplete ss)
-                    Nothing -> return ()
-            Nothing -> do
-                    SS.ssDebugError ss "onBuildCompile:: no file name set"
+                        SS.twSetFocus tw
+                    Nothing -> do
+                        SS.ssDebugError ss "onBuildBuild:: no file name set"
+                        return ()
+            Nothing -> return ()
     else return ()
                
 compileComplete :: SS.Session -> IO ()
 compileComplete ss = do
-{-
-    set (SS.ssMenuListGet ss CN.menuBuildBuild)   [enabled := True]        
-    set (SS.ssMenuListGet ss CN.menuBuildCompile) [enabled := True]
-    set (SS.ssMenuListGet ss CN.menuDebugGhci)    [enabled := True]
-    set (SS.ssMenuListGet ss CN.menuDebugRun)     [enabled := True]
--}
+
     SS.ssClearStateBit ss SS.ssStateCompile
     SS.ssSetMenus ss
 
@@ -159,7 +138,6 @@ cpCompileFile :: SS.Session -> String -> Maybe (IO ()) -> IO ()
 cpCompileFile ss fp mfinally = do
 
     SS.ssDebugInfo ss $ "Start compile: " ++ fp
-
     OT.clear ss
     OT.addLineS ss "Compile started ..."
 
@@ -174,19 +152,14 @@ cpCompileFile ss fp mfinally = do
 
     return ()
  
+
 cpCompileFileDone :: SS.Session -> Maybe (IO ()) -> SS.CompReport -> IO ()
 cpCompileFileDone ss mfinally ces = do
     
     if SS.crErrorCount ces == 0 then do
-        SS.ssQueueFunction ss (OT.addTextS ss "\nNo errors\n")
-        SS.ssSetMenus ss
-        --set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := False]
-        --set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := False]
+        SS.ssQueueFunction ss $ OT.addTextS ss "\nNo errors\n"
     else do
-        SS.ssQueueFunction ss (OT.addTextS ss ("\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n"))
-        SS.ssSetMenus ss
-        --set (SS.ssMenuListGet ss CN.menuBuildNextError)     [enabled := True]
-        --set (SS.ssMenuListGet ss CN.menuBuildPreviousError) [enabled := True]
+        SS.ssQueueFunction ss  $OT.addTextS ss ("\n" ++ (show $ SS.crErrorCount ces) ++ " errors\n")
 
     -- save compilation results to session
     SS.ssSetCompilerReport ss ces
@@ -196,6 +169,7 @@ cpCompileFileDone ss mfinally ces = do
     maybe (return ()) (SS.ssQueueFunction ss) mfinally
 
     return ()
+
 
 cpDebugRun :: SS.Session -> SS.TextWindow -> IO ()
 cpDebugRun ss tw = do 

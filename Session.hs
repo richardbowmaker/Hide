@@ -1,6 +1,9 @@
 
 module Session 
 (
+    incDebugRecord,
+    dbTics,
+    dbState,
     CompError,
     CompReport,
     DebugBreakPoint,
@@ -8,6 +11,8 @@ module Session
     DebugRange,
     DebugSession,
     DebugVariable,
+    DebugState,
+    DebugRecord,
     FindText,
     FunctionChannel,
     Session,
@@ -35,6 +40,7 @@ module Session
     crUpdateReport,
     createBreakPoint,
     createDebugOutput,
+    createDebugRecord,
     createDebugRange,
     createDebugSession,
     createDebugTextWindow,
@@ -136,6 +142,7 @@ module Session
     twPanelHwnd,
     twRemoveWindow,
     twSetFilePath,
+    twSetFocus,
     twStatusInfo,
     twType,
     twUpdate
@@ -261,7 +268,11 @@ ssSetMenus ss = do
     menus <- atomically $ do readTVar $ ssMenus ss
     forM_ menus $ \menu -> do
         e <- MN.mnEnabled menu
-        set (MN.mnItem menu) [text := MN.mnTitle menu, help := MN.mnHelp menu, on command := MN.mnAction menu, enabled := e]
+        set (MN.mnItem menu) [
+            text := MN.mnTitle menu,
+            help := MN.mnHelp menu, 
+            on command := (MN.mnAction menu >> ssSetMenus ss), 
+            enabled := e]
 
 ssDisableMenuHandlers :: Session -> HWND -> IO ()
 ssDisableMenuHandlers ss handlers = do
@@ -397,6 +408,7 @@ data TextWindow
                     twPanelHwnd         :: HWND,                -- ^ HWND of panel
                     twHwnd              :: HWND,
                     twFilePath          :: Maybe String,        -- ^ File name associated with window
+                    twSetFocus          :: IO (),
                     twHasFocus          :: IO Bool,
                     twIsClean           :: IO Bool,
                     twStatusInfo        :: IO String}
@@ -414,7 +426,7 @@ instance Show TextWindowType where
     show (OutputFile scn) = show scn
 
 instance Show TextWindow where
-    show (TextWindow typ _ phwnd hwnd mfp _ _ _) = 
+    show (TextWindow typ _ phwnd hwnd mfp _ _ _ _) = 
         "TextWindow: " ++ show typ ++ 
         ", panel hwnd = " ++ MI.hwndToString phwnd ++
         ", child hwnd = " ++ MI.hwndToString hwnd  ++
@@ -422,19 +434,19 @@ instance Show TextWindow where
 
 ---------------------------------------------------------------
 
-createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> IO Bool -> IO Bool -> IO String -> TextWindow
-createTextWindow wtype panel hwndp hwnd mfp action enabled status = (TextWindow wtype panel hwndp hwnd mfp action enabled status)
+createTextWindow :: TextWindowType -> Panel () -> HWND -> HWND -> Maybe String -> IO () -> IO Bool -> IO Bool -> IO String -> TextWindow
+createTextWindow wtype panel hwndp hwnd mfp setfocus hasfocus isclean status = (TextWindow wtype panel hwndp hwnd mfp setfocus hasfocus isclean status)
 
-createSourceTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> Maybe String -> IO Bool -> IO Bool -> IO String -> TextWindow
+createSourceTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> Maybe String -> IO () -> IO Bool -> IO Bool -> IO String -> TextWindow
 createSourceTextWindow scn = createTextWindow $ SourceFile scn
 
-createGhciTextWindow :: Panel () -> HWND -> HWND -> Maybe String -> IO Bool -> IO Bool -> IO String -> TextWindow
+createGhciTextWindow :: Panel () -> HWND -> HWND -> Maybe String -> IO () -> IO Bool -> IO Bool -> IO String -> TextWindow
 createGhciTextWindow  = createTextWindow GhciFile
 
-createDebugTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> Maybe String -> IO Bool -> IO Bool -> IO String -> TextWindow
+createDebugTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> Maybe String -> IO () -> IO Bool -> IO Bool -> IO String -> TextWindow
 createDebugTextWindow scn = createTextWindow $ DebugFile scn
 
-createOutputTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> IO Bool -> IO Bool -> IO String -> TextWindow
+createOutputTextWindow :: SC.Editor -> Panel () -> HWND -> HWND -> IO () -> IO Bool -> IO Bool -> IO String -> TextWindow
 createOutputTextWindow scn panel phwnd hwnd = createTextWindow (OutputFile scn) panel phwnd hwnd Nothing 
 
 createMenuFunction :: Int -> IO () -> IO Bool -> MenuFunction
@@ -545,6 +557,19 @@ twFindSourceFileWindow ss fp = do
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 
+
+data DebugState = DbInitialising | DbPaused | DbFinished
+data DebugRecord = DebugRecord { dbTics :: Int, dbState :: DebugState }
+
+instance Show DebugState where
+    show dbs = case dbs of 
+        DbInitialising -> "Initialising"
+        DbPaused       -> "Paused"
+        DbFinished     -> "Finished"
+
+instance Show DebugRecord where
+    show (DebugRecord tics state) = "DbState: Tics = " ++ show tics ++ ", State = " ++ show state
+
 data DebugSession = DebugSession 
     { 
         dsTw            :: Maybe TextWindow,        -- GHCI session
@@ -629,6 +654,12 @@ instance Show DebugRange where
 
 createDebugSession :: Maybe TextWindow -> String -> [DebugBreakPoint] -> Maybe DebugOutput -> DebugSession 
 createDebugSession mtw dir bps mdout = (DebugSession mtw dir bps mdout)
+
+createDebugRecord :: DebugRecord
+createDebugRecord = (DebugRecord 0 DbInitialising)
+
+incDebugRecord :: DebugRecord -> DebugRecord
+incDebugRecord dbr =  dbr { dbTics = dbTics dbr + 1 }
 
 dsGetDebugSession :: Session -> IO DebugSession
 dsGetDebugSession ss = atomically $ readTVar (ssDebugSession ss)

@@ -56,7 +56,7 @@ openSourceFileEditor ss fp = do
 
     -- add text window to project
     let tw = SS.createSourceTextWindow scn p hwnd (SC.getHwnd scn) 
-            (Just fp) (SC.getFocus scn) (SC.isClean scn) (getStatusInfo scn)
+            (Just fp) (SC.grabFocus scn) (SC.getFocus scn) (SC.isClean scn) (getStatusInfo scn)
     SS.twUpdate ss (\tws -> tw : tws)
 
     -- enable events
@@ -157,7 +157,7 @@ newFile ss = do
     auiNotebookAddPage nb p "..." False 0
 
     let tw = SS.createSourceTextWindow scn p hwnd (SC.getHwnd scn) 
-            Nothing (SC.getFocus scn) (SC.isClean scn) (getStatusInfo scn)
+            Nothing  (SC.grabFocus scn) (SC.getFocus scn) (SC.isClean scn) (getStatusInfo scn)
     SS.twUpdate ss (\tws -> tw : tws)
 
     -- set the menu handlers
@@ -208,7 +208,8 @@ closeTab ss tw scn = do
     -- remove source file from project
     SS.twRemoveWindow ss tw    
     -- clear status bar
-    updateStatus ss ""    
+    updateStatus ss "" 
+    SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
     return ()
 
 fileOpen :: SS.Session -> String -> IO ()
@@ -240,7 +241,8 @@ fileClose ss tw scn = do
         case mix of
             Just ix -> do
                 let nb = SS.ssEditors ss        
-                auiNotebookDeletePage nb ix  
+                auiNotebookDeletePage nb ix
+                SS.ssDisableMenuHandlers ss (SS.twHwnd tw)  
                 return True
             Nothing -> do
                 SS.ssDebugError ss "fileClose, no tab for source file"

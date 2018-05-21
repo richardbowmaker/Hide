@@ -59,10 +59,8 @@ onDebugGhci ss tw scn = do
                     Just fp -> do
                         mtw' <- openWindowFile ss tw 
                         case mtw' of 
-                            Just tw' -> do
-                                SS.ssQueueFunction ss $ startDebug ss tw (SS.twHwnd tw')
-                                return() 
-                            Nothing -> return ()
+                            Just tw' -> startDebug ss tw (SS.twHwnd tw')
+                            Nothing  -> return ()
                     Nothing -> return ()
             Nothing -> do
                 SS.ssDebugError ss "onBuildGhci:: no file name set"
@@ -87,7 +85,7 @@ openWindowFile ss ftw = do
                     case mw of
                         Just (panel, hwndp, hwnd) -> do
                             let tw = SS.createGhciTextWindow panel hwndp hwnd 
-                                    (Just fp) (hasFocus hwnd) (return True) (return "")
+                                    (Just fp) (setFocus hwnd) (hasFocus hwnd) (return True) (return "")
                             SS.twUpdate ss (\tws -> tw : tws)
                             let menus = createMenuHandlers ss tw (Just fp)
                             SS.ssSetMenuHandlers ss menus
@@ -109,8 +107,19 @@ startDebug ss tw hwnd = do
             -- mapM_ (addModule ss) modules
             -- setBreakPoints ss modules hwnd
             SS.ssSetStateBit ss SS.ssStateDebugging
+            SS.ssSetMenus ss
+            runDebugger ss tw hwnd SS.createDebugRecord
         Nothing -> do
             SS.ssDebugError ss "Ghci.startDebug: no filename set"
+
+runDebugger :: SS.Session -> SS.TextWindow -> HWND -> SS.DebugRecord -> IO ()
+runDebugger ss tw hwnd dbr = do
+        if SS.dbTics dbr `mod` 10 == 0 then 
+            SS.ssDebugInfo ss "Debugger waiting"
+        else 
+            return ()
+        step
+    where step = SS.ssQueueFunction ss $ runDebugger ss tw hwnd $ SS.incDebugRecord dbr
 
 openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
@@ -118,7 +127,7 @@ openWindow ss = do
     case m of
         Just (panel, hwndp, hwnd) -> do
             let tw = SS.createGhciTextWindow panel hwndp hwnd 
-                    Nothing (hasFocus hwnd) (return False) (return "")
+                    Nothing (setFocus hwnd) (hasFocus hwnd) (return False) (return "")
             SS.twUpdate ss (\tws -> tw : tws)
             let menus = createMenuHandlers ss tw Nothing
             SS.ssSetMenuHandlers ss menus
@@ -134,7 +143,7 @@ openDebugWindow ss = do
     case m of
         Just (panel, hwndp, hwnd) -> do
             let tw = SS.createGhciTextWindow panel hwndp hwnd 
-                    Nothing (hasFocus hwnd) (return False) (return "")
+                    Nothing (setFocus hwnd) (hasFocus hwnd) (return False) (return "")
             SS.twUpdate ss (\tws -> tw : tws)
             let menus = createMenuHandlers ss tw Nothing
             SS.ssSetMenuHandlers ss menus 
@@ -173,6 +182,7 @@ closeWindow ss tw = do
     p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
     windowGetHandle p >>= SI.ghciTerminalClose
     SS.twRemoveWindow ss tw
+    SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
     return ()
 
 closeAll :: SS.Session -> IO ()
@@ -199,7 +209,6 @@ createMenuHandlers ss tw mfp =
         hwnd = SS.twHwnd tw
         debugging = SS.ssTestState ss SS.ssStateDebugging
         debuggerPaused = liftM2 (&&) debugging (liftM (not) $ SS.ssTestState ss SS.ssStateRunning)
-
 
 paste :: HWND -> IO ()
 paste = SI.ghciTerminalPaste
@@ -292,16 +301,14 @@ stopDebug ss hwnd = do
     SI.ghciTerminalClose hwnd
     SS.dsClearDebugSession ss
 
-load :: SS.Session -> HWND -> String -> IO Bool
+load :: SS.Session -> HWND -> String -> IO ()
 load ss hwnd fp = do
-    ms <- sendCommandSynch ss hwnd (":load *" ++ fp) "Main> " 30000
-    case ms of
-        Just _  -> return True
-        Nothing -> return False
+    SS.ssSetStateBit ss SS.ssStateRunning
+    sendCommandAsynch hwnd (":load *" ++ fp) "Main> " 
 
 printVar :: SS.Session -> HWND -> String -> IO String
 printVar ss hwnd var = do
-    ms <- sendCommandSynch ss hwnd (":print " ++ var) "Main> " 30000
+    ms <- sendCommandSynch ss hwnd (":print " ++ var) "*Main>" 30000
     case ms of
         Just s  -> do
             let is = maybe 0 id (findIndex (== '=') s)
