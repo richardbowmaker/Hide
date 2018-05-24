@@ -204,6 +204,7 @@ data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int
 type TErrors = TVar CompReport
 type TFindText = TVar FindText
 
+
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
@@ -556,7 +557,6 @@ twFindSourceFileWindow ss fp = do
 
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
-
 
 data DebugState = DbInitialising | DbPaused | DbFinished
 data DebugRecord = DebugRecord { dbTics :: Int, dbState :: DebugState }
