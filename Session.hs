@@ -160,6 +160,7 @@ import Data.List (find, intercalate)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.Char (toLower)
 import Data.Word (Word64)
+import qualified Data.Text as TX (empty, Text) 
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
@@ -194,6 +195,7 @@ data Session = Session {    ssFrame             :: Frame (),            -- Main 
                             ssState             :: TState,
                             ssDebugSession      :: TDebugSession,
                             ssDebugGrid         :: Grid (),
+                            ssDebugOut          :: TDebugOut,
                             ssFileOpen          :: (Session -> String -> IO ()), -- File Open and Save are used in many places in the program
                                                                                  -- however the strict modular hierarchy prevents import of FileMenu.hs where needed
                             ssFileSave          :: (Session -> TextWindow -> SC.Editor -> IO Bool)}
@@ -204,6 +206,8 @@ data FindText = FindText { ftText :: String, ftCurrPos :: Int, ftStartPos :: Int
 type TErrors = TVar CompReport
 type TFindText = TVar FindText
 
+-- debugger output capture
+type TDebugOut = TVar TX.Text 
 
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
@@ -248,7 +252,8 @@ ssCreate mf am nb ms sf ots db dbgr fileopen filesave = do
     hws  <- atomically $ newTVar $ createTextWindows [] 
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession Nothing "" [] Nothing
-    return (Session mf am nb tms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr fileopen filesave)
+    debot <- atomically $ newTVar TX.empty 
+    return (Session mf am nb tms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr debot fileopen filesave)
 
 ----------------------------------------------------------------
 -- Menu helpers
@@ -370,7 +375,7 @@ crFindError ss line = do
     ces <- ssGetCompilerReport ss
     return $ find (\ce -> 
         let ls = ceErrLine ce
-            le = (ceErrLine ce) + (length $ ceErrLines ce) - 1
+            le = (ceErrLine ce) + (length $ ceErrLines ce)
         in  line >= ls && line <= le) (crErrors ces)
 
 crGetNoOfErrors :: Session -> IO Int

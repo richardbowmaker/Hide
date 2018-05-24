@@ -153,13 +153,13 @@ setUpMainWindow mf sf = do
     ss <- SS.ssCreate mf am enb menus sf onb scn grid FM.fileOpen FM.fileSave
     
     -- setup static menu handlers
-    let mhs = [ MN.createMenuHandler MN.menuFileOpen           hwnd (FM.onFileOpen ss)                 (return True),
-                MN.createMenuHandler MN.menuFileNew            hwnd (FM.onFileNew ss)                  (return True),
-                MN.createMenuHandler MN.menuWindowGhci         hwnd (GH.openWindow ss >> return ())    (return True),
-                MN.createMenuHandler MN.menuWindowOutput       hwnd (OT.openOutputWindow ss)           (return True),
-                MN.createMenuHandler MN.menuTestTest           hwnd (onTestTest ss)                    (return True),
-                MN.createMenuHandler MN.menuBuildNextError     hwnd (OT.gotoNextError ss)              (return False),
-                MN.createMenuHandler MN.menuBuildPreviousError hwnd (OT.gotoPreviousError ss)          (return False)]
+    let mhs = [ MN.createMenuHandler MN.menuFileOpen           hwnd (FM.onFileOpen ss)              (return True),
+                MN.createMenuHandler MN.menuFileNew            hwnd (FM.onFileNew ss)               (return True),
+                MN.createMenuHandler MN.menuWindowGhci         hwnd (GH.openWindow ss >> return ()) (return True),
+                MN.createMenuHandler MN.menuWindowOutput       hwnd (OT.openOutputWindow ss)        (return True),
+                MN.createMenuHandler MN.menuTestTest           hwnd (onTestTest ss)                 (return True),
+                MN.createMenuHandler MN.menuBuildNextError     hwnd (OT.gotoNextError ss)           (anyErrors ss),
+                MN.createMenuHandler MN.menuBuildPreviousError hwnd (OT.gotoPreviousError ss)       (anyErrors ss)]
     SS.ssSetMenuHandlers ss mhs
     SS.ssSetMenus ss
 
@@ -172,7 +172,8 @@ setUpMainWindow mf sf = do
 
     return ss
 
-    where hwnd = windowGetHandle mf
+    where   hwnd = windowGetHandle mf
+            anyErrors ss = liftM (>0) (liftM SS.crErrorCount $ SS.ssGetCompilerReport ss) 
 
 ------------------------------------------------------------    
 -- Setup menus

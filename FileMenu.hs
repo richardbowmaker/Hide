@@ -74,27 +74,27 @@ openSourceFileEditor ss fp = do
 -- create the menu handlers
 createMenuHandlers :: SS.Session -> SC.Editor -> SS.TextWindow -> Maybe String -> MN.HideMenuHandlers 
 createMenuHandlers ss scn tw mfp = 
-    [MN.createMenuHandler MN.menuFileClose         hwnd (onFileClose ss tw scn)         (return True),
-     MN.createMenuHandler MN.menuFileCloseAll      hwnd (onFileCloseAll ss)             (return True),
-     MN.createMenuHandler MN.menuFileSave          hwnd (onFileSave ss tw scn)          (liftM not $ SC.isClean scn),
-     MN.createMenuHandler MN.menuFileSaveAs        hwnd (onFileSaveAs ss tw scn)        (return True),
-     MN.createMenuHandler MN.menuFileSaveAll       hwnd (onFileSaveAll ss)              (liftM not $ allFilesClean ss),
-     MN.createMenuHandler MN.menuEditUndo          hwnd (SC.undo scn)                   (SC.canUndo scn),
-     MN.createMenuHandler MN.menuEditRedo          hwnd (SC.redo scn)                   (SC.canRedo scn),
-     MN.createMenuHandler MN.menuEditCut           hwnd (SC.cut scn)                    (liftM not $ SC.selectionIsEmpty scn),
-     MN.createMenuHandler MN.menuEditCopy          hwnd (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn),
-     MN.createMenuHandler MN.menuEditPaste         hwnd (SC.paste scn)                  (SC.canPaste scn),
-     MN.createMenuHandler MN.menuEditSelectAll     hwnd (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn),
-     MN.createMenuHandler MN.menuEditFind          hwnd (EM.editFind ss tw scn)         (return True),
-     MN.createMenuHandler MN.menuEditFindForward   hwnd (EM.editFindForward ss tw scn)  (return True),
-     MN.createMenuHandler MN.menuEditFindBackward  hwnd (EM.editFindBackward ss tw scn) (return True),
-     MN.createMenuHandler MN.menuEditSort          hwnd (SC.sortSelectedText scn)       (liftM not $ SC.selectionIsEmpty scn),
-     MN.createMenuHandler MN.menuBuildCompile      hwnd (CP.onBuildCompile ss tw scn)   (liftM not $ SS.ssTestState ss SS.ssStateCompile),
-     MN.createMenuHandler MN.menuBuildBuild        hwnd (CP.onBuildBuild ss tw scn)     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
-     MN.createMenuHandler MN.menuBuildRebuild      hwnd (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
-     MN.createMenuHandler MN.menuBuildClean        hwnd (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
-     MN.createMenuHandler MN.menuDebugRun          hwnd (CP.cpDebugRun ss tw)           (liftM not $ SS.ssTestState ss SS.ssStateDebugging),
-     MN.createMenuHandler MN.menuDebugGhci         hwnd (GH.onDebugGhci ss tw scn)      (liftM not $ SS.ssTestState ss SS.ssStateCompile)]
+    [MN.createMenuHandler MN.menuFileClose          hwnd (onFileClose ss tw scn)         (return True),
+     MN.createMenuHandler MN.menuFileCloseAll       hwnd (onFileCloseAll ss)             (return True),
+     MN.createMenuHandler MN.menuFileSave           hwnd (onFileSave ss tw scn)          (liftM not $ SC.isClean scn),
+     MN.createMenuHandler MN.menuFileSaveAs         hwnd (onFileSaveAs ss tw scn)        (return True),
+     MN.createMenuHandler MN.menuFileSaveAll        hwnd (onFileSaveAll ss)              (liftM not $ allFilesClean ss),
+     MN.createMenuHandler MN.menuEditUndo           hwnd (SC.undo scn)                   (SC.canUndo scn),
+     MN.createMenuHandler MN.menuEditRedo           hwnd (SC.redo scn)                   (SC.canRedo scn),
+     MN.createMenuHandler MN.menuEditCut            hwnd (SC.cut scn)                    (liftM not $ SC.selectionIsEmpty scn),
+     MN.createMenuHandler MN.menuEditCopy           hwnd (SC.copy scn)                   (liftM not $ SC.selectionIsEmpty scn),
+     MN.createMenuHandler MN.menuEditPaste          hwnd (SC.paste scn)                  (SC.canPaste scn),
+     MN.createMenuHandler MN.menuEditSelectAll      hwnd (SC.selectAll scn)              (liftM (>0) $ SC.getTextLen scn),
+     MN.createMenuHandler MN.menuEditFind           hwnd (EM.editFind ss tw scn)         (return True),
+     MN.createMenuHandler MN.menuEditFindForward    hwnd (EM.editFindForward ss tw scn)  (return True),
+     MN.createMenuHandler MN.menuEditFindBackward   hwnd (EM.editFindBackward ss tw scn) (return True),
+     MN.createMenuHandler MN.menuEditSort           hwnd (SC.sortSelectedText scn)       (liftM not $ SC.selectionIsEmpty scn),
+     MN.createMenuHandler MN.menuBuildCompile       hwnd (CP.onBuildCompile ss tw scn)   (liftM not $ SS.ssTestState ss SS.ssStateCompile),
+     MN.createMenuHandler MN.menuBuildBuild         hwnd (CP.onBuildBuild ss tw scn)     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
+     MN.createMenuHandler MN.menuBuildRebuild       hwnd (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
+     MN.createMenuHandler MN.menuBuildClean         hwnd (return ())                     (liftM not $ SS.ssTestState ss SS.ssStateCompile),
+     MN.createMenuHandler MN.menuDebugRun           hwnd (CP.cpDebugRun ss tw)           (liftM not $ SS.ssTestState ss SS.ssStateDebugging),
+     MN.createMenuHandler MN.menuDebugGhci          hwnd (GH.onDebugGhci ss tw scn)      (liftM not $ SS.ssTestState ss SS.ssStateCompile)]
 
     where hwnd = SS.twHwnd tw
 

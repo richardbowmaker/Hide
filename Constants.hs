@@ -31,7 +31,7 @@ import Graphics.Win32.GDI.Types (COLORREF)
 debug = True
 
 programTitle :: String
-programTitle = "HIDE 24/05/2018"
+programTitle = "HIDE V.24-05-2018-2"
 
 ------------------------------------------------------------    
 -- colors
