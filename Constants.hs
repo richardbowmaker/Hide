@@ -19,7 +19,9 @@ module Constants
     braceBad,
     stringBrown,
     indents,
-    yellow
+    yellow,
+    timerInterval,
+    timerToMs
 )
 where
 
@@ -32,6 +34,12 @@ debug = True
 
 programTitle :: String
 programTitle = "HIDE V.24-05-2018-2"
+
+timerInterval :: Int
+timerInterval = 100
+
+timerToMs :: Int -> Int
+timerToMs = (*timerInterval)
 
 ------------------------------------------------------------    
 -- colors

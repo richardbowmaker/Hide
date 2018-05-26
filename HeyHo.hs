@@ -66,7 +66,7 @@ mainGUI = do
         set mf [on closing :~ onClosing ss]
         
         -- create a timer that updates the display
-        t <- timer mf [interval := 100, on command := SS.ssRunFunctionQueue ss] 
+        t <- timer mf [interval := CN.timerInterval, on command := SS.ssRunFunctionQueue ss] 
            
         return ()
         
@@ -296,7 +296,7 @@ onOutputTabClose :: SS.Session -> EventAuiNotebook -> IO ()
 onOutputTabClose ss _ = do
     mtw <- OT.getSelectedGhci ss 
     case mtw of
-        Just tw -> GH.closeWindow ss tw
+        Just tw -> GH.tabClosing ss tw
         Nothing -> OT.closeOutputWindow ss
 
 onOutputTabChanged :: SS.Session -> EventAuiNotebook -> IO ()

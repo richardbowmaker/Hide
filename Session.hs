@@ -1,47 +1,33 @@
 
 module Session 
 (
-    incDebugRecord,
-    dbTics,
-    dbState,
-    CompError,
-    CompReport,
-    DebugBreakPoint,
-    DebugOutput,
-    DebugRange,
-    DebugSession,
-    DebugVariable,
-    DebugState,
-    DebugRecord,
-    FindText,
+    CompError (..),
+    CompReport (..),
+    DebugBreakPoint (..),
+    DebugOutput (..),
+    DebugRange (..),
+    DebugRecord (..),
+    DebugSession (..),
+    DebugState (..),
+    DebugVariable (..),
+    FindText (..),
     FunctionChannel,
-    Session,
-    SsMenuList,
-    SsNameMenuPair,
+    Session (..),
     TErrors,
-    TextWindow,
+    TextWindow (..),
     TextWindows,
-    ceErrLine,
-    ceErrLines,
-    ceErrorNo,
-    ceFilePath,
-    ceSrcCol,
-    ceSrcLine,
     compErrorToString,
     compErrorsToString,
     crCreateCompError,
     crCreateCompReport,
-    crCurrErr,
-    crErrorCount,
-    crErrors,
     crFindError,
     crGetNoOfErrors,
     crUpdateCurrentError,
     crUpdateReport,
     createBreakPoint,
     createDebugOutput,
-    createDebugRecord,
     createDebugRange,
+    createDebugRecord,
     createDebugSession,
     createDebugTextWindow,
     createDebugVariable,
@@ -50,63 +36,33 @@ module Session
     createOutputTextWindow,
     createSourceTextWindow,
     createTextWindow,
-    doColE,
-    doColS,
-    doFilePath,
-    doFunction,
     doGetDebugRange,
-    doLineE,
-    doLineS,
-    doModule,
-    doRange,
-    doType,
-    doValue,
-    doVariable,
-    doVariables,
     dsAddBreakPoint,
     dsBreakPointSet,
-    dsBreakPoints,
     dsClearDebugOutput,
     dsClearDebugSession,
+    dsDebugOutputAppend,
+    dsDebugOutputClear,
+    dsDebugOutputGet,
+    dsDebugOutputSet,
     dsDeleteBreakPoint,
-    dsDirectory,
-    dsEditor,
     dsEqualBreakPoint,
-    dsFilePath,
     dsGetBreakPoints,
     dsGetDebugOutput,
     dsGetDebugSession,
     dsGetSessionHwnd,
-    dsHandle,
-    dsNo,
-    dsOutput,
     dsSetBreakPointNo,
     dsSetBreakPoints,
     dsSetDebugOutput,
     dsUpdateBreakPoints,
     dsUpdateDebugSession,
-    ftCurrPos,
     ftFindText,
-    ftStartPos, 
-    ftText,
-    ssAuiMgr,
+    dsIncDebugRecord,
     ssClearStateBit,
-    ssCompilerReport,
     ssCreate,
-    ssDebugError,
-    ssDebugGrid,
-    ssDebugInfo,
-    ssDebugSession,
-    ssDebugWarn,
     ssDisableMenuHandlers,
-    ssEditors,
-    ssFileOpen,
-    ssFileSave,
-    ssFindText,
-    ssFrame,
     ssGetCompilerReport,
     ssOutput,
-    ssOutputs,
     ssQueueFunction,
     ssRunFunctionQueue,
     ssSetCompilerReport,
@@ -117,10 +73,8 @@ module Session
     ssStateCompile,
     ssStateDebugging,
     ssStateRunning,
-    ssStatus,
     ssTestState,
     ssToString,
-    twFilePath,
     twFilePathToString,
     twFindAndSetFilePath,
     twFindSourceFileWindow,
@@ -128,9 +82,6 @@ module Session
     twFindWindows,
     twGetEditor,
     twGetWindows,
-    twHasFocus,
-    twHwnd,
-    twIsClean,
     twIsDebug,
     twIsGhci,
     twIsOutput,
@@ -138,13 +89,8 @@ module Session
     twIsSameWindow,
     twIsSourceFile,
     twMatchesHwnd,
-    twPanel,
-    twPanelHwnd,
     twRemoveWindow,
     twSetFilePath,
-    twSetFocus,
-    twStatusInfo,
-    twType,
     twUpdate
 ) where
 
@@ -160,7 +106,6 @@ import Data.List (find, intercalate)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.Char (toLower)
 import Data.Word (Word64)
-import qualified Data.Text as TX (empty, Text) 
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
@@ -207,15 +152,12 @@ type TErrors = TVar CompReport
 type TFindText = TVar FindText
 
 -- debugger output capture
-type TDebugOut = TVar TX.Text 
+type TDebugOut = TVar String 
 
 -- scheduled functions for timer event to run
 type FunctionChannel = TChan (IO ())
 
 data MenuFunction = MenuFunction { mfId :: Int, mfFunction :: IO (), mfEnabled :: IO Bool  }
-
-type SsNameMenuPair = (Int, MenuItem ())                               
-type SsMenuList = [SsNameMenuPair]
 
 type TState = TVar Int
 
@@ -252,7 +194,7 @@ ssCreate mf am nb ms sf ots db dbgr fileopen filesave = do
     hws  <- atomically $ newTVar $ createTextWindows [] 
     state <- atomically $ newTVar 0 
     debug <- atomically $ newTVar $ createDebugSession Nothing "" [] Nothing
-    debot <- atomically $ newTVar TX.empty 
+    debot <- atomically $ newTVar "" 
     return (Session mf am nb tms sf cfn ots tout dbe dbw dbi mtid terr tfnd hws state debug dbgr debot fileopen filesave)
 
 ----------------------------------------------------------------
@@ -563,8 +505,12 @@ twFindSourceFileWindow ss fp = do
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 
-data DebugState = DbInitialising | DbPaused | DbFinished
-data DebugRecord = DebugRecord { dbTics :: Int, dbState :: DebugState }
+data DebugState = DbInitialising | DbPaused | DbFinished deriving (Eq)
+data DebugRecord = DebugRecord 
+    { 
+        dbTics :: Int, 
+        dbState :: DebugState 
+    }
 
 instance Show DebugState where
     show dbs = case dbs of 
@@ -660,11 +606,11 @@ instance Show DebugRange where
 createDebugSession :: Maybe TextWindow -> String -> [DebugBreakPoint] -> Maybe DebugOutput -> DebugSession 
 createDebugSession mtw dir bps mdout = (DebugSession mtw dir bps mdout)
 
-createDebugRecord :: DebugRecord
-createDebugRecord = (DebugRecord 0 DbInitialising)
+createDebugRecord :: DebugState -> Int -> DebugRecord
+createDebugRecord state tics = (DebugRecord tics state)
 
-incDebugRecord :: DebugRecord -> DebugRecord
-incDebugRecord dbr =  dbr { dbTics = dbTics dbr + 1 }
+dsIncDebugRecord :: DebugRecord -> DebugRecord
+dsIncDebugRecord dbr =  dbr { dbTics = dbTics dbr + 1 }
 
 dsGetDebugSession :: Session -> IO DebugSession
 dsGetDebugSession ss = atomically $ readTVar (ssDebugSession ss)
@@ -768,6 +714,21 @@ dsClearDebugOutput :: Session -> IO ()
 dsClearDebugOutput ss =
     dsUpdateDebugSession ss (\ds ->
         createDebugSession (dsTw ds) (dsDirectory ds) (dsBreakPoints ds) Nothing)
+
+dsDebugOutputClear :: Session -> IO ()
+dsDebugOutputClear ss = dsDebugOutputSet ss ""
+
+dsDebugOutputSet :: Session -> String -> IO ()
+dsDebugOutputSet ss tx = atomically (writeTVar (ssDebugOut ss) tx)
+
+dsDebugOutputAppend :: Session -> String -> IO (String)
+dsDebugOutputAppend ss txb = atomically $ do
+    txa <- readTVar (ssDebugOut ss) 
+    writeTVar (ssDebugOut ss) $ txa ++ txb
+    return $ txa ++ txb
+
+dsDebugOutputGet :: Session -> IO String
+dsDebugOutputGet ss = atomically $ readTVar (ssDebugOut ss)
 
 --------------------------------------------
 -- Function queue

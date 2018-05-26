@@ -14,6 +14,7 @@ module Misc
     frameToString,
     hwndToString,
     isSameWindow,
+    lastN,
     panelToString,
     ptrToInt,
     ptrToInt64,
@@ -27,6 +28,7 @@ module Misc
     withCStrings
 ) where
 
+import Control.Applicative (liftA2)
 import Control.Monad (liftM2)
 import Data.Char (isDigit)
 import Data.Int (Int64)
@@ -152,6 +154,11 @@ withCStrings = withCStrings' []
         withCStrings' :: [CString] -> [String] -> ([CString] -> IO a) -> IO a
         withCStrings' cstrs [] fn = (fn . reverse) cstrs
         withCStrings' cstrs (str:strs) fn = withCString str (\cstr -> withCStrings' (cstr:cstrs) strs fn)
+
+lastN :: [a] -> Int -> Maybe [a]
+lastN _ 0 = Just []
+lastN [] _ = Nothing
+lastN xs n = liftA2 (++) (lastN (init xs) (n-1)) (Just $ [last xs])
 
 ------------------------------------------------------------    
 -- Tree Control

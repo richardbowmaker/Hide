@@ -2,7 +2,7 @@
 module Ghci
 ( 
     closeAll,
-    closeWindow,
+    tabClosing,
     copy,
     createGrid,
     cut,
@@ -35,7 +35,6 @@ import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
 import System.FilePath.Windows ((</>), takeFileName, takeDirectory)
 
-
 -- project imports
 
 import qualified Constants as CN
@@ -59,7 +58,7 @@ onDebugGhci ss tw scn = do
                     Just fp -> do
                         mtw' <- openWindowFile ss tw 
                         case mtw' of 
-                            Just tw' -> startDebug ss tw (SS.twHwnd tw')
+                            Just tw' -> initDebugger ss tw' 
                             Nothing  -> return ()
                     Nothing -> return ()
             Nothing -> do
@@ -96,30 +95,76 @@ openWindowFile ss ftw = do
                         Nothing -> return Nothing
                 Nothing -> return Nothing
 
-startDebug :: SS.Session -> SS.TextWindow -> HWND -> IO ()
-startDebug ss tw hwnd = do
+initDebugger :: SS.Session -> SS.TextWindow -> IO ()
+initDebugger ss tw = do
     case SS.twFilePath tw of
         Just fp -> do
             SS.dsUpdateDebugSession ss (\ds -> 
                 SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
-            load ss hwnd fp
+            load ss (SS.twHwnd tw) fp
             -- modules <- getModulesLookup ss hwnd
             -- mapM_ (addModule ss) modules
             -- setBreakPoints ss modules hwnd
-            SS.ssSetStateBit ss SS.ssStateDebugging
-            SS.ssSetMenus ss
-            runDebugger ss tw hwnd SS.createDebugRecord
+            startDebugger ss tw
         Nothing -> do
             SS.ssDebugError ss "Ghci.startDebug: no filename set"
 
+startDebugger :: SS.Session -> SS.TextWindow -> IO ()
+startDebugger ss tw = do
+    SS.ssSetStateBit ss SS.ssStateDebugging
+    SS.ssSetMenus ss
+    runDebugger ss tw (SS.twHwnd tw) $ SS.createDebugRecord SS.DbInitialising 0
+
+stopDebugger :: SS.Session -> SS.TextWindow -> IO ()
+stopDebugger ss tw = do
+    clearDebugStoppedMarker ss
+    SS.ssClearStateBit ss SS.ssStateDebugging
+    SS.ssClearStateBit ss SS.ssStateRunning
+    SS.dsClearDebugSession ss
+
+-- on timer handler
 runDebugger :: SS.Session -> SS.TextWindow -> HWND -> SS.DebugRecord -> IO ()
 runDebugger ss tw hwnd dbr = do
-        if SS.dbTics dbr `mod` 10 == 0 then 
-            SS.ssDebugInfo ss "Debugger waiting"
-        else 
-            return ()
-        step
-    where step = SS.ssQueueFunction ss $ runDebugger ss tw hwnd $ SS.incDebugRecord dbr
+    b <- SS.ssTestState ss SS.ssStateDebugging
+    if b then do
+        when (elapsed `mod` 1000 == 0) $ SS.ssDebugInfo ss $ "Debugger: " ++ show state
+        -- dispatch to handler
+        state' <- case state of 
+            SS.DbInitialising -> 
+                runDebuggerInitialising ss tw hwnd elapsed
+            otherwise -> do
+                SS.dsDebugOutputClear ss
+                return state
+        -- reset timer if state changed
+        let tics' = if state == state' then (tics+1) else 0
+        -- reschedule debugger
+        case state' of 
+            SS.DbFinished -> return ()
+            otherwise -> SS.ssQueueFunction ss $ 
+                runDebugger ss tw hwnd $ SS.createDebugRecord state' tics'
+    else return () -- debugger stopped
+
+    where   state = SS.dbState dbr
+            tics = SS.dbTics dbr
+            elapsed = CN.timerToMs tics
+
+runDebuggerInitialising :: SS.Session -> SS.TextWindow -> HWND -> Int -> IO (SS.DebugState)
+runDebuggerInitialising ss tw hwnd elapsed = do
+    -- have we timedout waiting for GHCI to start
+    if elapsed > 5000 then do
+        infoDialog (SS.ssFrame ss) CN.programTitle "Debugger did not start"
+        stopDebugger ss tw
+        return SS.DbFinished
+    else do
+        -- get the GHCI output
+        s <- SS.dsDebugOutputGet ss
+        case MI.lastN (lines s) 2 of
+            Just [l, _] -> do
+                if MI.stringStartsWith l "Ok, modules loaded:" then do
+                    SS.dsDebugOutputClear ss
+                    return SS.DbPaused                
+                else return SS.DbInitialising
+            Nothing -> return SS.DbInitialising
 
 openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
@@ -175,31 +220,61 @@ open ss fp = do
             auiNotebookSetSelection nb ix 
 
             return (Just (p, hp, hwnd))
-                
-closeWindow :: SS.Session -> SS.TextWindow -> IO ()
-closeWindow ss tw = do
-    let nb = SS.ssOutputs ss
-    p <- auiNotebookGetSelection nb >>= auiNotebookGetPage nb
-    windowGetHandle p >>= SI.ghciTerminalClose
-    SS.twRemoveWindow ss tw
-    SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
-    return ()
 
 closeAll :: SS.Session -> IO ()
 closeAll ss = SS.twFindWindows ss SS.twIsGhci >>= mapM_ (\tw -> closeWindow ss tw)
+
+tabClosing :: SS.Session -> SS.TextWindow -> IO ()
+tabClosing ss tw = do 
+    stopDebugger ss tw
+    SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
+    SI.ghciTerminalClose (SS.twHwnd tw)
+
+closeWindow :: SS.Session -> SS.TextWindow -> IO ()
+closeWindow ss tw = do
+
+   -- remove page from notebook
+    mix <- getTabIndex ss tw 
+    case mix of
+        Just ix -> do
+            stopDebugger ss tw
+            SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
+            SI.ghciTerminalClose (SS.twHwnd tw)
+            let nb = SS.ssOutputs ss        
+            auiNotebookDeletePage nb ix
+            return ()
+        Nothing -> do
+            SS.ssDebugError ss "fileClose, no tab for source file"    
+
+    SS.twRemoveWindow ss tw
+    return ()
+
+getTabIndex :: SS.Session -> SS.TextWindow -> IO (Maybe Int)
+getTabIndex ss tw = do
+
+    let nb = SS.ssOutputs ss
+    pc <- auiNotebookGetPageCount nb
+
+    -- get list of window handles as ints
+    hs <- mapM (getHwnd nb) [0..(pc-1)]
+
+    -- find tab with hwnd that matches the source file
+    return (findIndex (\h -> SS.twMatchesHwnd tw h) hs)
+    
+    where getHwnd nb i = auiNotebookGetPage nb i >>= windowGetHandle
 
 -- create the menu handlers
 createMenuHandlers :: SS.Session -> SS.TextWindow -> Maybe String -> MN.HideMenuHandlers 
 createMenuHandlers ss tw mfp = 
     [MN.createMenuHandler MN.menuFileClose         hwnd (closeWindow ss tw)     (return True),
-     MN.createMenuHandler MN.menuFileCloseAll      hwnd (closeAll ss)           (return True),
      MN.createMenuHandler MN.menuFileSaveAs        hwnd (fileSaveAs ss tw)      (return True),
      MN.createMenuHandler MN.menuEditCut           hwnd (cut hwnd)              (isTextSelected hwnd),
      MN.createMenuHandler MN.menuEditCopy          hwnd (copy hwnd)             (isTextSelected hwnd),
      MN.createMenuHandler MN.menuEditPaste         hwnd (paste hwnd)            (return True),
      MN.createMenuHandler MN.menuEditSelectAll     hwnd (selectAll hwnd)        (return True),
      MN.createMenuHandler MN.menuEditClear         hwnd (clear hwnd)            (return True),
-     MN.createMenuHandler MN.menuDebugStop         hwnd (stopDebug ss hwnd)     (debugging),
+     MN.createMenuHandler MN.menuDebugDebug        hwnd (startDebugger ss tw)   (liftM not debugging),
+     MN.createMenuHandler MN.menuDebugStop         hwnd (stopDebugger ss tw)    (debugging),
      MN.createMenuHandler MN.menuDebugContinue     hwnd (continue ss hwnd)      (debuggerPaused),
      MN.createMenuHandler MN.menuDebugStep         hwnd (step ss hwnd)          (debuggerPaused),
      MN.createMenuHandler MN.menuDebugStepLocal    hwnd (stepLocal ss hwnd)     (debuggerPaused),
@@ -292,19 +367,10 @@ toggleBreakPoint ss tw scn sn = do
             bps <- SS.dsGetBreakPoints ss
             SS.ssDebugInfo ss $ "Ghci.toggleBreakPoint" ++ intercalate "\n" (map show bps)
 
-stopDebug :: SS.Session -> HWND -> IO ()
-stopDebug ss hwnd = do
-    sendCommand hwnd ":quit\n"
-    clearDebugStoppedMarker ss
-    SS.ssClearStateBit ss SS.ssStateDebugging
-    SS.ssClearStateBit ss SS.ssStateRunning
-    SI.ghciTerminalClose hwnd
-    SS.dsClearDebugSession ss
-
 load :: SS.Session -> HWND -> String -> IO ()
 load ss hwnd fp = do
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch hwnd (":load *" ++ fp) "Main> " 
+    sendCommand hwnd (":load *" ++ fp) 
 
 printVar :: SS.Session -> HWND -> String -> IO String
 printVar ss hwnd var = do
@@ -472,7 +538,12 @@ eventHandler ss tw mask hwnd evt mstr
         SS.ssSetMenuHandlers ss mhs
     | evt' == SI.ghciTerminalEventSelectionSet || evt == SI.ghciTerminalEventSelectionClear = do
         SS.ssSetMenus ss        
-    | evt' == SI.ghciTerminalEventAsynchOutput = do
+    | evt' == SI.ghciTerminalEventOutput = do
+        case mstr of
+            Just str -> (SS.dsDebugOutputAppend ss str) >> return ()
+            Nothing -> return ()
+--        maybe (return "") (SS.dsDebugOutputAppend ss) mstr
+{-
         b <- SS.ssTestState ss SS.ssStateRunning
         if b then do
             case PR.parseDebuggerOutput str of
@@ -482,6 +553,7 @@ eventHandler ss tw mask hwnd evt mstr
                 Nothing   -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
             SS.ssClearStateBit ss SS.ssStateRunning            
         else return () -- should send this to the output pane
+-}
     | otherwise = return ()
 
     where   evt' = evt .&. mask

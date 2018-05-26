@@ -155,7 +155,7 @@ menusConfig = [ (MenuCfg menuFileOpen           "Open"               "Ctrl-O"   
                 (MenuCfg menuBuildPreviousError "Previous error"     "Shift-F4"      "Goto previous compile error"),
                 (MenuCfg menuDebugRun           "Run"                "F5"            "Run program"),
                 (MenuCfg menuDebugGhci          "Open GHCI"          "F9"            "Open file in GHCI"),
-                (MenuCfg menuDebugDebug         "Debug"              "F6"            "Run program in GHCI"),
+                (MenuCfg menuDebugDebug         "Debug"              "F6"            "Debug program in GHCI"),
                 (MenuCfg menuDebugStop          "Debug Stop"         "Shift-F6"      "Stop debugging"),
                 (MenuCfg menuDebugContinue      "Debug Continue"     "Shift-F11"     "Continue in debugger"),
                 (MenuCfg menuDebugStep          "Single step"        "F11"           "Single step debugger"),
