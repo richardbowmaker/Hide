@@ -505,7 +505,7 @@ twFindSourceFileWindow ss fp = do
 type TDebugOutput = TVar String -- output from debugger
 type TDebugSession = TVar DebugSession
 
-data DebugState = DbInitialising | DbPaused | DbFinished deriving (Eq)
+data DebugState = DbInitialising | DbBreakpoints | DbPaused | DbFinished deriving (Eq)
 data DebugRecord = DebugRecord 
     { 
         dbTics :: Int, 
@@ -515,6 +515,7 @@ data DebugRecord = DebugRecord
 instance Show DebugState where
     show dbs = case dbs of 
         DbInitialising -> "Initialising"
+        DbBreakpoints  -> "Breakpoints"
         DbPaused       -> "Paused"
         DbFinished     -> "Finished"
 

@@ -92,6 +92,7 @@ isSameWindow w1 w2 = do
     h2 <- windowGetHandle w2
     return (comparePtrs h1 h2)
 
+
 findAndRemove :: (a -> Bool) -> [a] -> [a]
 findAndRemove _ [] = []
 findAndRemove f (x:xs) = if f x then rest else x : rest

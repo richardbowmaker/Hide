@@ -51,49 +51,50 @@ onDebugGhci ss tw scn = do
     ans <- (SS.ssFileSave ss) ss tw scn
     if ans then do
         -- get again in case filename changed
-        mtw <- SS.twFindWindow ss (\tw' -> SS.twMatchesHwnd tw' (SS.twPanelHwnd tw))
-        case mtw of
-            Just tw -> do
-                case SS.twFilePath tw of
+        mftw <- SS.twFindWindow ss (\tw' -> SS.twMatchesHwnd tw' (SS.twPanelHwnd tw))
+        case mftw of
+            Just ftw -> do
+                case SS.twFilePath ftw of
                     Just fp -> do
-                        mtw' <- openWindowFile ss tw 
-                        case mtw' of 
-                            Just tw' -> initDebugger ss tw' 
-                            Nothing  -> return ()
-                    Nothing -> return ()
-            Nothing -> do
-                SS.ssDebugError ss "onBuildGhci:: no file name set"
+                        -- see if a GHCI window is already open with the same file as in ftw (scintilla editor)
+                        mgtw <- SS.twFindWindow ss (\gtw -> (SS.twIsGhci gtw) && (SS.twIsSameFile ftw gtw)) 
+                        case mgtw of
+                            Just gtw -> do
+                                -- GHCI already open so select it
+                                let nb = SS.ssOutputs ss
+                                auiNotebookGetPageIndex nb (SS.twPanel gtw) >>= auiNotebookSetSelection nb
+                                -- reload the source file
+                                load ss (SS.twHwnd gtw) fp
+                                SS.twSetFocus ftw
+                            Nothing -> do
+                                mgtw <- openWindowFile ss ftw 
+                                case mgtw of 
+                                    Just gtw -> do
+                                        initDebugger ss gtw
+                                        SS.twSetFocus ftw 
+                                    Nothing  -> SS.ssDebugError ss "Ghci.onDebugGhci:: GHCI window failed to open"
+                    Nothing -> SS.ssDebugError ss "Ghci.onDebugGhci:: no file name set #1"
+            Nothing -> SS.ssDebugError ss "Ghci.onDebugGhci:: no file name set #2"
     else return ()
 
 openWindowFile :: SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
 openWindowFile ss ftw = do
-    -- see if a GHCI window is already open with the same file as in ftw (scintilla editor)
-    mtw <- SS.twFindWindow ss (\tw -> (SS.twIsGhci tw) && (SS.twIsSameFile ftw tw)) 
-    case mtw of
-        Just tw -> do
-            -- GHCI already open so select it
-            let nb = SS.ssOutputs ss
-            auiNotebookGetPageIndex nb (SS.twPanel tw) >>= auiNotebookSetSelection nb
-            -- reload the source file
-            return (Just tw)
-        Nothing -> do
-            -- GHCI not open so open a new tab
-            case SS.twFilePath ftw of
-                Just fp -> do
-                    mw <- open ss fp                
-                    case mw of
-                        Just (panel, hwndp, hwnd) -> do
-                            let tw = SS.createGhciTextWindow panel hwndp hwnd 
-                                    (Just fp) (setFocus hwnd) (hasFocus hwnd) (return True) (return "")
-                            SS.twUpdate ss (\tws -> tw : tws)
-                            let menus = createMenuHandlers ss tw (Just fp)
-                            SS.ssSetMenuHandlers ss menus
-                            setEventHandler ss tw hwnd SI.ghciTerminalEventMaskDebug
-                            enableEvents hwnd
-                            setFocus hwnd
-                            return $ Just tw
-                        Nothing -> return Nothing
+    case SS.twFilePath ftw of
+        Just fp -> do
+            mw <- open ss fp                
+            case mw of
+                Just (panel, hwndp, hwnd) -> do
+                    let tw = SS.createGhciTextWindow panel hwndp hwnd 
+                            (Just fp) (setFocus hwnd) (hasFocus hwnd) (return True) (return "")
+                    SS.twUpdate ss (\tws -> tw : tws)
+                    let menus = createMenuHandlers ss tw (Just fp)
+                    SS.ssSetMenuHandlers ss menus
+                    setEventHandler ss tw hwnd SI.ghciTerminalEventMaskDebug
+                    enableEvents hwnd
+                    setFocus hwnd
+                    return $ Just tw
                 Nothing -> return Nothing
+        Nothing -> return Nothing
 
 initDebugger :: SS.Session -> SS.TextWindow -> IO ()
 initDebugger ss tw = do
@@ -102,9 +103,6 @@ initDebugger ss tw = do
             SS.dsUpdateDebugSession ss (\ds -> 
                 SS.createDebugSession (Just tw) (takeDirectory fp) (SS.dsBreakPoints ds) Nothing)
             load ss (SS.twHwnd tw) fp
-            -- modules <- getModulesLookup ss hwnd
-            -- mapM_ (addModule ss) modules
-            -- setBreakPoints ss modules hwnd
             startDebugger ss tw
         Nothing -> do
             SS.ssDebugError ss "Ghci.startDebug: no filename set"
@@ -113,6 +111,7 @@ startDebugger :: SS.Session -> SS.TextWindow -> IO ()
 startDebugger ss tw = do
     SS.ssSetStateBit ss SS.ssStateDebugging
     SS.ssSetMenus ss
+    SS.dsDebugOutputClear ss
     runDebugger ss tw (SS.twHwnd tw) $ SS.createDebugRecord SS.DbInitialising 0
 
 stopDebugger :: SS.Session -> SS.TextWindow -> IO ()
@@ -132,6 +131,10 @@ runDebugger ss tw hwnd dbr = do
         state' <- case state of 
             SS.DbInitialising -> 
                 runDebuggerInitialising ss tw hwnd elapsed
+            SS.DbBreakpoints -> 
+                runDebuggerBreakpoints ss tw hwnd elapsed
+            SS.DbPaused -> 
+                runDebuggerPaused ss tw hwnd elapsed
             otherwise -> do
                 SS.dsDebugOutputClear ss
                 return state
@@ -162,9 +165,30 @@ runDebuggerInitialising ss tw hwnd elapsed = do
             Just [l, _] -> do
                 if MI.stringStartsWith l "Ok, modules loaded:" then do
                     SS.dsDebugOutputClear ss
-                    return SS.DbPaused                
+                    return SS.DbBreakpoints                
                 else return SS.DbInitialising
             Nothing -> return SS.DbInitialising
+
+runDebuggerBreakpoints :: SS.Session -> SS.TextWindow -> HWND -> Int -> IO (SS.DebugState)
+runDebuggerBreakpoints ss tw hwnd elapsed = do
+    modules <- getModulesLookup ss hwnd
+    -- mapM_ (addModule ss) modules
+    setBreakPoints ss modules hwnd
+    SS.dsDebugOutputClear ss
+    return SS.DbPaused
+    
+runDebuggerPaused :: SS.Session -> SS.TextWindow -> HWND -> Int -> IO (SS.DebugState)
+runDebuggerPaused ss tw hwnd elapsed = do
+    s <- SS.dsDebugOutputGet ss
+    case PR.parseDebuggerOutput s of
+        Just dout -> do
+            SS.dsSetDebugOutput ss dout
+            handleDebuggerOutput ss hwnd
+            -- SS.ssDebugInfo ss $ show dout
+            SS.dsDebugOutputClear ss
+            return ()
+        Nothing -> return ()
+    return SS.DbPaused
 
 openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
 openWindow ss = do
@@ -229,6 +253,8 @@ tabClosing ss tw = do
     stopDebugger ss tw
     SS.ssDisableMenuHandlers ss (SS.twHwnd tw)
     SI.ghciTerminalClose (SS.twHwnd tw)
+    SS.twRemoveWindow ss tw
+    return ()
 
 closeWindow :: SS.Session -> SS.TextWindow -> IO ()
 closeWindow ss tw = do
@@ -275,10 +301,10 @@ createMenuHandlers ss tw mfp =
      MN.createMenuHandler MN.menuEditClear         hwnd (clear hwnd)            (return True),
      MN.createMenuHandler MN.menuDebugDebug        hwnd (startDebugger ss tw)   (liftM not debugging),
      MN.createMenuHandler MN.menuDebugStop         hwnd (stopDebugger ss tw)    (debugging),
-     MN.createMenuHandler MN.menuDebugContinue     hwnd (continue ss hwnd)      (debuggerPaused),
-     MN.createMenuHandler MN.menuDebugStep         hwnd (step ss hwnd)          (debuggerPaused),
-     MN.createMenuHandler MN.menuDebugStepLocal    hwnd (stepLocal ss hwnd)     (debuggerPaused),
-     MN.createMenuHandler MN.menuDebugStepModule   hwnd (stepModule ss hwnd)    (debuggerPaused)]
+     MN.createMenuHandler MN.menuDebugContinue     hwnd (continue ss hwnd)      (return True),
+     MN.createMenuHandler MN.menuDebugStep         hwnd (step ss hwnd)          (return True),
+     MN.createMenuHandler MN.menuDebugStepLocal    hwnd (stepLocal ss hwnd)     (return True),
+     MN.createMenuHandler MN.menuDebugStepModule   hwnd (stepModule ss hwnd)    (return True)]
 
     where 
         hwnd = SS.twHwnd tw
@@ -398,36 +424,36 @@ continue :: SS.Session -> HWND -> IO ()
 continue ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning    
-    sendCommandAsynch hwnd ":continue\n" "Main> "
+    sendCommandAsynch hwnd ":continue\n" ">"
 
 step :: SS.Session -> HWND -> IO ()
 step ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch hwnd ":step\n" "Main> "
+    sendCommandAsynch hwnd ":step\n" ">"
 
 stepLocal :: SS.Session -> HWND -> IO ()
 stepLocal ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch hwnd ":steplocal\n" "Main> "
+    sendCommandAsynch hwnd ":steplocal\n" ">"
 
 stepModule :: SS.Session -> HWND -> IO ()
 stepModule ss hwnd = do
     clearDebugStoppedMarker ss
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch hwnd ":stepmodule\n" "Main> "
+    sendCommandAsynch hwnd ":stepmodule\n" ">"
 
 deleteBreakPoints :: SS.Session -> HWND -> IO Bool
 deleteBreakPoints ss hwnd = do
-    ms <- sendCommandSynch ss hwnd ":delete *" "Main> " 1000
+    ms <- sendCommandSynch ss hwnd ":delete *" "> " 1000
     case ms of
         Just _  -> return True
         Nothing -> return False
 
 getModulesLookup :: SS.Session -> HWND -> IO ([(String, String)])
 getModulesLookup ss hwnd = do
-    ms <- sendCommandSynch ss hwnd ":show modules" "Main> " 1000 
+    ms <- sendCommandSynch ss hwnd ":show modules" "> " 1000 
     case ms of
         Just s -> do 
             SS.ssDebugInfo ss $ "Modules: " ++ (intercalate "\n" (map tuptostr $ modules s))
@@ -462,7 +488,7 @@ setBreakPoint :: SS.Session -> SS.DebugBreakPoint -> [(String, String)] -> HWND 
 setBreakPoint ss bp modules hwnd = do
     l <- SC.markerLineFromHandle (SS.dsEditor bp) (SS.dsHandle bp)
     let mod = maybe "" id $ lookup (takeFileName $ SS.dsFilePath bp) modules
-    ms <- sendCommandSynch ss  hwnd (":break " ++ mod ++ " " ++ (show (l+1)))  "Main> " 1000
+    ms <- sendCommandSynch ss  hwnd (":break " ++ mod ++ " " ++ (show (l+1)))  ">" 1000
     case ms of
         Just s -> do
             let ws = words s
@@ -542,18 +568,6 @@ eventHandler ss tw mask hwnd evt mstr
         case mstr of
             Just str -> (SS.dsDebugOutputAppend ss str) >> return ()
             Nothing -> return ()
---        maybe (return "") (SS.dsDebugOutputAppend ss) mstr
-{-
-        b <- SS.ssTestState ss SS.ssStateRunning
-        if b then do
-            case PR.parseDebuggerOutput str of
-                Just dout -> do
-                    SS.dsSetDebugOutput ss dout
-                    SS.ssQueueFunction ss $ handleDebuggerOutput ss hwnd
-                Nothing   -> SS.ssDebugError ss $ "Failed to parse debugger output:\n" ++ str
-            SS.ssClearStateBit ss SS.ssStateRunning            
-        else return () -- should send this to the output pane
--}
     | otherwise = return ()
 
     where   evt' = evt .&. mask
@@ -568,7 +582,7 @@ handleDebuggerOutput ss hwnd = do
             (SS.ssFileOpen ss) ss filePath
         Nothing -> return ()
     setDebugStoppedMarker ss
-    displayVariablesGrid ss hwnd
+    -- displayVariablesGrid ss hwnd
 
 displayVariablesGrid :: SS.Session -> HWND -> IO ()
 displayVariablesGrid ss hwnd = do

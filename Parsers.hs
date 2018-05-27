@@ -79,9 +79,34 @@ linkLine = do
 eol :: String
 eol = "\n"
 
+
 ------------------------------------------
 -- debugger output parser
 ------------------------------------------
+{-
+Stopped in Main.mainGUI, D:\_Rick's\haskell\simple.hs:22:11-38
+_result :: IO (Button ()) = _
+mf :: Frame () = Graphics.UI.WXCore.WxcObject.Object
+                   0x000000000836e700
+[D:\_Rick's\haskell\simple.hs:22:11-38] *Main>
+
+Stopped in Main.qsort.(...), D:\_Rick's\haskell\sort.hs:5:24-56
+_result :: ([Integer], [Integer]) = _
+a :: Integer = 8
+as :: [Integer] = [4,0,3,1,23,....]
+[D:\_Rick's\haskell\sort.hs:5:24-56] *Main>
+
+Stopped in Main.mainGUI, D:\_Rick's\haskell\simple.hs:(9,11)-(36,13)
+_result :: IO () = _
+[D:\_Rick's\haskell\simple.hs:(9,11)-(36,13)] *Main> 
+
+Stopped in Main.mainGUI, simple.hs:22:11-38
+_result :: IO (Button ()) = _
+mf :: Frame () = Graphics.UI.WXCore.WxcObject.Object
+                   0x0000000015eded30
+[simple.hs:22:11-38] *Main>
+-}
+-----------------------------------------
 
 parseDebuggerOutput :: String -> Maybe SS.DebugOutput
 parseDebuggerOutput s = 
