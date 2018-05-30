@@ -33,7 +33,7 @@ import Graphics.Win32.GDI.Types (COLORREF)
 debug = True
 
 programTitle :: String
-programTitle = "HIDE V.24-05-2018-2"
+programTitle = "HIDE 30-05-2018"
 
 timerInterval :: Int
 timerInterval = 100

@@ -400,7 +400,7 @@ load ss hwnd fp = do
 
 printVar :: SS.Session -> HWND -> String -> IO String
 printVar ss hwnd var = do
-    ms <- sendCommandSynch ss hwnd (":print " ++ var) "*Main>" 30000
+    ms <- sendCommandSynch ss hwnd (":print " ++ var) ">" 30000
     case ms of
         Just s  -> do
             let is = maybe 0 id (findIndex (== '=') s)
@@ -410,7 +410,7 @@ printVar ss hwnd var = do
 
 addModule :: SS.Session -> HWND -> (String, String) -> IO Bool
 addModule ss hwnd (_, mod) = do
-    ms <- sendCommandSynch ss hwnd (":add *" ++ mod) "Main> " 30000
+    ms <- sendCommandSynch ss hwnd (":add *" ++ mod) ">" 30000
     case ms of
         Just _  -> return True
         Nothing -> return False
@@ -418,7 +418,7 @@ addModule ss hwnd (_, mod) = do
 runMain :: SS.Session -> HWND -> IO ()
 runMain ss hwnd = do
     SS.ssSetStateBit ss SS.ssStateRunning
-    sendCommandAsynch hwnd "main\n" "Main> "
+    sendCommandAsynch hwnd "main\n" ">"
 
 continue :: SS.Session -> HWND -> IO ()
 continue ss hwnd = do
@@ -582,13 +582,14 @@ handleDebuggerOutput ss hwnd = do
             (SS.ssFileOpen ss) ss filePath
         Nothing -> return ()
     setDebugStoppedMarker ss
-    -- displayVariablesGrid ss hwnd
+    displayVariablesGrid ss hwnd
 
 displayVariablesGrid :: SS.Session -> HWND -> IO ()
 displayVariablesGrid ss hwnd = do
     mdout <- SS.dsGetDebugOutput ss
     case mdout of
         Just dout -> do
+            SS.ssDebugInfo ss $ "Ghci.displayVariablesGrid:: " ++ show dout
             -- display free variables in grid 
             nr <- gridGetNumberRows grid
             if nr > 0 then gridDeleteRows grid 0 nr True
