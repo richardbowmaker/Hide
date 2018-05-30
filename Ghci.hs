@@ -30,10 +30,11 @@ import Control.Monad (foldM, liftM, liftM2)
 import Data.Bits ((.&.), (.|.), testBit)
 import Data.Int (Int32)
 import Data.List (findIndex, intercalate)
+import Data.Time (defaultTimeLocale, formatTime, getZonedTime)
 import Graphics.UI.WX
 import Graphics.UI.WXCore
 import Graphics.Win32.GDI.Types (HWND)
-import System.FilePath.Windows ((</>), takeFileName, takeDirectory)
+import System.FilePath.Windows ((</>), dropExtension, takeFileName, takeDirectory)
 
 -- project imports
 
@@ -343,14 +344,15 @@ clear = SI.ghciTerminalClear
    
 -- File Save As, returns False if user opted to cancel the save 
 fileSaveAs :: SS.Session -> SS.TextWindow -> IO ()
-fileSaveAs ss tw = do   
+fileSaveAs ss tw = do
+    ts <- timestamp
     mfn <- SI.winSaveFileDialog 
             (SS.ssFrame ss) 
             "Save GHCI as" 
             (maybe "." takeDirectory $ SS.twFilePath tw) 
             "*.txt" 
             "Text file" 
-            (maybe "" id $ SS.twFilePath tw)
+            (maybe "" (\s -> (dropExtension s) ++ "_" ++ ts ++ ".txt") $ SS.twFilePath tw)
             0x02 -- overwrite prompt
     case mfn of 
         Just fp -> do
@@ -359,7 +361,11 @@ fileSaveAs ss tw = do
             SS.twFindAndSetFilePath ss tw (Just fp) 
             return ()
         Nothing -> return ()
-          
+
+    where timestamp = do 
+            t <- getZonedTime
+            return $ formatTime defaultTimeLocale "%H-%M-%S_%d-%m-%Y" t
+       
 setEventHandler :: SS.Session -> SS.TextWindow -> HWND -> Int -> IO ()
 setEventHandler ss tw hwnd mask = SI.ghciTerminalSetEventHandler hwnd (eventHandler ss tw mask)
 

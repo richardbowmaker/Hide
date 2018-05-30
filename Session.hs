@@ -418,7 +418,7 @@ twGetEditor tw =
 twFindAndSetFilePath :: Session -> TextWindow -> Maybe String -> IO (Maybe TextWindow)
 twFindAndSetFilePath ss tw mfp = do 
     twUpdateWindow ss (\tw -> 
-        if twMatchesHwnd tw (twHwnd tw) then
+        if twMatchesHwnd tw (twHwnd tw) then 
             Just $ twSetFilePath tw mfp
         else Nothing)
     twFindWindow ss (\tw' -> twMatchesHwnd tw' (twHwnd tw))

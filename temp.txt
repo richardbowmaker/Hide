@@ -1,11 +1,45 @@
 GHCi, version 8.0.1: http://www.haskell.org/ghc/  :? for help
-Prelude> 5678
-5678
-Prelude> 
-Prelude> 
-Prelude> aafgh
-
-<interactive>:4:1: error: Variable not in scope: aafgh
-Prelude> 
-Prelude> 
-Prelude> 
+Prelude> [ 4 of 10] Compiling Constants        ( Constants.hs, interpreted )
+[ 5 of 10] Compiling Menus            ( Menus.hs, interpreted )
+[ 6 of 10] Compiling Scintilla        ( Scintilla.hs, interpreted )
+[ 7 of 10] Compiling Debug            ( Debug.hs, interpreted )
+[ 8 of 10] Compiling Session          ( Session.hs, interpreted )
+[ 9 of 10] Compiling Parsers          ( Parsers.hs, interpreted )
+[10 of 10] Compiling Ghci             ( D:\_Rick's\haskell\Hide\Ghci.hs, interpreted )
+Ok, modules loaded: Debug, Constants, Ghci, Menus, Misc (Misc.o), Parsers, Scintilla, ScintillaProxyImports (ScintillaProxyImports.o), Session, ScintillaConstants (ScintillaConstants.o).
+*Ghci> :browse
+Debug            ( Debug.hs, interpreted )
+Constants        ( Constants.hs, interpreted )
+Ghci             ( D:\_Rick's\haskell\Hide\Ghci.hs, interpreted )
+Menus            ( Menus.hs, interpreted )
+Misc             ( Misc.hs, Misc.o )
+Parsers          ( Parsers.hs, interpreted )
+Scintilla        ( Scintilla.hs, interpreted )
+ScintillaProxyImports ( ScintillaProxyImports.hs, ScintillaProxyImports.o )
+Session          ( Session.hs, interpreted )
+ScintillaConstants ( ScintillaConstants.hs, ScintillaConstants.o )
+*Ghci> onDebugGhci :: SS.Session -> SS.TextWindow -> SC.Editor -> IO ()
+openWindowFile ::
+  SS.Session -> SS.TextWindow -> IO (Maybe SS.TextWindow)
+openWindow :: SS.Session -> IO (Maybe SS.TextWindow)
+openDebugWindow :: SS.Session -> IO (Maybe SS.TextWindow)
+closeAll :: SS.Session -> IO ()
+tabClosing :: SS.Session -> SS.TextWindow -> IO ()
+paste :: HWND -> IO ()
+cut :: HWND -> IO ()
+copy :: HWND -> IO ()
+selectAll :: HWND -> IO ()
+hasFocus :: HWND -> IO Bool
+setFocus :: HWND -> IO ()
+getTextLength :: HWND -> IO Int
+getAllText :: HWND -> IO BS.ByteString
+setEventHandler ::
+  SS.Session -> SS.TextWindow -> HWND -> Int -> IO ()
+enableEvents :: HWND -> IO ()
+disableEvents :: HWND -> IO ()
+toggleBreakPoint ::
+  SS.Session
+  -> SS.TextWindow -> SC.Editor -> SI.SCNotification -> IO ()
+sendCommand :: HWND -> String -> IO ()
+createGrid :: Frame () -> IO (Grid ())
+*Ghci> 
